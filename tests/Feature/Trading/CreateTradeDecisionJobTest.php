@@ -1,0 +1,64 @@
+<?php
+
+namespace Tests\Feature\Trading;
+
+use App\Jobs\CreateTradeDecisionJob;
+use App\Models\Asset;
+use App\Models\BrokerAccount;
+use App\Models\StrategyRun;
+use Illuminate\Bus\Dispatcher;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class CreateTradeDecisionJobTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_job_creates_trade_decision_with_context_and_policy_checks(): void
+    {
+        config()->set('broker.mode', 'paper');
+        config()->set('trading.allowed_assets', ['BTC']);
+        config()->set('trading.enabled', true);
+
+        $account = BrokerAccount::query()->create([
+            'broker' => 'robinhood',
+            'external_account_id' => 'acct-1',
+            'currency' => 'USD',
+            'buying_power' => 100,
+            'cash_balance' => 100,
+            'equity' => 100,
+            'status' => 'active',
+            'snapshot_at' => now(),
+        ]);
+
+        $asset = Asset::query()->create([
+            'broker' => 'robinhood',
+            'symbol' => 'BTC',
+            'asset_type' => 'crypto',
+            'is_tradable' => true,
+            'is_enabled' => true,
+        ]);
+
+        $strategyRun = StrategyRun::query()->create([
+            'strategy_name' => 'BTC_ETH_Momentum_Filtered_v1',
+            'mode' => 'paper',
+            'started_at' => now(),
+            'status' => 'running',
+        ]);
+
+        $decisionId = app(Dispatcher::class)->dispatchSync(
+            new CreateTradeDecisionJob($strategyRun->id, $asset->id, $account->id)
+        );
+        $decisionId = $decisionId ?: (int) $strategyRun->tradeDecisions()->value('id');
+
+        $this->assertDatabaseHas('trade_decisions', [
+            'id' => $decisionId,
+            'asset_id' => $asset->id,
+        ]);
+        $this->assertDatabaseHas('policy_checks', [
+            'trade_decision_id' => $decisionId,
+            'policy_name' => 'allowed_asset',
+            'result' => 1,
+        ]);
+    }
+}
