@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class UniverseVersion extends Model
 {
@@ -21,5 +22,10 @@ class UniverseVersion extends Model
                 throw new LogicException('Completed universe versions are immutable; create a new version.');
             }
         });
+    }
+
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(UniverseMembership::class);
     }
 }

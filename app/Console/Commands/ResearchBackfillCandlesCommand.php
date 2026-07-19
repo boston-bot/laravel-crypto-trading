@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 class ResearchBackfillCandlesCommand extends Command
 {
-    protected $signature = 'research:backfill-candles {--years=5} {--symbol=*}';
+    protected $signature = 'research:backfill-candles {--years=8} {--symbol=*}';
 
     protected $description = 'Enqueue public Coinbase hourly candle backfills for the research universe';
 

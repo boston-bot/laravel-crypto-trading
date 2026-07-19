@@ -75,8 +75,13 @@ def _load_universe(connection: Any, assets: List[Dict[str, Any]], start: datetim
     four_hour: Dict[str, pd.DataFrame] = {}
     for asset in assets:
         symbol = str(asset["symbol"])
-        hourly[symbol] = _candles(connection, int(asset["id"]), "1h", start, end)
-        four_hour[symbol] = _candles(connection, int(asset["id"]), "4h", start, end)
+        listed_at = datetime.fromisoformat(str(asset.get("listed_at", start)).replace("Z", "+00:00"))
+        delisted_at = datetime.fromisoformat(str(asset.get("delisted_at", end)).replace("Z", "+00:00")) if asset.get("delisted_at") else end
+        member_start, member_end = max(start, listed_at), min(end, delisted_at)
+        if member_start >= member_end:
+            continue
+        hourly[symbol] = _candles(connection, int(asset["id"]), "1h", member_start, member_end)
+        four_hour[symbol] = _candles(connection, int(asset["id"]), "4h", member_start, member_end)
     return hourly, four_hour
 
 

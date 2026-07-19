@@ -132,8 +132,8 @@ class EngineRepository:
                     WHERE c.asset_id=%s AND c.timeframe=%s AND c.source='coinbase'
                       AND c.metadata_json->>'derived_from'='1h'
                 )
-                SELECT candle_open_time, candle_close_time, open, high, low, close, volume,
-                       available_at, first_seen_at, is_final
+                SELECT candle_id AS observation_id, candle_open_time, candle_close_time, open, high, low, close, volume,
+                       available_at, first_seen_at, is_final, quality_state
                 FROM (
                     SELECT DISTINCT ON (candle_open_time) *
                     FROM versions

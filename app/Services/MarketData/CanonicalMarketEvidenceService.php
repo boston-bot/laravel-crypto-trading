@@ -6,6 +6,7 @@ use App\Data\MarketData\CommonMarketBar;
 use App\Models\Asset;
 use App\Models\DataQualityIncident;
 use App\Models\MarketCandle;
+use App\Models\MarketCandleRevision;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
@@ -109,6 +110,31 @@ class CanonicalMarketEvidenceService
     public function canonicalSource(): string
     {
         return (string) config('research.candles.canonical_source', 'coinbase');
+    }
+
+    /** @return array<string, mixed>|null */
+    public function pointInTimeVersion(MarketCandle $candle, CarbonInterface $cutoff): ?array
+    {
+        $at = CarbonImmutable::instance($cutoff)->utc();
+        $versions = collect();
+        if ($candle->available_at !== null && $candle->first_seen_at !== null && $candle->available_at->lte($at) && $candle->first_seen_at->lte($at)) {
+            $versions->push(['available_at' => $candle->available_at, 'first_seen_at' => $candle->first_seen_at, 'open' => $candle->open, 'high' => $candle->high, 'low' => $candle->low, 'close' => $candle->close, 'volume' => $candle->volume, 'is_final' => $candle->is_final, 'quality_state' => $candle->quality_state, 'observation_id' => 'candle:'.$candle->id.':'.$candle->source_revision]);
+        }
+        foreach (MarketCandleRevision::query()->where('market_candle_id', $candle->id)->where('available_at', '<=', $at)->where('first_seen_at', '<=', $at)->get() as $revision) {
+            $versions->push(array_merge((array) $revision->values_json, ['available_at' => $revision->available_at, 'first_seen_at' => $revision->first_seen_at, 'observation_id' => 'revision:'.$revision->id]));
+        }
+        return $versions->filter(fn (array $row): bool => $this->validNumericVersion($row))->sortByDesc(fn (array $row): int => $row['available_at']->getTimestamp())->first();
+    }
+
+    private function validNumericVersion(array $row): bool
+    {
+        foreach (['open', 'high', 'low', 'close', 'volume'] as $field) {
+            if (! isset($row[$field]) || ! is_numeric($row[$field]) || ! is_finite((float) $row[$field])) { return false; }
+        }
+        return (bool) ($row['is_final'] ?? true) && in_array((string) ($row['quality_state'] ?? 'valid'), ['valid', 'verified'], true)
+            && (float) $row['high'] >= max((float) $row['open'], (float) $row['close'], (float) $row['low'])
+            && (float) $row['low'] <= min((float) $row['open'], (float) $row['close'], (float) $row['high'])
+            && (float) $row['volume'] >= 0;
     }
 
     /**

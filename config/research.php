@@ -17,7 +17,7 @@ return [
         'canonical_source' => 'coinbase',
         'canonical_timeframe' => '1h',
         'derived_timeframes' => ['4h', '1d'],
-        'target_years' => 5,
+        'target_years' => 8,
         'live_refresh_hours' => (int) env('MARKET_EVIDENCE_REFRESH_HOURS', 336),
     ],
     'fees' => [
@@ -46,6 +46,7 @@ return [
         'max_price_change_bps' => (float) env('APPROVAL_MAX_PRICE_CHANGE_BPS', 75.0),
     ],
     'backtest_gate' => [
+        'minimum_complete_folds' => 3,
         'holdout_months' => 12,
         'train_months' => 24,
         'validation_months' => 6,

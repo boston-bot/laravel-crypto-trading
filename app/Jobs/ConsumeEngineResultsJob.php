@@ -98,7 +98,7 @@ class ConsumeEngineResultsJob implements ShouldQueue
                     $eligible = false;
                 }
                 $resolution = EvaluationResolution::tryFrom((string) ($proposal['resolution'] ?? ''))
-                    ?? ($action === 'HOLD' ? EvaluationResolution::HOLD : EvaluationResolution::BLOCKED_BY_EVIDENCE);
+                    ?? ($action === 'HOLD' ? EvaluationResolution::HOLD : EvaluationResolution::ACTIONABLE);
                 if ($trace === null && $promotableSchema) {
                     $resolution = EvaluationResolution::BLOCKED_BY_EVIDENCE;
                 }
@@ -279,12 +279,6 @@ class ConsumeEngineResultsJob implements ShouldQueue
         if (! $outputComplete) {
             return 'incomplete_engine_output';
         }
-        if (! $promotableSchema) {
-            return 'legacy_schema_non_promotable';
-        }
-        if (! $eligible) {
-            return 'ineligible_evidence';
-        }
         if ($evaluationKind !== 'trading') {
             return 'diagnostic_evaluation';
         }
@@ -296,6 +290,12 @@ class ConsumeEngineResultsJob implements ShouldQueue
         }
         if (! $logicalFresh) {
             return 'stale_logical_bar';
+        }
+        if (! $promotableSchema) {
+            return 'legacy_schema_non_promotable';
+        }
+        if (! $eligible) {
+            return 'ineligible_evidence';
         }
 
         return null;
