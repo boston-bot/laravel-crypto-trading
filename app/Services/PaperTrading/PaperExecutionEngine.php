@@ -15,6 +15,7 @@ use App\Models\PaperPosition;
 use App\Models\PaperSession;
 use App\Models\TradeDecision;
 use App\Services\Execution\SlippageModel;
+use App\Services\Research\PaperEvidenceGateService;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -69,6 +70,10 @@ class PaperExecutionEngine
             ->first();
         if ($session === null) {
             throw new RuntimeException('No active paper session. Start a virtual or mirrored session before approving paper orders.');
+        }
+        if ($side === OrderSide::BUY && $session->evidence_eligible
+            && app(PaperEvidenceGateService::class)->suppressesNewEntries($session)) {
+            throw new RuntimeException('New paper entries are suppressed because the pinned evidence gate failed. Exits remain available.');
         }
         $intentHash = $this->intentHash($session, $asset, $decision, $side, $requestedNotional, $requestedQuantity);
         $reservation = $this->reservations->reserve(

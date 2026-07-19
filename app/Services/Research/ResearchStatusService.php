@@ -12,6 +12,7 @@ use App\Models\HoldoutInterval;
 use App\Models\IngestionCheckpoint;
 use App\Models\MarketCandle;
 use App\Models\OrderBookSummary;
+use App\Models\PaperSession;
 use App\Models\PipelineCycle;
 use App\Models\ResearchManifest;
 use App\Models\SpreadObservation;
@@ -97,6 +98,10 @@ class ResearchStatusService
             'holdout' => HoldoutInterval::query()->latest('id')->first()?->only([
                 'id', 'strategy_experiment_id', 'status', 'authorized_strategy_version_id',
                 'authorized_at', 'revealed_at', 'terminal_at',
+            ]),
+            'forward_paper' => PaperSession::query()->where('evidence_eligible', true)->latest('id')->first()?->only([
+                'id', 'strategy_version_id', 'universe_version_id', 'evidence_status',
+                'evidence_checked_at', 'entries_suppressed_at', 'entries_suppression_reason',
             ]),
             'spread_shadow' => [
                 'execution_enabled' => false,

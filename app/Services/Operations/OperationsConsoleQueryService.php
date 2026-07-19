@@ -9,6 +9,7 @@ use App\Models\AssetEvaluation;
 use App\Models\BacktestRun;
 use App\Models\BrokerAccount;
 use App\Models\EngineJob;
+use App\Models\HoldoutInterval;
 use App\Models\MarketCandle;
 use App\Models\PaperLedgerEntry;
 use App\Models\PaperPortfolioSnapshot;
@@ -107,6 +108,23 @@ class OperationsConsoleQueryService
             'ledger' => $session ? PaperLedgerEntry::query()->with('asset')->where('paper_session_id', $session->id)->latest('occurred_at')->limit(100)->get() : [],
             'pending_proposals' => TradeDecision::query()->with('asset')->where('broker_account_id', $account?->id)->where('status', 'awaiting_human_approval')->latest()->get(),
             'history' => $account ? PaperSession::query()->where('broker_account_id', $account->id)->latest('started_at')->limit(20)->get() : [],
+            'research_finalists' => HoldoutInterval::query()
+                ->with(['strategyVersion.candidate.experiment.universeVersion'])
+                ->where('status', 'passed')
+                ->whereNotNull('authorized_strategy_version_id')
+                ->get()
+                ->map(fn (HoldoutInterval $holdout): array => [
+                    'strategy_version_id' => $holdout->authorized_strategy_version_id,
+                    'strategy_name' => $holdout->strategyVersion?->name,
+                    'strategy_version' => $holdout->strategyVersion?->version,
+                    'family' => $holdout->strategyVersion?->candidate?->family,
+                    'universe_version_id' => $holdout->strategyVersion?->candidate?->experiment?->universe_version_id,
+                    'universe_version' => $holdout->strategyVersion?->candidate?->experiment?->universeVersion?->version,
+                ])->values(),
+            'paper_evidence' => $session?->evidence_summary_json ?? [
+                'status' => $session?->evidence_status ?? 'not_eligible',
+                'live_eligible' => false,
+            ],
         ];
     }
 

@@ -92,6 +92,9 @@ class PipelineCycleService
         string $mode = 'paper',
         string $evaluationKind = 'trading',
     ): PipelineCycle {
+        if ($session->evidence_eligible && ($session->strategy_version_id === null || $session->universe_version_id === null)) {
+            throw new LogicException('Evidence-eligible paper cycles require immutable strategy and universe pins.');
+        }
         $strategyVersionId = $session->strategy_version_id !== null ? (int) $session->strategy_version_id : null;
         $universeVersionId = $session->universe_version_id !== null ? (int) $session->universe_version_id : null;
         $cycleKey = hash('sha256', implode('|', [

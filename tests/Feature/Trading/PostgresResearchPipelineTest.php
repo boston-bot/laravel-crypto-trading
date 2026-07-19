@@ -158,6 +158,25 @@ class PostgresResearchPipelineTest extends TestCase
         }
     }
 
+    public function test_evidence_eligible_paper_session_pins_are_database_immutable(): void
+    {
+        $pdo = $this->newPdo();
+        $pdo->beginTransaction();
+        try {
+            $accountId = $pdo->query("INSERT INTO broker_accounts (broker,external_account_id,currency,buying_power,cash_balance,equity,status,snapshot_at,created_at,updated_at) VALUES ('coinbase','pg-evidence-".Str::uuid()."','USD',0,0,0,'active',now(),now(),now()) RETURNING id")->fetchColumn();
+            $statement = $pdo->prepare("INSERT INTO paper_sessions (broker_account_id,funding_mode,status,currency,opening_cash,reserved_cash,fee_scenario,slippage_scenario,valuation_at,started_at,evidence_eligible,evidence_status,execution_policy_hash,created_at,updated_at) VALUES (?,'virtual','active','USD',10000,0,'test','test',now(),now(),true,'collecting_evidence',?,now(),now()) RETURNING id");
+            $statement->execute([$accountId, hash('sha256', 'execution-policy')]);
+            $sessionId = $statement->fetchColumn();
+
+            $this->expectException(\PDOException::class);
+            $pdo->exec("UPDATE paper_sessions SET execution_policy_hash='".hash('sha256', 'rewritten')."' WHERE id=".(int) $sessionId);
+        } finally {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
+    }
+
     public function test_paper_session_lock_serializes_competing_buy_reservations(): void
     {
         [$accountId, $assetId, $sessionId] = $this->createPaperFixture();

@@ -5,6 +5,8 @@ namespace App\Jobs;
 use App\Enums\BrokerType;
 use App\Models\BrokerAccount;
 use App\Services\PaperTrading\PaperPortfolioValuationService;
+use App\Services\PaperTrading\PaperSessionService;
+use App\Services\Research\PaperEvidenceGateService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -17,8 +19,11 @@ class SnapshotPaperPortfolioJob implements ShouldQueue
         public readonly ?int $brokerAccountId = null,
     ) {}
 
-    public function handle(PaperPortfolioValuationService $valuationService): void
-    {
+    public function handle(
+        PaperPortfolioValuationService $valuationService,
+        PaperSessionService $sessions,
+        PaperEvidenceGateService $evidenceGate,
+    ): void {
         if ((string) config('broker.mode', 'paper') !== 'paper') {
             return;
         }
@@ -35,8 +40,12 @@ class SnapshotPaperPortfolioJob implements ShouldQueue
         }
 
         $query->orderBy('id')
-            ->each(function (BrokerAccount $account) use ($valuationService): void {
+            ->each(function (BrokerAccount $account) use ($valuationService, $sessions, $evidenceGate): void {
                 $valuationService->snapshot($account);
+                $session = $sessions->activeFor($account);
+                if ($session?->evidence_eligible) {
+                    $evidenceGate->evaluate($session);
+                }
             });
     }
 }

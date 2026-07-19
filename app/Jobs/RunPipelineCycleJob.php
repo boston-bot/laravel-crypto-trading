@@ -36,6 +36,14 @@ class RunPipelineCycleJob implements ShouldQueue
                 }
                 $cycle->refresh();
             }
+            $cycle->loadMissing('paperSession');
+            if ($cycle->mode === 'paper' && $cycle->paperSession?->evidence_eligible
+                && ($cycle->strategy_version_id !== $cycle->paperSession->strategy_version_id
+                    || $cycle->universe_version_id !== $cycle->paperSession->universe_version_id)) {
+                $cycles->fail($cycle, 'The cycle versions do not match the evidence-eligible paper session pins.');
+
+                return;
+            }
 
             $evaluationStep = $cycle->steps()->where('step_key', 'evaluation')->firstOrFail();
             if (in_array($evaluationStep->status, ['completed', 'skipped'], true)) {
@@ -100,6 +108,11 @@ class RunPipelineCycleJob implements ShouldQueue
                 $cycles->completeStep($cycle, $step, 'Skipped until a paper session is started.', status: 'skipped');
             }
             $cycles->complete($cycle, ['evaluated_assets' => 0, 'explanation' => 'No paper action was possible because no paper session is active.']);
+
+            return false;
+        }
+        if ($session?->evidence_eligible && ($session->strategy_version_id === null || $session->universe_version_id === null)) {
+            $cycles->fail($cycle, 'The evidence-eligible paper session is missing immutable version pins.');
 
             return false;
         }

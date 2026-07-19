@@ -57,6 +57,17 @@ class OperationsConsoleTest extends TestCase
         $this->assertSame(10_000.0, (float) PaperLedgerEntry::query()->sole()->cash_delta);
     }
 
+    public function test_paper_projection_exposes_research_evidence_state_without_implying_live_eligibility(): void
+    {
+        $this->account();
+
+        $this->getJson('/api/ops/v1/paper')
+            ->assertOk()
+            ->assertJsonPath('data.research_finalists', [])
+            ->assertJsonPath('data.paper_evidence.status', 'not_eligible')
+            ->assertJsonPath('data.paper_evidence.live_eligible', false);
+    }
+
     public function test_mirror_session_requires_fresh_equity_and_copies_no_positions(): void
     {
         $account = $this->account(12_345.67);

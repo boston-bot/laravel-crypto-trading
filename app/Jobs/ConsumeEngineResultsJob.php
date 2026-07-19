@@ -11,6 +11,7 @@ use App\Models\StrategyRun;
 use App\Models\TradeDecision;
 use App\Services\Operations\ActivityEventService;
 use App\Services\Operations\PipelineCycleService;
+use App\Services\Research\PaperEvidenceGateService;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Dispatcher;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -44,6 +45,19 @@ class ConsumeEngineResultsJob implements ShouldQueue
 
                 return;
             }
+            $cycle = isset($payload['pipeline_cycle_id'])
+                ? PipelineCycle::query()->with('paperSession')->find((string) $payload['pipeline_cycle_id'])
+                : null;
+            $session = $cycle?->paperSession;
+            $versionPinsMatch = ! $session?->evidence_eligible || (
+                $job->strategy_version_id === $session->strategy_version_id
+                && $job->universe_version_id === $session->universe_version_id
+                && $cycle?->strategy_version_id === $session->strategy_version_id
+                && $cycle?->universe_version_id === $session->universe_version_id
+            );
+            $paperGate = $session?->evidence_eligible
+                ? app(PaperEvidenceGateService::class)->evaluate($session)
+                : null;
 
             $expected = collect((array) ($payload['assets'] ?? []))
                 ->filter(fn (mixed $asset): bool => is_array($asset) && (int) ($asset['id'] ?? 0) > 0)
@@ -55,7 +69,8 @@ class ConsumeEngineResultsJob implements ShouldQueue
             $expectedIds = $expected->keys()->map(fn (mixed $id): int => (int) $id)->sort()->values();
             $proposalIds = $proposals->keys()->filter(fn (mixed $id): bool => (int) $id > 0)->map(fn (mixed $id): int => (int) $id)->sort()->values();
             $duplicateProposalIds = $proposalCounts->filter(fn (int $count, mixed $id): bool => (int) $id > 0 && $count > 1)->keys()->values()->all();
-            $outputComplete = $expectedIds->all() === $proposalIds->all() && $duplicateProposalIds === [];
+            $outputShapeComplete = $expectedIds->all() === $proposalIds->all() && $duplicateProposalIds === [];
+            $outputComplete = $outputShapeComplete && $versionPinsMatch;
 
             $createdDecisions = 0;
             $approved = 0;
@@ -105,7 +120,19 @@ class ConsumeEngineResultsJob implements ShouldQueue
                 if ($action === 'HOLD' && $resolution === EvaluationResolution::ACTIONABLE) {
                     $resolution = EvaluationResolution::HOLD;
                 }
-                $suppressionReason = $this->suppressionReason($evaluationKind, $resolution, $eligible, $outputComplete, $resultFresh, $logicalFresh, $promotableSchema);
+                $entrySuppressed = (bool) ($paperGate['suppress_new_entries'] ?? false)
+                    && in_array($action, ['ENTER', 'BUY'], true);
+                $suppressionReason = $this->suppressionReason(
+                    $evaluationKind,
+                    $resolution,
+                    $eligible,
+                    $outputShapeComplete,
+                    $versionPinsMatch,
+                    $entrySuppressed,
+                    $resultFresh,
+                    $logicalFresh,
+                    $promotableSchema,
+                );
                 $actionable = $suppressionReason === null;
                 $explanation = $trace?->primaryExplanation ?? $this->explanation($action, $probability, $entryThreshold, $warnings, $suppressionReason);
                 $evaluation = AssetEvaluation::query()->firstOrCreate(
@@ -208,6 +235,8 @@ class ConsumeEngineResultsJob implements ShouldQueue
                     'approved_decisions' => $approved,
                     'manifest_hash' => $locked->manifest_hash,
                     'output_complete' => $outputComplete,
+                    'version_pins_match' => $versionPinsMatch,
+                    'paper_evidence_status' => $paperGate['status'] ?? null,
                     'unexpected_asset_ids' => $proposalIds->diff($expectedIds)->values()->all(),
                     'missing_asset_ids' => $expectedIds->diff($proposalIds)->values()->all(),
                     'duplicate_asset_ids' => $duplicateProposalIds,
@@ -220,7 +249,7 @@ class ConsumeEngineResultsJob implements ShouldQueue
                 return;
             }
 
-            $cycle = PipelineCycle::query()->find($cycleId);
+            $cycle = $cycle?->id === $cycleId ? $cycle : PipelineCycle::query()->find($cycleId);
             if ($cycle === null) {
                 return;
             }
@@ -228,10 +257,11 @@ class ConsumeEngineResultsJob implements ShouldQueue
             $cycles = app(PipelineCycleService::class);
             $cycles->completeStep($cycle, 'evaluation', 'The strategy engine evaluated the pinned universe.', ['evaluations' => $expected->count()]);
             if (! $outputComplete) {
-                $cycles->completeStep($cycle, 'result_consumption', 'Engine output did not match the pinned universe.', [
+                $cycles->completeStep($cycle, 'result_consumption', $versionPinsMatch ? 'Engine output did not match the pinned universe.' : 'Engine output did not match the evidence-eligible session pins.', [
                     'missing_asset_ids' => $expectedIds->diff($proposalIds)->values()->all(),
                     'unexpected_asset_ids' => $proposalIds->diff($expectedIds)->values()->all(),
                     'duplicate_asset_ids' => $duplicateProposalIds,
+                    'version_pins_match' => $versionPinsMatch,
                 ], 'failed');
                 foreach (['reconciliation', 'snapshot'] as $step) {
                     $cycles->completeStep($cycle, $step, 'Skipped because engine output validation failed.', status: 'skipped');
@@ -274,10 +304,25 @@ class ConsumeEngineResultsJob implements ShouldQueue
         return sprintf('%s was proposed with %.1f%% calibrated probability.', $action, $probability * 100);
     }
 
-    private function suppressionReason(string $evaluationKind, EvaluationResolution $resolution, bool $eligible, bool $outputComplete, bool $resultFresh, bool $logicalFresh, bool $promotableSchema): ?string
-    {
-        if (! $outputComplete) {
+    private function suppressionReason(
+        string $evaluationKind,
+        EvaluationResolution $resolution,
+        bool $eligible,
+        bool $outputShapeComplete,
+        bool $versionPinsMatch,
+        bool $entrySuppressed,
+        bool $resultFresh,
+        bool $logicalFresh,
+        bool $promotableSchema,
+    ): ?string {
+        if (! $versionPinsMatch) {
+            return 'pinned_version_mismatch';
+        }
+        if (! $outputShapeComplete) {
             return 'incomplete_engine_output';
+        }
+        if ($entrySuppressed) {
+            return 'paper_evidence_gate_failed';
         }
         if ($evaluationKind !== 'trading') {
             return 'diagnostic_evaluation';

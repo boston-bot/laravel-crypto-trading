@@ -49,7 +49,14 @@ class OperationsActionController extends Controller
         }
 
         try {
-            $session = $sessions->start(BrokerAccount::query()->findOrFail((int) $values['broker_account_id']), $values['funding_mode'], isset($values['virtual_capital']) ? (float) $values['virtual_capital'] : null);
+            $session = $sessions->start(
+                BrokerAccount::query()->findOrFail((int) $values['broker_account_id']),
+                $values['funding_mode'],
+                isset($values['virtual_capital']) ? (float) $values['virtual_capital'] : null,
+                isset($values['strategy_version_id']) ? (int) $values['strategy_version_id'] : null,
+                isset($values['universe_version_id']) ? (int) $values['universe_version_id'] : null,
+                (bool) ($values['evidence_eligible'] ?? false),
+            );
             $action->update(['status' => 'completed', 'target_type' => 'paper_session', 'target_id' => (string) $session->id, 'result_json' => ['paper_session_id' => $session->id], 'completed_at' => now()]);
 
             return response()->json(['message' => 'Paper session started.', 'data' => ['action' => $action->fresh(), 'session' => $session]], 201);

@@ -2,7 +2,9 @@
 
 namespace App\Services\PaperTrading;
 
+use App\Enums\HoldoutStatus;
 use App\Models\BrokerAccount;
+use App\Models\HoldoutInterval;
 use App\Models\PaperLedgerEntry;
 use App\Models\PaperSession;
 use App\Models\StrategyVersion;
@@ -12,13 +14,19 @@ use RuntimeException;
 
 class PaperSessionService
 {
-    public function start(BrokerAccount $account, string $fundingMode, ?float $virtualCapital = null): PaperSession
-    {
+    public function start(
+        BrokerAccount $account,
+        string $fundingMode,
+        ?float $virtualCapital = null,
+        ?int $strategyVersionId = null,
+        ?int $universeVersionId = null,
+        bool $evidenceEligible = false,
+    ): PaperSession {
         if (! in_array($fundingMode, ['virtual', 'mirror'], true)) {
             throw new RuntimeException('Choose virtual capital or mirrored Coinbase equity.');
         }
 
-        return DB::transaction(function () use ($account, $fundingMode, $virtualCapital): PaperSession {
+        return DB::transaction(function () use ($account, $fundingMode, $virtualCapital, $strategyVersionId, $universeVersionId, $evidenceEligible): PaperSession {
             $lockedAccount = BrokerAccount::query()->whereKey($account->id)->lockForUpdate()->firstOrFail();
             if (PaperSession::query()->where('broker_account_id', $account->id)->where('status', 'active')->lockForUpdate()->exists()) {
                 throw new RuntimeException('This account already has an active paper session. End it before starting another.');
@@ -31,8 +39,13 @@ class PaperSessionService
                 throw new RuntimeException('Paper starting capital must be greater than zero.');
             }
 
-            $strategyVersion = StrategyVersion::query()->where('status', 'active')->latest('activated_at')->first();
-            $universeVersion = UniverseVersion::query()->where('status', 'active')->latest('activated_at')->first();
+            [$strategyVersion, $universeVersion, $executionPolicyHash] = $evidenceEligible
+                ? $this->resolveEvidencePins($strategyVersionId, $universeVersionId)
+                : [
+                    StrategyVersion::query()->where('status', 'active')->latest('activated_at')->first(),
+                    UniverseVersion::query()->where('status', 'active')->latest('activated_at')->first(),
+                    null,
+                ];
             $session = PaperSession::query()->create([
                 'broker_account_id' => $account->id,
                 'strategy_version_id' => $strategyVersion?->id,
@@ -47,7 +60,14 @@ class PaperSessionService
                 'valuation_at' => $lockedAccount->snapshot_at,
                 'source_account_snapshot_id' => $fundingMode === 'mirror' ? $lockedAccount->id : null,
                 'started_at' => now(),
-                'metadata_json' => ['strategy_name' => config('trading.strategy_name'), 'source_equity' => $fundingMode === 'mirror' ? (float) $lockedAccount->equity : null],
+                'evidence_eligible' => $evidenceEligible,
+                'evidence_status' => $evidenceEligible ? 'collecting_evidence' : 'not_eligible',
+                'execution_policy_hash' => $executionPolicyHash,
+                'metadata_json' => [
+                    'strategy_name' => config('trading.strategy_name'),
+                    'source_equity' => $fundingMode === 'mirror' ? (float) $lockedAccount->equity : null,
+                    'live_eligible' => false,
+                ],
             ]);
 
             PaperLedgerEntry::query()->create([
@@ -60,6 +80,41 @@ class PaperSessionService
 
             return $session->fresh();
         });
+    }
+
+    /** @return array{StrategyVersion, UniverseVersion, string} */
+    private function resolveEvidencePins(?int $strategyVersionId, ?int $universeVersionId): array
+    {
+        if (! in_array((string) config('research.engine.driver'), ['database', 'python'], true)) {
+            throw new RuntimeException('Evidence-eligible paper sessions require the canonical Python/database strategy engine.');
+        }
+        if (($strategyVersionId === null) !== ($universeVersionId === null)) {
+            throw new RuntimeException('Select both a frozen strategy version and its universe version.');
+        }
+
+        if ($strategyVersionId === null) {
+            $passing = HoldoutInterval::query()->where('status', HoldoutStatus::Passed)->whereNotNull('authorized_strategy_version_id')->get();
+            if ($passing->count() !== 1) {
+                throw new RuntimeException('Select an exact finalist; automatic defaulting requires exactly one holdout-passing finalist.');
+            }
+            $strategyVersionId = (int) $passing->sole()->authorized_strategy_version_id;
+        }
+        $strategy = StrategyVersion::query()->with('candidate.experiment.universeVersion')->findOrFail($strategyVersionId);
+        $experiment = $strategy->candidate?->experiment;
+        $holdoutPassed = HoldoutInterval::query()
+            ->where('strategy_experiment_id', $experiment?->id)
+            ->where('authorized_strategy_version_id', $strategy->id)
+            ->where('status', HoldoutStatus::Passed)
+            ->exists();
+        if ($experiment === null || ! $strategy->is_deployable || $strategy->version_role !== 'final' || ! $holdoutPassed) {
+            throw new RuntimeException('The selected strategy is not the frozen holdout-passing finalist.');
+        }
+        $universe = $experiment->universeVersion;
+        if ($universeVersionId !== null && $universe->id !== $universeVersionId) {
+            throw new RuntimeException('The selected universe does not belong to the frozen finalist experiment.');
+        }
+
+        return [$strategy, $universe, (string) $experiment->execution_policy_hash];
     }
 
     public function activeFor(BrokerAccount|int $account): ?PaperSession
