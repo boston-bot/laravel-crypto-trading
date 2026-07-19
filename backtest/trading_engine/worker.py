@@ -82,6 +82,7 @@ def run_worker(database_url: str, once: bool = False, poll_seconds: float = 2.0)
             )
             heartbeat.start()
             try:
+                completion_manifest_hash = canonical_hash({"job": job["id"], "as_of": job["as_of"], "payload": job["payload_json"]})
                 if job["kind"] == "evaluate":
                     result = evaluate_job(repository, job)
                 elif job["kind"] == "backfill":
@@ -90,12 +91,15 @@ def run_worker(database_url: str, once: bool = False, poll_seconds: float = 2.0)
                 elif job["kind"] == "backtest":
                     payload = job["payload_json"] if isinstance(job["payload_json"], dict) else json.loads(job["payload_json"])
                     result = execute_backtest(connection, payload)
+                    completion_manifest_hash = str(result["manifest_hash"])
+                    if payload.get("lineage"):
+                        result["lineage"] = dict(payload["lineage"]) | {"manifest_hash": completion_manifest_hash}
                 elif job["kind"] == "sentiment_refresh":
                     payload = job["payload_json"] if isinstance(job["payload_json"], dict) else json.loads(job["payload_json"])
                     result = refresh_sentiment(connection, payload.get("url", "https://api.alternative.me/fng/"), int(payload.get("limit", 90)))
                 else:
                     raise NotImplementedError(f"Unsupported engine job kind: {job['kind']}")
-                repository.complete(job, result, canonical_hash({"job": job["id"], "as_of": job["as_of"], "payload": job["payload_json"]}), ENGINE_VERSION)
+                repository.complete(job, result, completion_manifest_hash, ENGINE_VERSION)
             except Exception as exc:  # worker boundary deliberately records bounded failures
                 LOGGER.exception("Engine job %s failed", job["id"])
                 repository.fail(job["id"], str(exc))

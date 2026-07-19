@@ -15,6 +15,7 @@ class BacktestRunMetric extends Model
         'metric_name',
         'metric_group',
         'metric_value',
+        'dimension_key',
         'context_json',
     ];
 

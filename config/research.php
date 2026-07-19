@@ -45,6 +45,21 @@ return [
         'max_quote_age_seconds' => (int) env('APPROVAL_MAX_QUOTE_AGE_SECONDS', 15),
         'max_price_change_bps' => (float) env('APPROVAL_MAX_PRICE_CHANGE_BPS', 75.0),
     ],
+    'experiments' => [
+        'families' => ['trend_rotation', 'pullback_in_trend', 'protected_momentum', 'defensive_cash'],
+        'search_budget_per_family' => 24,
+        'objective' => 'maximize_compounded_net_oos_return',
+        'regimes' => ['risk_on', 'neutral', 'risk_off', 'volatility_shock'],
+        'execution_policy' => [
+            'version' => 'coinbase-ioc-v1',
+            'venue' => 'coinbase',
+            'gross_cap' => 1.0,
+            'fill_timing' => 'first_executable_observation_strictly_after_cutoff',
+        ],
+        'attribution_policy' => ['version' => 'net-trade-linked-v1', 'method' => 'net_asset_contribution'],
+        'benchmark_policy' => ['version' => 'monthly-net-v1', 'benchmarks' => ['point_in_time_equal_weight', 'btc_buy_hold', 'cash']],
+        'cost_policy' => ['version' => 'coinbase-observed-v1', 'normal_multiplier' => 1.0, 'stressed_multiplier' => 2.0],
+    ],
     'backtest_gate' => [
         'minimum_complete_folds' => 3,
         'holdout_months' => 12,

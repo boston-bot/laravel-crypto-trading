@@ -97,6 +97,31 @@ class PostgresResearchPipelineTest extends TestCase
         }
     }
 
+    public function test_preregistered_experiment_is_database_immutable(): void
+    {
+        $pdo = $this->newPdo();
+        $pdo->beginTransaction();
+        try {
+            $universeId = $pdo->query("INSERT INTO universe_versions (name,version,status,content_hash,symbols_json,created_at,updated_at) VALUES ('pg-experiment','v1','research','".hash('sha256', (string) Str::uuid())."','[\"BTC\",\"ETH\",\"SOL\"]',now(),now()) RETURNING id")->fetchColumn();
+            $statement = $pdo->prepare(<<<'SQL'
+                INSERT INTO strategy_experiments
+                    (schema_version,name,status,universe_version_id,objective,constraints_json,search_budget,seeds_json,regimes_json,cost_policy_json,attribution_policy_json,benchmark_policy_json,execution_policy_version,execution_policy_hash,development_start,development_end,holdout_start,holdout_end,content_hash,created_at,updated_at)
+                VALUES
+                    ('1.0','pg-immutable','queued',?,'maximize_compounded_net_oos_return','{}',4,'[7]','[]','{}','{}','{}','coinbase-ioc-v1',?,now()-interval '3 years',now()-interval '1 year',now()-interval '1 year',now(),?,now(),now())
+                RETURNING id
+            SQL);
+            $statement->execute([$universeId, hash('sha256', 'execution'), hash('sha256', (string) Str::uuid())]);
+            $id = $statement->fetchColumn();
+
+            $this->expectException(\PDOException::class);
+            $pdo->exec("UPDATE strategy_experiments SET name='rewritten' WHERE id=".(int) $id);
+        } finally {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
+    }
+
     public function test_paper_session_lock_serializes_competing_buy_reservations(): void
     {
         [$accountId, $assetId, $sessionId] = $this->createPaperFixture();

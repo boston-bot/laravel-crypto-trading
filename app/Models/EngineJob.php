@@ -17,6 +17,7 @@ class EngineJob extends Model
         'research_manifest_id', 'idempotency_key', 'as_of', 'valid_until', 'payload_json',
         'status', 'attempts', 'max_attempts', 'lease_owner', 'lease_expires_at',
         'heartbeat_at', 'completed_at', 'last_error',
+        'backtest_run_id', 'strategy_experiment_id', 'strategy_experiment_candidate_id',
     ];
 
     protected function casts(): array
@@ -49,5 +50,20 @@ class EngineJob extends Model
     public function researchManifest(): BelongsTo
     {
         return $this->belongsTo(ResearchManifest::class);
+    }
+
+    public function backtestRun(): BelongsTo
+    {
+        return $this->belongsTo(BacktestRun::class);
+    }
+
+    public function experiment(): BelongsTo
+    {
+        return $this->belongsTo(StrategyExperiment::class, 'strategy_experiment_id');
+    }
+
+    public function candidate(): BelongsTo
+    {
+        return $this->belongsTo(StrategyExperimentCandidate::class, 'strategy_experiment_candidate_id');
     }
 }
