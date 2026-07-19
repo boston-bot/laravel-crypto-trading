@@ -283,22 +283,30 @@ The parameter space, objective, constraints, random seed, and maximum search bud
 
 ### Robustness Tests
 
-A candidate is disqualified when:
+Every robustness predicate, threshold, parameter-neighborhood definition, cost multiplier, regime classifier, and reconciliation tolerance is numeric and frozen in the experiment manifest. The initial policy defines a parameter neighbor as a candidate one adjacent search-grid step away on exactly one numeric or ordinal parameter, or one preregistered alternative value away on one categorical parameter, with all other values held constant. All valid immediate neighbors are evaluated; a parameter set with fewer than four valid neighbors is ineligible.
 
-- small neighboring parameter changes cause performance collapse;
-- performance depends on one fold or one regime;
-- one asset dominates profits beyond the concentration gate;
-- results disappear under realistic cost stress;
-- closed trades are too few to support the conclusion;
-- append-future tests change historical signals;
-- forced fold-end valuation materially contradicts closed-trade metrics;
-- the live evaluation fixture differs from replay at the same logical bar and portfolio state.
+A candidate is disqualified when any of these initial predicates fails:
+
+- fewer than 80% of immediate parameter neighbors have positive net OOS return and maximum drawdown no greater than 15%;
+- median neighbor net OOS return is less than 50% of the selected parameter set's net OOS return;
+- removing the best-returning outer fold makes linked net OOS return non-positive, or one fold supplies more than 50% of positive OOS P&L;
+- one asset supplies more than 50% of positive OOS P&L;
+- any preregistered regime has drawdown above 15%, worst-regime net return is below -5%, or one regime supplies more than 70% of positive OOS P&L;
+- stressed-cost linked OOS return is non-positive;
+- the numeric evidence-count gates are missed;
+- appending future observations changes any earlier factor, rank, signal, intent, fill, or portfolio state;
+- the NAV reconciliation residual after cash, realized P&L, unrealized P&L, reservations, and all costs exceeds one basis point at any fold end;
+- the live evaluation fixture differs from replay at the same logical bar, strategy version, execution policy, universe, and portfolio state.
+
+Changing one of these defaults requires a new experiment manifest before any run begins; it cannot amend a running experiment.
 
 ### Holdout Rules
 
 The anchored holdout interval may be opened only for one frozen finalist hash. The database enforces one authorized opening for the tuple of holdout interval, experiment, manifest, and candidate hash. Retries are allowed only when they are idempotent continuations with identical hashes; a different candidate, manifest, code version, or experiment is denied. Once any row in an interval is revealed, that exact interval and every overlapping interval are permanently ineligible as a locked holdout for later experiments.
 
 Opening writes an immutable audit event containing interval, candidate hash, manifest hash, code version, operator, authorization, purpose, and timestamp. Storage access is mediated by a holdout-aware repository or database role; ordinary research APIs, exports, jobs, logs, and UI endpoints fail closed for unrevealed rows. A direct-access attempt records an audit incident.
+
+The holdout starts with normalized NAV 1.0, 100% cash, no positions, no reservations, and every asset state set to `flat`. It does not carry trades, cooldowns, or pending confirmations across `holdout_start`. The evaluator may warm deterministic features with canonical observations strictly before `holdout_start`, limited to the maximum lookback and confirmation bars declared in the frozen strategy definition. Warmup observations cannot contribute return, create orders, change frozen parameters, or expose a holdout row. Insufficient warmup fails the run as incomplete. The first actionable decision is at or after `holdout_start`, and the final NAV is marked at the last final common bar strictly before `holdout_end`.
 
 Holdout pass gates are preregistered and cannot change after opening. A pass requires:
 
@@ -384,6 +392,8 @@ Backtest runs link to an experiment and declare an evaluation stage:
 
 Fold, regime, asset, holding-period, cost, and parameter-neighborhood metrics are stored in queryable metric groups. Large equity, trade, fill, and diagnostic payloads remain attached through immutable result/manifests.
 
+Holdout evaluation has a durable lifecycle of `locked`, `authorized`, `running`, and exactly one terminal outcome: `passed`, `failed`, or `inconclusive`. `Inconclusive` is non-promotable and immutable for that revealed interval; it is not an invitation to change the candidate or rerun with different gates.
+
 ### Holdout Access Audit
 
 An append-only holdout access record stores the exact interval, experiment, strategy version, manifest, engine version, code hash, actor, authorization, purpose, and open time. Exclusion and uniqueness constraints prevent overlapping holdout reuse, multiple candidate openings, update, or deletion while permitting idempotent retries for the exact authorized evaluation.
@@ -453,7 +463,7 @@ The deeper Research Lab uses the approved research cockpit concept:
 - holding-period distribution;
 - gross return, fees, spread, slippage, and net return;
 - equal-weight universe, BTC, and cash benchmarks;
-- holdout state (`locked`, `opened`, `passed`, `failed`);
+- holdout state (`locked`, `authorized`, `running`, `passed`, `failed`, `inconclusive`);
 - archived candidates and explicit rejection reasons.
 
 ### Performance Semantics and Assets Labels
@@ -462,11 +472,15 @@ Every performance projection declares `period_start`, `as_of`, bar interval, com
 
 Portfolio strategy return is the net time-weighted change in marked-to-market NAV over the selected period, including realized and unrealized P&L and all modeled costs. Portfolio benchmarks are independently investable series over the same timestamps: equal-weight point-in-time eligible universe, BTC buy-and-hold, and cash. Relative performance is the arithmetic percentage-point difference `strategy_return - selected_benchmark_return`; the API also exposes the two source returns so the UI never reconstructs it ambiguously.
 
+A versioned benchmark policy defines construction. The initial equal-weight universe benchmark starts at normalized NAV 1.0, rebalances at the first final common four-hour bar of each UTC calendar month, and assigns equal target weight to every point-in-time eligible asset with a valid executable price. New listings enter at the next scheduled rebalance. Halts and delistings follow the same forced-exit and incomplete-data policy as strategy replay; proceeds remain cash until the next rebalance. It is long-only, unlevered, and reports both gross price return and net return under the same precision, spread, slippage, and fee policy used by the strategy. BTC buy-and-hold makes one costed purchase at period start and remains invested; the cash benchmark returns 0% unless the manifest pins an observable cash-yield series.
+
 The Assets table does not label a rotating portfolio result as an asset-level “strategy return.” It shows:
 
 1. Net strategy P&L contribution for the asset, divided by portfolio NAV at period start.
-2. Strategy holding-window return for that asset, labeled as applying only while held.
+2. Strategy held-period linked return for that asset, labeled as applying only while held.
 3. Full-period asset buy-and-hold return.
+
+Asset attribution follows a versioned policy. Net contribution is the sum of that asset's realized P&L, unrealized P&L change, and allocated fees, spread, and slippage divided by portfolio NAV at period start. When an asset has multiple holding episodes, its held-period linked return geometrically links the net return of each episode in chronological order and excludes intervening cash periods; the UI labels the episode count and never compares this metric directly with a full-period benchmark. Full-period asset buy-and-hold is the raw close-to-close market price return over the declared period and is explicitly labeled as excluding trading costs.
 
 Portfolio strategy and relative returns appear in the portfolio summary, not repeated per asset. When no eligible strategy replay or paper ledger covers the interval, strategy fields show `Not measured`; they never show zero. Benchmark values are labeled as market outcomes and cannot be styled or described as strategy losses.
 
@@ -537,7 +551,8 @@ No UI endpoint recalculates historical strategy logic.
 
 - benchmark losses cannot be labeled as strategy losses;
 - unavailable strategy returns render `Not measured`;
-- portfolio return, asset contribution, holding-window return, benchmark return, and relative return reconcile to their documented period and formula;
+- portfolio return, asset contribution, held-period linked return, benchmark return, and relative return reconcile to their documented period and formula;
+- repeated asset holding episodes and point-in-time benchmark membership reproduce identically from the pinned attribution and benchmark policies;
 - every action and blocker has a decision trace;
 - HOLDs show failed rules and counterfactuals;
 - Research Lab metrics reconcile with immutable backtest results;
