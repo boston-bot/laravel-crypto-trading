@@ -10,8 +10,7 @@ class MarketRankService
         private readonly FeatureEngine $featureEngine,
         private readonly RegimeService $regimeService,
         private readonly CompositeScoringService $compositeScoringService,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>

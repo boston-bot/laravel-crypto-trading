@@ -2,15 +2,17 @@
 
 namespace App\Services\MarketData;
 
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Client\Factory as HttpFactory;
+use InvalidArgumentException;
 use RuntimeException;
 
 class CoinbaseMarketDataClient
 {
     public function __construct(
         private readonly HttpFactory $http,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<int, array<string, mixed>>
@@ -79,14 +81,136 @@ class CoinbaseMarketDataClient
     }
 
     /**
+     * Fetch a bounded half-open UTC range: [start, end).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getHourlyCandlesRange(string $symbol, CarbonInterface $start, CarbonInterface $end): array
+    {
+        $product = $this->normalizeSymbol($symbol);
+        $cursor = CarbonImmutable::instance($start)->utc()->startOfHour();
+        $rangeEnd = CarbonImmutable::instance($end)->utc()->startOfHour();
+        if ($rangeEnd->lessThanOrEqualTo($cursor)) {
+            return [];
+        }
+
+        $url = rtrim((string) config('services.coinbase.exchange_base_url', 'https://api.exchange.coinbase.com'), '/').'/products/'.$product.'/candles';
+        $rowsByOpen = [];
+
+        while ($cursor->lessThan($rangeEnd)) {
+            // The API treats both boundaries as inclusive in some responses.
+            $chunkEnd = $cursor->addHours(299);
+            if ($chunkEnd->greaterThan($rangeEnd)) {
+                $chunkEnd = $rangeEnd;
+            }
+            $rowsByOpen += $this->fetchHourlyRows($url, $cursor, $chunkEnd);
+
+            $cursor = $chunkEnd;
+        }
+
+        // Successful Coinbase responses can be sparse. Retry missing hours in
+        // narrow windows before the repair service records a genuine source gap.
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $missing = $this->missingHourlyTimestamps($rowsByOpen, CarbonImmutable::instance($start)->utc()->startOfHour(), $rangeEnd);
+            if ($missing === []) {
+                break;
+            }
+
+            foreach ($missing as $timestamp) {
+                $missingOpen = CarbonImmutable::createFromTimestampUTC($timestamp);
+                $retryStart = $missingOpen->subHour();
+                if ($retryStart->lessThan($start)) {
+                    $retryStart = CarbonImmutable::instance($start)->utc()->startOfHour();
+                }
+                $retryEnd = $missingOpen->addHours(2);
+                if ($retryEnd->greaterThan($rangeEnd)) {
+                    $retryEnd = $rangeEnd;
+                }
+                $rowsByOpen += $this->fetchHourlyRows($url, $retryStart, $retryEnd);
+            }
+        }
+
+        ksort($rowsByOpen);
+
+        return array_values($rowsByOpen);
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function fetchHourlyRows(string $url, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $response = $this->http
+            ->acceptJson()
+            ->timeout(20)
+            ->retry([500, 1000, 2000], throw: false)
+            ->get($url, [
+                'granularity' => 3600,
+                'start' => $start->toIso8601String(),
+                'end' => $end->toIso8601String(),
+            ]);
+
+        if (! $response->successful()) {
+            throw new RuntimeException('Coinbase hourly repair request failed ('.$response->status().'): '.$response->body());
+        }
+
+        $rows = [];
+        foreach ((array) $response->json() as $row) {
+            if (! is_array($row) || count($row) < 6) {
+                continue;
+            }
+            $openTime = CarbonImmutable::createFromTimestampUTC((int) $row[0]);
+            if ($openTime->lessThan($start) || ! $openTime->lessThan($end)) {
+                continue;
+            }
+
+            $rows[$openTime->getTimestamp()] = [
+                'open_time' => $openTime->toIso8601String(),
+                'close_time' => $openTime->addHour()->toIso8601String(),
+                'low' => (float) $row[1],
+                'high' => (float) $row[2],
+                'open' => (float) $row[3],
+                'close' => (float) $row[4],
+                'volume' => (float) $row[5],
+                'available_at' => $openTime->addHour()->toIso8601String(),
+                'is_final' => $openTime->addHour()->isPast(),
+                'quality_state' => 'valid',
+                'metadata' => [
+                    'provider' => 'coinbase',
+                    'acquisition_path' => 'public_exchange_repair',
+                    'raw' => $row,
+                ],
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rowsByOpen
+     * @return array<int, int>
+     */
+    private function missingHourlyTimestamps(array $rowsByOpen, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $missing = [];
+        for ($cursor = $start; $cursor->lessThan($end); $cursor = $cursor->addHour()) {
+            if (! isset($rowsByOpen[$cursor->getTimestamp()])) {
+                $missing[] = $cursor->getTimestamp();
+            }
+        }
+
+        return $missing;
+    }
+
+    /**
      * @return array{0: int, 1: int}
      */
     private function granularityPlanForTimeframe(string $timeframe): array
     {
         return match ($timeframe) {
+            '1h' => [3600, 3600],
             // Coinbase Exchange API does not support 14400 directly.
             '4h' => [3600, 14400],
-            default => [86400, 86400],
+            '1d' => [86400, 86400],
+            default => throw new InvalidArgumentException("Unsupported Coinbase candle timeframe [{$timeframe}]."),
         };
     }
 

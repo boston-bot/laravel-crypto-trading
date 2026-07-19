@@ -319,6 +319,7 @@ class FeatureEngine
 
             if ($start <= 0) {
                 $returns[] = 0.0;
+
                 continue;
             }
 

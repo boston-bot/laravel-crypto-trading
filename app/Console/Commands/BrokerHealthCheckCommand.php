@@ -19,8 +19,7 @@ class BrokerHealthCheckCommand extends Command
         RobinhoodClient $robinhoodClient,
         CoinbaseClient $coinbaseClient,
         BrokerCredentialResolver $credentialResolver,
-    ): int
-    {
+    ): int {
         $broker = BrokerType::tryFrom((string) $this->option('broker')) ?? BrokerType::default();
         $credential = $credentialResolver->resolve(
             $broker,

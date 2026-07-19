@@ -16,15 +16,13 @@ class SyncRobinhoodAccountJob implements ShouldQueue
 
     public function __construct(
         public readonly ?int $credentialId = null,
-    ) {
-    }
+    ) {}
 
     public function handle(
         RobinhoodClient $client,
         RobinhoodMapper $mapper,
         BrokerCredentialResolver $credentialResolver,
-    ): void
-    {
+    ): void {
         $credential = $credentialResolver->resolve(BrokerType::ROBINHOOD, $this->credentialId);
         if ($credential === null) {
             return;

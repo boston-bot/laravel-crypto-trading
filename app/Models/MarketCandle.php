@@ -24,6 +24,12 @@ class MarketCandle extends Model
         'turnover_usd',
         'source',
         'ingested_at',
+        'first_seen_at',
+        'available_at',
+        'is_final',
+        'source_revision',
+        'content_hash',
+        'quality_state',
         'metadata_json',
     ];
 
@@ -39,6 +45,9 @@ class MarketCandle extends Model
             'volume' => 'decimal:12',
             'turnover_usd' => 'decimal:8',
             'ingested_at' => 'datetime',
+            'first_seen_at' => 'immutable_datetime',
+            'available_at' => 'immutable_datetime',
+            'is_final' => 'boolean',
             'metadata_json' => 'array',
         ];
     }

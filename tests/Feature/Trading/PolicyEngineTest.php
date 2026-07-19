@@ -76,4 +76,3 @@ class PolicyEngineTest extends TestCase
         $this->assertArrayHasKey('kill_switch', $result->messages);
     }
 }
-

@@ -16,8 +16,7 @@ class RobinhoodSigner
         string $apiKey,
         string $privateKey,
         ?string $timestamp = null,
-    ): array
-    {
+    ): array {
         $normalizedMethod = strtoupper($method);
         $timestamp = $timestamp ?? (string) now()->getTimestamp();
         $message = sprintf('%s%s%s%s%s', $apiKey, $timestamp, $path, $normalizedMethod, $body);

@@ -35,4 +35,3 @@ class BrokerCredential extends Model
         return $this->hasMany(BrokerAccount::class);
     }
 }
-

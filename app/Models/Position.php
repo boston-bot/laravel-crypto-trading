@@ -43,4 +43,3 @@ class Position extends Model
         return $this->belongsTo(Asset::class);
     }
 }
-

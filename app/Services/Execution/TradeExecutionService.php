@@ -25,8 +25,7 @@ class TradeExecutionService
         private readonly RobinhoodMapper $robinhoodMapper,
         private readonly CoinbaseClient $coinbaseClient,
         private readonly CoinbaseMapper $coinbaseMapper,
-    ) {
-    }
+    ) {}
 
     public function submitDecision(int $decisionId): void
     {
@@ -53,9 +52,17 @@ class TradeExecutionService
             return;
         }
 
+        if ($decision->requires_human_approval && ($decision->approved_at === null || $decision->signal_expires_at?->isPast())) {
+            throw new RuntimeException('Live order submission requires a current human approval for an unexpired proposal.');
+        }
+
         $broker = $decision->brokerAccount->broker instanceof BrokerType
             ? $decision->brokerAccount->broker
             : BrokerType::tryFrom((string) $decision->brokerAccount->broker) ?? BrokerType::default();
+
+        if ($broker !== BrokerType::COINBASE) {
+            throw new RuntimeException('Live order execution is restricted to Coinbase; other brokers are paper-data compatibility only.');
+        }
 
         $credential = $this->credentialResolver->resolve(
             $broker,
@@ -164,7 +171,6 @@ class TradeExecutionService
     }
 
     /**
-     * @param  BrokerCredential  $credential
      * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: array<string, mixed>}
      */
     private function submitRobinhoodOrder(BrokerCredential $credential, TradeDecision $decision): array
@@ -187,7 +193,6 @@ class TradeExecutionService
     }
 
     /**
-     * @param  BrokerCredential  $credential
      * @return array{0: array<string, mixed>, 1: array<string, mixed>}
      */
     private function fetchRobinhoodOrder(BrokerCredential $credential, string $externalOrderId): array
@@ -200,7 +205,6 @@ class TradeExecutionService
     }
 
     /**
-     * @param  BrokerCredential  $credential
      * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: array<string, mixed>}
      */
     private function submitCoinbaseOrder(BrokerCredential $credential, TradeDecision $decision): array
@@ -245,7 +249,6 @@ class TradeExecutionService
     }
 
     /**
-     * @param  BrokerCredential  $credential
      * @return array{0: array<string, mixed>, 1: array<string, mixed>}
      */
     private function fetchCoinbaseOrder(BrokerCredential $credential, string $externalOrderId): array

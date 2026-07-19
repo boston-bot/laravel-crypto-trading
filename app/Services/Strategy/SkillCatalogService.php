@@ -44,4 +44,3 @@ class SkillCatalogService
         return null;
     }
 }
-

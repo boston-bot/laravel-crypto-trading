@@ -18,7 +18,8 @@ class PolicyEngine
 
         $mode = (string) config('broker.mode', 'paper');
         $requiresHumanApproval = $mode === 'live'
-            && (bool) config('trading.human_approval_required', true);
+            ? (bool) config('trading.human_approval_required', true)
+            : (bool) config('trading.paper.human_approval_required', false);
 
         $checks['kill_switch'] = ! Cache::get((string) config('trading.kill_switch_cache_key', 'trading:frozen'), false);
         if (! $checks['kill_switch']) {

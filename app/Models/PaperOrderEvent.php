@@ -16,6 +16,7 @@ class PaperOrderEvent extends Model
         'broker_order_id',
         'trade_decision_id',
         'broker_account_id',
+        'paper_session_id',
         'asset_id',
         'event_type',
         'status',
@@ -26,6 +27,8 @@ class PaperOrderEvent extends Model
         'reference_price',
         'fill_price',
         'slippage_bps',
+        'fill_id',
+        'fee',
         'payload_json',
     ];
 
@@ -40,6 +43,7 @@ class PaperOrderEvent extends Model
             'reference_price' => 'decimal:8',
             'fill_price' => 'decimal:8',
             'slippage_bps' => 'decimal:4',
+            'fee' => 'decimal:8',
             'payload_json' => 'array',
         ];
     }
@@ -62,5 +66,10 @@ class PaperOrderEvent extends Model
     public function asset(): BelongsTo
     {
         return $this->belongsTo(Asset::class);
+    }
+
+    public function paperSession(): BelongsTo
+    {
+        return $this->belongsTo(PaperSession::class);
     }
 }

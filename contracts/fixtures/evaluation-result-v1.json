@@ -1,0 +1,21 @@
+{
+  "engine_version": "0.1.0",
+  "schema_version": "1.0",
+  "job_id": "123e4567-e89b-12d3-a456-426614174000",
+  "as_of": "2026-07-16T12:00:00+00:00",
+  "valid_until": "2026-07-16T12:30:00+00:00",
+  "manifest_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "proposals": [
+    {
+      "asset_id": 1,
+      "asset": "BTC",
+      "action": "HOLD",
+      "score": 0.12,
+      "calibrated_probability": 0.54,
+      "expected_value_bps": null,
+      "factor_attribution": {"trend": 0.2},
+      "warnings": []
+    }
+  ],
+  "diagnostics": {"point_in_time": true}
+}

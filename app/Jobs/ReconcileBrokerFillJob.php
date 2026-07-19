@@ -14,8 +14,7 @@ class ReconcileBrokerFillJob implements ShouldQueue
 
     public function __construct(
         public readonly ?int $brokerOrderId = null,
-    ) {
-    }
+    ) {}
 
     public function handle(TradeExecutionService $tradeExecutionService): void
     {
@@ -41,4 +40,3 @@ class ReconcileBrokerFillJob implements ShouldQueue
             });
     }
 }
-

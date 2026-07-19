@@ -7,8 +7,8 @@ use App\Enums\OrderSide;
 final readonly class TradeCandidate
 {
     /**
-     * @param array<string, mixed> $marketContext
-     * @param array<string, mixed> $signalContext
+     * @param  array<string, mixed>  $marketContext
+     * @param  array<string, mixed>  $signalContext
      */
     public function __construct(
         public int $assetId,
@@ -20,7 +20,5 @@ final readonly class TradeCandidate
         public float $confidence,
         public array $marketContext = [],
         public array $signalContext = [],
-    ) {
-    }
+    ) {}
 }
-

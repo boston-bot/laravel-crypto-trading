@@ -15,8 +15,7 @@ class RiskEngine
         private readonly ExposureService $exposureService,
         private readonly DrawdownService $drawdownService,
         private readonly CorrelationService $correlationService,
-    ) {
-    }
+    ) {}
 
     public function evaluate(TradeCandidate $candidate, BrokerAccount $account): RiskEvaluation
     {
@@ -30,7 +29,9 @@ class RiskEngine
         $equity = max(1.0, (float) $account->equity);
         $openExposure = $this->exposureService->openExposureNotional($account);
         $candidateExposurePct = ($candidate->notionalUsd / $equity) * 100;
-        $portfolioHeatPct = (($openExposure + $candidate->notionalUsd) / $equity) * 100;
+        $portfolioHeatPct = (($candidate->side->value === 'buy'
+            ? $openExposure + $candidate->notionalUsd
+            : max(0, $openExposure - $candidate->notionalUsd)) / $equity) * 100;
         $context['open_exposure_notional'] = $openExposure;
         $context['candidate_exposure_pct'] = $candidateExposurePct;
         $context['portfolio_heat_pct'] = $portfolioHeatPct;
@@ -50,8 +51,25 @@ class RiskEngine
             $violations[] = 'Candidate notional exceeds max_position_notional_usd.';
         }
 
-        if ((float) $account->buying_power < $candidate->notionalUsd) {
+        if ($candidate->side->value === 'buy' && $candidateExposurePct > (float) config('risk.max_asset_exposure_pct', 20.0)) {
+            $violations[] = 'Candidate exceeds the per-asset equity exposure cap.';
+        }
+
+        if ($candidate->side->value === 'buy' && $account->positions()->where('asset_id', $candidate->assetId)->where('quantity', '>', 0)->exists()) {
+            $violations[] = 'Pyramiding is disabled for existing long positions.';
+        }
+
+        if ($candidate->side->value === 'buy' && (float) $account->buying_power < $candidate->notionalUsd) {
             $violations[] = 'Insufficient buying power.';
+        }
+
+        if ($candidate->side->value === 'sell') {
+            $positionQuantity = (float) $account->positions()->where('asset_id', $candidate->assetId)->value('quantity');
+            if ($positionQuantity <= 0) {
+                $violations[] = 'A long position is required before submitting a sell exit.';
+            } elseif ($candidate->quantity > $positionQuantity) {
+                $violations[] = 'Sell quantity exceeds the current long position.';
+            }
         }
 
         if (
@@ -89,7 +107,7 @@ class RiskEngine
         }
 
         $candidateAsset = Asset::query()->find($candidate->assetId);
-        if ($candidateAsset !== null) {
+        if ($candidateAsset !== null && $candidate->side->value === 'buy') {
             $correlatedExposurePct = $this->correlationService->correlatedExposurePct($account, $candidateAsset)
                 + $candidateExposurePct;
             $context['correlated_exposure_pct'] = $correlatedExposurePct;

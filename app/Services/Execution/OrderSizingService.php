@@ -12,8 +12,7 @@ class OrderSizingService
     public function __construct(
         private readonly DrawdownService $drawdownService,
         private readonly ExposureService $exposureService,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<string, mixed>  $signal

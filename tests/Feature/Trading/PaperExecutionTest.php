@@ -15,6 +15,7 @@ use App\Models\TradeAttribution;
 use App\Models\TradeDecision;
 use App\Services\Broker\Robinhood\RobinhoodClient;
 use App\Services\Execution\TradeExecutionService;
+use App\Services\PaperTrading\PaperSessionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
 use Tests\TestCase;
@@ -49,6 +50,8 @@ class PaperExecutionTest extends TestCase
             'is_tradable' => true,
             'is_enabled' => true,
         ]);
+
+        app(PaperSessionService::class)->start($account, 'virtual', 100);
 
         $decision = TradeDecision::query()->create([
             'broker_account_id' => $account->id,
@@ -100,6 +103,7 @@ class PaperExecutionTest extends TestCase
         ]);
         $this->assertDatabaseCount('paper_portfolio_snapshots', 1);
         $this->assertDatabaseCount('trade_attributions', 1);
+        $this->assertDatabaseCount('paper_ledger_entries', 3);
         $this->assertTrue(
             BrokerOrder::query()->first()?->external_order_id !== null
         );

@@ -19,6 +19,13 @@
 /storage/*.key
 /storage/pail
 /vendor
+/backtest/venv
+/backtest/**/__pycache__
+/backtest/.pytest_cache
+/backtest/*.egg-info
+/backtest/data/*.csv
+/backtest/reports/*
+/.superpowers/
 Homestead.json
 Homestead.yaml
 Thumbs.db

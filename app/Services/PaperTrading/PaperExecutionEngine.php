@@ -8,11 +8,14 @@ use App\Models\Asset;
 use App\Models\BrokerAccount;
 use App\Models\BrokerOrder;
 use App\Models\MarketQuote;
+use App\Models\PaperLedgerEntry;
 use App\Models\PaperOrderEvent;
 use App\Models\PaperPosition;
+use App\Models\PaperSession;
 use App\Models\TradeDecision;
 use App\Services\Execution\SlippageModel;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class PaperExecutionEngine
 {
@@ -20,171 +23,155 @@ class PaperExecutionEngine
         private readonly SlippageModel $slippageModel,
         private readonly PaperPortfolioValuationService $valuationService,
         private readonly PaperAttributionService $attributionService,
-    ) {
-    }
+        private readonly PaperSessionService $sessions,
+    ) {}
 
     public function submit(BrokerAccount $account, Asset $asset, TradeDecision $decision): BrokerOrder
     {
-        $quote = MarketQuote::query()
-            ->where('asset_id', $asset->id)
-            ->latest('snapshot_time')
-            ->first();
-
+        $quote = MarketQuote::query()->where('asset_id', $asset->id)->latest('snapshot_time')->first();
         $referencePrice = $this->resolveReferencePrice($decision, $quote);
         $spreadBps = (float) ($quote?->spread_bps ?? config('trading.paper.default_spread_bps', 35.0));
         $liquidityScore = (float) ($quote?->liquidity_score ?? 0.6);
         $volatility = (float) ($decision->signal_context_json['ta']['atr_pct'] ?? 0.03);
-
         $requestedNotional = max(0.0, (float) ($decision->requested_notional ?? 0.0));
         $requestedQuantity = max(0.0, (float) ($decision->requested_quantity ?? 0.0));
-
-        if ($requestedNotional <= 0 && $requestedQuantity > 0 && $referencePrice > 0) {
+        if ($requestedNotional <= 0 && $requestedQuantity > 0) {
             $requestedNotional = $requestedQuantity * $referencePrice;
+        }
+        if ($requestedNotional <= 0) {
+            throw new RuntimeException('Paper order notional must be greater than zero.');
         }
 
         $side = $decision->side ?? OrderSide::BUY;
-        $slippageBps = $this->slippageModel->estimateSlippageBps(
-            $requestedNotional,
-            $volatility,
-            $spreadBps,
-            $liquidityScore,
-        );
+        $slippageBps = $this->slippageModel->estimateSlippageBps($requestedNotional, $volatility, $spreadBps, $liquidityScore);
+        $fillPrice = $this->slippageModel->estimateFillPrice($referencePrice, $side, $requestedNotional, $volatility, $spreadBps, $liquidityScore);
+        $filledNotional = round($requestedNotional, 8);
+        $filledQuantity = round($filledNotional / $fillPrice, 12);
+        $feeBps = (float) config('trading.paper.taker_fee_bps', 60.0);
+        $fee = round($filledNotional * ($feeBps / 10000), 8);
 
-        $fillPrice = $this->slippageModel->estimateFillPrice(
-            $referencePrice,
-            $side,
-            $requestedNotional,
-            $volatility,
-            $spreadBps,
-            $liquidityScore,
-        );
+        $order = DB::transaction(function () use ($account, $asset, $decision, $quote, $side, $referencePrice, $spreadBps, $slippageBps, $fillPrice, $filledNotional, $filledQuantity, $fee, $feeBps): BrokerOrder {
+            $lockedDecision = TradeDecision::query()->whereKey($decision->id)->lockForUpdate()->firstOrFail();
+            $clientOrderId = 'paper_'.hash('sha256', (string) $lockedDecision->idempotency_key);
+            $existing = BrokerOrder::query()->where('client_order_id', $clientOrderId)->first();
+            if ($existing !== null) {
+                return $existing;
+            }
 
-        $filledNotional = $requestedNotional;
-        $filledQuantity = $fillPrice > 0
-            ? round($filledNotional / $fillPrice, 12)
-            : $requestedQuantity;
+            $session = PaperSession::query()
+                ->where('broker_account_id', $account->id)
+                ->where('status', 'active')
+                ->lockForUpdate()
+                ->first();
+            if ($session === null) {
+                throw new RuntimeException('No active paper session. Start a virtual or mirrored session before approving paper orders.');
+            }
 
-        $order = BrokerOrder::query()->create([
-            'broker_account_id' => $account->id,
-            'asset_id' => $asset->id,
-            'trade_decision_id' => $decision->id,
-            'external_order_id' => 'paper_'.Str::uuid(),
-            'client_order_id' => 'paper_'.Str::uuid(),
-            'side' => $side->value,
-            'order_type' => 'market',
-            'time_in_force' => 'gtc',
-            'requested_quantity' => $decision->requested_quantity,
-            'requested_notional' => $decision->requested_notional,
-            'requested_price' => $referencePrice,
-            'status' => OrderStatus::FILLED->value,
-            'filled_quantity' => $filledQuantity,
-            'filled_notional' => $filledNotional,
-            'avg_fill_price' => $fillPrice,
-            'submitted_at' => now(),
-            'filled_at' => now(),
-            'raw_request_json' => [
-                'mode' => 'paper',
-                'decision_id' => $decision->id,
+            $position = PaperPosition::query()
+                ->where('paper_session_id', $session->id)
+                ->where('asset_id', $asset->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($side === OrderSide::BUY && $this->sessions->availableCash($session) < ($filledNotional + $fee)) {
+                throw new RuntimeException(sprintf('Paper order requires $%.2f, but only $%.2f is available.', $filledNotional + $fee, $this->sessions->availableCash($session)));
+            }
+            if ($side === OrderSide::SELL && (float) ($position?->quantity ?? 0) + 0.000000000001 < $filledQuantity) {
+                throw new RuntimeException('Paper sell quantity exceeds the active session position.');
+            }
+
+            $fillId = 'paper-fill-'.hash('sha256', $clientOrderId.'|'.$filledQuantity.'|'.$fillPrice);
+            $order = BrokerOrder::query()->create([
+                'broker_account_id' => $account->id,
+                'paper_session_id' => $session->id,
+                'asset_id' => $asset->id,
+                'trade_decision_id' => $lockedDecision->id,
+                'external_order_id' => 'paper_'.hash('sha256', $clientOrderId),
+                'client_order_id' => $clientOrderId,
+                'side' => $side->value,
+                'order_type' => 'market',
+                'time_in_force' => 'ioc',
+                'requested_quantity' => $lockedDecision->requested_quantity,
+                'requested_notional' => $lockedDecision->requested_notional,
+                'requested_price' => $referencePrice,
+                'status' => OrderStatus::FILLED->value,
+                'filled_quantity' => $filledQuantity,
+                'filled_notional' => $filledNotional,
+                'avg_fill_price' => $fillPrice,
+                'fee_amount' => $fee,
+                'submitted_at' => now(),
+                'filled_at' => now(),
+                'raw_request_json' => ['mode' => 'paper', 'session_id' => $session->id, 'decision_id' => $lockedDecision->id, 'reference_price' => $referencePrice, 'spread_bps' => $spreadBps],
+                'raw_response_json' => ['mode' => 'paper', 'fill_id' => $fillId, 'fill_price' => $fillPrice, 'slippage_bps' => $slippageBps, 'fee_bps' => $feeBps, 'fee' => $fee],
+            ]);
+
+            [$position, $realizedPnl] = $this->applyFill($session, $account, $asset, $side, $filledQuantity, $fillPrice, $filledNotional, $fee, $position);
+            $this->postLedger($session, $asset, $order, $side, $fillId, $filledQuantity, $fillPrice, $filledNotional, $fee);
+
+            PaperOrderEvent::query()->create([
+                'broker_order_id' => $order->id,
+                'trade_decision_id' => $lockedDecision->id,
+                'broker_account_id' => $account->id,
+                'paper_session_id' => $session->id,
+                'asset_id' => $asset->id,
+                'event_type' => 'filled',
+                'status' => OrderStatus::FILLED->value,
+                'side' => $side->value,
+                'event_time' => now(),
+                'quantity' => $filledQuantity,
+                'notional' => $filledNotional,
                 'reference_price' => $referencePrice,
-                'spread_bps' => $spreadBps,
-            ],
-            'raw_response_json' => [
-                'mode' => 'paper',
                 'fill_price' => $fillPrice,
                 'slippage_bps' => $slippageBps,
-            ],
-        ]);
+                'fill_id' => $fillId,
+                'fee' => $fee,
+                'payload_json' => ['mode' => 'paper', 'quote_snapshot_time' => $quote?->snapshot_time?->toIso8601String()],
+            ]);
+            $this->attributionService->record($lockedDecision, $order, $position, $realizedPnl);
 
-        [$position, $realizedPnl] = $this->applyFill($account, $asset, $side, $filledQuantity, $fillPrice);
+            return $order;
+        });
 
-        PaperOrderEvent::query()->create([
-            'broker_order_id' => $order->id,
-            'trade_decision_id' => $decision->id,
-            'broker_account_id' => $account->id,
-            'asset_id' => $asset->id,
-            'event_type' => 'filled',
-            'status' => OrderStatus::FILLED->value,
-            'side' => $side->value,
-            'event_time' => now(),
-            'quantity' => $filledQuantity,
-            'notional' => $filledNotional,
-            'reference_price' => $referencePrice,
-            'fill_price' => $fillPrice,
-            'slippage_bps' => $slippageBps,
-            'payload_json' => [
-                'mode' => 'paper',
-                'quote_snapshot_time' => $quote?->snapshot_time?->toIso8601String(),
-            ],
-        ]);
-
-        $this->attributionService->record($decision, $order, $position, $realizedPnl);
         $this->valuationService->snapshot($account);
 
-        return $order;
+        return $order->fresh();
     }
 
     private function resolveReferencePrice(TradeDecision $decision, ?MarketQuote $quote): float
     {
-        $fromDecision = (float) ($decision->market_context_json['reference_price'] ?? 0.0);
-        if ($fromDecision > 0.0) {
-            return $fromDecision;
+        $price = (float) ($decision->market_context_json['reference_price'] ?? $quote?->mid_price ?? $quote?->last_price ?? 0.0);
+        if ($price <= 0) {
+            throw new RuntimeException('Paper execution requires an observed decision or quote price; synthetic fallback prices are prohibited.');
         }
 
-        $quoteMid = (float) ($quote?->mid_price ?? 0.0);
-        if ($quoteMid > 0.0) {
-            return $quoteMid;
-        }
-
-        $quoteLast = (float) ($quote?->last_price ?? 0.0);
-        if ($quoteLast > 0.0) {
-            return $quoteLast;
-        }
-
-        $relativeStrength = (float) ($decision->market_context_json['market_rank']['factor_breakdown']['relative_strength'] ?? 0.5);
-
-        return round(100 + ($relativeStrength * 20), 8);
+        return $price;
     }
 
-    /**
-     * @return array{0: PaperPosition, 1: float|null}
-     */
-    private function applyFill(
-        BrokerAccount $account,
-        Asset $asset,
-        OrderSide $side,
-        float $filledQuantity,
-        float $fillPrice,
-    ): array {
-        $position = PaperPosition::query()->firstOrCreate(
-            [
-                'broker_account_id' => $account->id,
-                'asset_id' => $asset->id,
-            ],
-            [
-                'quantity' => 0,
-                'cost_basis' => 0,
-                'realized_pnl' => 0,
-                'updated_snapshot_at' => now(),
-            ]
-        );
-
+    /** @return array{0: PaperPosition, 1: float|null} */
+    private function applyFill(PaperSession $session, BrokerAccount $account, Asset $asset, OrderSide $side, float $quantity, float $price, float $notional, float $fee, ?PaperPosition $position): array
+    {
+        $position ??= PaperPosition::query()->create([
+            'broker_account_id' => $account->id,
+            'paper_session_id' => $session->id,
+            'asset_id' => $asset->id,
+            'quantity' => 0,
+            'cost_basis' => 0,
+            'realized_pnl' => 0,
+            'updated_snapshot_at' => now(),
+        ]);
         $currentQty = (float) $position->quantity;
-        $currentCostBasis = (float) $position->cost_basis;
-        $avgEntry = $currentQty > 0 ? ($currentCostBasis / $currentQty) : 0.0;
+        $currentCost = (float) $position->cost_basis;
 
-        $realizedPnl = null;
         if ($side === OrderSide::BUY) {
-            $newQty = $currentQty + $filledQuantity;
-            $newCostBasis = $currentCostBasis + ($filledQuantity * $fillPrice);
-            $newAvg = $newQty > 0 ? $newCostBasis / $newQty : 0.0;
-
+            $newQty = $currentQty + $quantity;
+            $newCost = $currentCost + $notional + $fee;
             $position->update([
                 'quantity' => $newQty,
-                'avg_entry_price' => $newAvg,
-                'cost_basis' => $newCostBasis,
-                'market_price' => $fillPrice,
-                'market_value' => $newQty * $fillPrice,
-                'unrealized_pnl' => ($newQty * $fillPrice) - $newCostBasis,
+                'avg_entry_price' => $newCost / $newQty,
+                'cost_basis' => $newCost,
+                'market_price' => $price,
+                'market_value' => $newQty * $price,
+                'unrealized_pnl' => ($newQty * $price) - $newCost,
                 'opened_at' => $position->opened_at ?? now(),
                 'closed_at' => null,
                 'updated_snapshot_at' => now(),
@@ -193,31 +180,49 @@ class PaperExecutionEngine
             return [$position->fresh(), null];
         }
 
-        $sellQty = min($currentQty, $filledQuantity);
-        if ($sellQty <= 0) {
-            $position->update([
-                'updated_snapshot_at' => now(),
-            ]);
-
-            return [$position->fresh(), null];
-        }
-
-        $realizedPnl = ($fillPrice - $avgEntry) * $sellQty;
-        $remainingQty = max(0.0, $currentQty - $sellQty);
-        $remainingCostBasis = $remainingQty > 0 ? $remainingQty * $avgEntry : 0.0;
-
+        $averageCost = $currentQty > 0 ? $currentCost / $currentQty : 0.0;
+        $relievedCost = $averageCost * $quantity;
+        $realizedPnl = $notional - $fee - $relievedCost;
+        $remainingQty = max(0.0, $currentQty - $quantity);
+        $remainingCost = max(0.0, $currentCost - $relievedCost);
         $position->update([
             'quantity' => $remainingQty,
-            'avg_entry_price' => $remainingQty > 0 ? $avgEntry : null,
-            'cost_basis' => $remainingCostBasis,
-            'market_price' => $fillPrice,
-            'market_value' => $remainingQty * $fillPrice,
-            'unrealized_pnl' => ($remainingQty * $fillPrice) - $remainingCostBasis,
+            'avg_entry_price' => $remainingQty > 0 ? $remainingCost / $remainingQty : null,
+            'cost_basis' => $remainingCost,
+            'market_price' => $price,
+            'market_value' => $remainingQty * $price,
+            'unrealized_pnl' => ($remainingQty * $price) - $remainingCost,
             'realized_pnl' => (float) $position->realized_pnl + $realizedPnl,
-            'closed_at' => $remainingQty <= 0 ? now() : null,
+            'closed_at' => $remainingQty <= 0.000000000001 ? now() : null,
             'updated_snapshot_at' => now(),
         ]);
 
-        return [$position->fresh(), $realizedPnl];
+        return [$position->fresh(), round($realizedPnl, 8)];
+    }
+
+    private function postLedger(PaperSession $session, Asset $asset, BrokerOrder $order, OrderSide $side, string $fillId, float $quantity, float $price, float $notional, float $fee): void
+    {
+        $principalType = $side === OrderSide::BUY ? 'buy_principal' : 'sell_proceeds';
+        PaperLedgerEntry::query()->create([
+            'paper_session_id' => $session->id,
+            'asset_id' => $asset->id,
+            'broker_order_id' => $order->id,
+            'entry_type' => $principalType,
+            'fill_id' => $fillId,
+            'cash_delta' => $side === OrderSide::BUY ? -$notional : $notional,
+            'quantity_delta' => $side === OrderSide::BUY ? $quantity : -$quantity,
+            'unit_price' => $price,
+            'occurred_at' => now(),
+        ]);
+        PaperLedgerEntry::query()->create([
+            'paper_session_id' => $session->id,
+            'asset_id' => $asset->id,
+            'broker_order_id' => $order->id,
+            'entry_type' => $side === OrderSide::BUY ? 'buy_fee' : 'sell_fee',
+            'fill_id' => $fillId,
+            'cash_delta' => -$fee,
+            'fee' => $fee,
+            'occurred_at' => now(),
+        ]);
     }
 }

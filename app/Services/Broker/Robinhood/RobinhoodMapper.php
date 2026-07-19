@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 class RobinhoodMapper
 {
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     public function mapAccount(array $payload): array
@@ -45,7 +45,7 @@ class RobinhoodMapper
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     public function mapAsset(array $payload): array
@@ -65,8 +65,8 @@ class RobinhoodMapper
     }
 
     /**
-     * @param array<string, mixed> $payload
-     * @param array<string, int> $assetIdBySymbol
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, int>  $assetIdBySymbol
      * @return array<string, mixed>
      */
     public function mapPosition(array $payload, array $assetIdBySymbol): array
@@ -85,8 +85,8 @@ class RobinhoodMapper
     }
 
     /**
-     * @param array<string, mixed> $payload
-     * @param array<string, int> $assetIdBySymbol
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, int>  $assetIdBySymbol
      * @return array<string, mixed>
      */
     public function mapOrder(array $payload, array $assetIdBySymbol): array

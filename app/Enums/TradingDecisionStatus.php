@@ -24,4 +24,3 @@ enum TradingDecisionStatus: string
         ], true);
     }
 }
-

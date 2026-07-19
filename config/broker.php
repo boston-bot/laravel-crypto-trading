@@ -22,6 +22,7 @@ return [
             'place_order' => env('COINBASE_ENDPOINT_PLACE_ORDER', '/api/v3/brokerage/orders'),
             'quotes' => env('COINBASE_ENDPOINT_QUOTES', '/api/v3/brokerage/best_bid_ask'),
             'candles' => env('COINBASE_ENDPOINT_CANDLES', '/api/v3/brokerage/products/{product_id}/candles'),
+            'transaction_summary' => env('COINBASE_ENDPOINT_TRANSACTION_SUMMARY', '/api/v3/brokerage/transaction_summary'),
         ],
     ],
 

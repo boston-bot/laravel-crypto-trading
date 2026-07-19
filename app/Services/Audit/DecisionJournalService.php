@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 class DecisionJournalService
 {
     /**
-     * @param array<string, mixed> $context
+     * @param  array<string, mixed>  $context
      */
     public function record(TradeDecision $decision, array $context = []): void
     {
@@ -22,4 +22,3 @@ class DecisionJournalService
         ]);
     }
 }
-

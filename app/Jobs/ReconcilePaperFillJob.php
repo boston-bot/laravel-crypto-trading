@@ -11,8 +11,7 @@ class ReconcilePaperFillJob implements ShouldQueue
 
     public function __construct(
         public readonly int $brokerOrderId,
-    ) {
-    }
+    ) {}
 
     public function handle(): void
     {

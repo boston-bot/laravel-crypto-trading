@@ -8,4 +8,3 @@ enum TradeDecisionAction: string
     case SELL = 'sell';
     case HOLD = 'hold';
 }
-

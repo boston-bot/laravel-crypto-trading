@@ -39,4 +39,3 @@ class DailyPortfolioSnapshot extends Model
         return $this->belongsTo(BrokerAccount::class);
     }
 }
-

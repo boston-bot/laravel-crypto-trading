@@ -7,4 +7,3 @@ enum StrategyMode: string
     case PAPER = 'paper';
     case LIVE = 'live';
 }
-

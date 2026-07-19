@@ -12,6 +12,7 @@ class PaperPortfolioSnapshot extends Model
 
     protected $fillable = [
         'broker_account_id',
+        'paper_session_id',
         'snapshot_time',
         'equity',
         'cash',
@@ -43,5 +44,10 @@ class PaperPortfolioSnapshot extends Model
     public function brokerAccount(): BelongsTo
     {
         return $this->belongsTo(BrokerAccount::class);
+    }
+
+    public function paperSession(): BelongsTo
+    {
+        return $this->belongsTo(PaperSession::class);
     }
 }

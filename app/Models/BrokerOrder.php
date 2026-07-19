@@ -15,6 +15,7 @@ class BrokerOrder extends Model
 
     protected $fillable = [
         'broker_account_id',
+        'paper_session_id',
         'asset_id',
         'trade_decision_id',
         'external_order_id',
@@ -31,6 +32,7 @@ class BrokerOrder extends Model
         'avg_fill_price',
         'submitted_at',
         'filled_at',
+        'fee_amount',
         'raw_request_json',
         'raw_response_json',
     ];
@@ -48,6 +50,7 @@ class BrokerOrder extends Model
             'avg_fill_price' => 'decimal:8',
             'submitted_at' => 'datetime',
             'filled_at' => 'datetime',
+            'fee_amount' => 'decimal:8',
             'raw_request_json' => 'array',
             'raw_response_json' => 'array',
         ];
@@ -56,6 +59,11 @@ class BrokerOrder extends Model
     public function brokerAccount(): BelongsTo
     {
         return $this->belongsTo(BrokerAccount::class);
+    }
+
+    public function paperSession(): BelongsTo
+    {
+        return $this->belongsTo(PaperSession::class);
     }
 
     public function asset(): BelongsTo

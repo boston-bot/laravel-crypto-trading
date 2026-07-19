@@ -7,6 +7,7 @@ use App\Services\Broker\BrokerException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use InvalidArgumentException;
 use JsonException;
 use Throwable;
 
@@ -15,8 +16,7 @@ class CoinbaseClient
     public function __construct(
         private readonly HttpFactory $http,
         private readonly CoinbaseJwtSigner $signer,
-    ) {
-    }
+    ) {}
 
     public function ping(BrokerCredential $credential): bool
     {
@@ -84,20 +84,67 @@ class CoinbaseClient
      */
     public function getBestBidAsk(BrokerCredential $credential, array $symbols = []): array
     {
-        $query = [];
-        if ($symbols !== []) {
-            $query['product_ids'] = implode(',', array_values(array_map(
-                fn (string $symbol): string => $this->normalizeProductId($symbol),
-                $symbols,
-            )));
+        $productIds = array_values(array_unique(array_filter(array_map(
+            fn (string $symbol): string => $this->normalizeProductId($symbol),
+            $symbols,
+        ))));
+
+        if ($productIds === []) {
+            return $this->extractRecords(
+                $this->request(
+                    $credential,
+                    'GET',
+                    (string) config('broker.coinbase.endpoints.quotes'),
+                ),
+                ['pricebooks', 'books', 'results', 'data.results']
+            );
         }
 
+        $records = [];
+        $errors = [];
+
+        foreach (array_chunk($productIds, 25) as $chunk) {
+            try {
+                $records = array_merge($records, $this->getBestBidAskChunk($credential, $chunk));
+
+                continue;
+            } catch (BrokerException $exception) {
+                if (count($chunk) === 1) {
+                    $errors[] = sprintf('%s: %s', $chunk[0], $exception->getMessage());
+
+                    continue;
+                }
+            }
+
+            // Fallback to per-product lookups so one bad product_id does not fail the full sync.
+            foreach ($chunk as $productId) {
+                try {
+                    $records = array_merge($records, $this->getBestBidAskChunk($credential, [$productId]));
+                } catch (BrokerException $exception) {
+                    $errors[] = sprintf('%s: %s', $productId, $exception->getMessage());
+                }
+            }
+        }
+
+        if ($records === [] && $errors !== []) {
+            throw new BrokerException('Coinbase best bid/ask failed for all requested products. '.$errors[0]);
+        }
+
+        return $records;
+    }
+
+    /**
+     * @param  array<int, string>  $productIds
+     * @return array<int, array<string, mixed>>
+     */
+    private function getBestBidAskChunk(BrokerCredential $credential, array $productIds): array
+    {
         return $this->extractRecords(
             $this->request(
                 $credential,
                 'GET',
                 (string) config('broker.coinbase.endpoints.quotes'),
-                query: $query,
+                query: $this->buildRepeatedQuery('product_ids', $productIds),
             ),
             ['pricebooks', 'books', 'results', 'data.results']
         );
@@ -170,6 +217,16 @@ class CoinbaseClient
         );
     }
 
+    /** @return array<string, mixed> */
+    public function getTransactionSummary(BrokerCredential $credential): array
+    {
+        return $this->request(
+            $credential,
+            'GET',
+            (string) config('broker.coinbase.endpoints.transaction_summary'),
+        );
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -183,7 +240,7 @@ class CoinbaseClient
 
     /**
      * @param  array<string, mixed>  $payload
-     * @param  array<string, mixed>  $query
+     * @param  array<string, mixed>|string  $query
      * @return array<string, mixed>
      */
     private function request(
@@ -191,7 +248,7 @@ class CoinbaseClient
         string $method,
         string $endpoint,
         array $payload = [],
-        array $query = [],
+        array|string $query = [],
     ): array {
         $apiKey = $this->resolveCredentialValue($credential->secret_ref)
             ?: (string) config('broker.coinbase.api_key', '');
@@ -276,6 +333,17 @@ class CoinbaseClient
         return '/'.ltrim($endpoint, '/');
     }
 
+    /**
+     * @param  array<int, string>  $values
+     */
+    private function buildRepeatedQuery(string $key, array $values): string
+    {
+        return implode('&', array_map(
+            fn (string $value): string => rawurlencode($key).'='.rawurlencode($value),
+            $values,
+        ));
+    }
+
     private function normalizeProductId(string $symbol): string
     {
         $upper = strtoupper(trim($symbol));
@@ -298,8 +366,10 @@ class CoinbaseClient
     private function resolveGranularity(string $timeframe): array
     {
         return match ($timeframe) {
+            '1h' => ['ONE_HOUR', 3600],
             '4h' => ['FOUR_HOUR', 14400],
-            default => ['ONE_DAY', 86400],
+            '1d' => ['ONE_DAY', 86400],
+            default => throw new InvalidArgumentException("Unsupported Coinbase candle timeframe [{$timeframe}]."),
         };
     }
 

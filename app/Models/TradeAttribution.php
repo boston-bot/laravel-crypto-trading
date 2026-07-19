@@ -13,6 +13,7 @@ class TradeAttribution extends Model
     protected $fillable = [
         'trade_decision_id',
         'broker_order_id',
+        'paper_session_id',
         'asset_id',
         'expected_probability',
         'expected_expectancy',

@@ -4,17 +4,25 @@ namespace App\Services\PaperTrading;
 
 use App\Models\BrokerAccount;
 use App\Models\MarketQuote;
+use App\Models\PaperLedgerEntry;
 use App\Models\PaperPortfolioSnapshot;
 use App\Models\PaperPosition;
+use App\Models\PaperSession;
 
 class PaperPortfolioValuationService
 {
     public function snapshot(BrokerAccount $account): PaperPortfolioSnapshot
     {
-        $positions = PaperPosition::query()
+        $session = PaperSession::query()->where('broker_account_id', $account->id)->where('status', 'active')->latest('id')->first();
+        $positionQuery = PaperPosition::query()
             ->where('broker_account_id', $account->id)
-            ->where('quantity', '>', 0)
-            ->get();
+            ->where('quantity', '>', 0);
+        if ($session !== null) {
+            $positionQuery->where('paper_session_id', $session->id);
+        } else {
+            $positionQuery->whereNull('paper_session_id');
+        }
+        $positions = $positionQuery->get();
 
         foreach ($positions as $position) {
             $quote = MarketQuote::query()
@@ -36,18 +44,25 @@ class PaperPortfolioValuationService
             ]);
         }
 
-        $aggregate = PaperPosition::query()
+        $aggregateQuery = PaperPosition::query()
             ->where('broker_account_id', $account->id)
             ->selectRaw('COALESCE(SUM(market_value), 0) as invested')
             ->selectRaw('COALESCE(SUM(realized_pnl), 0) as realized')
-            ->selectRaw('COALESCE(SUM(unrealized_pnl), 0) as unrealized')
-            ->first();
+            ->selectRaw('COALESCE(SUM(unrealized_pnl), 0) as unrealized');
+        if ($session !== null) {
+            $aggregateQuery->where('paper_session_id', $session->id);
+        } else {
+            $aggregateQuery->whereNull('paper_session_id');
+        }
+        $aggregate = $aggregateQuery->first();
 
         $invested = (float) ($aggregate->invested ?? 0.0);
         $realized = (float) ($aggregate->realized ?? 0.0);
         $unrealized = (float) ($aggregate->unrealized ?? 0.0);
 
-        $cash = max(0.0, (float) $account->cash_balance + $realized);
+        $cash = $session !== null
+            ? max(0.0, (float) PaperLedgerEntry::query()->where('paper_session_id', $session->id)->sum('cash_delta'))
+            : max(0.0, (float) $account->cash_balance + $realized);
         $equity = max(0.0, $cash + $invested);
         $grossExposurePct = $equity > 0 ? ($invested / $equity) * 100 : 0.0;
 
@@ -67,6 +82,7 @@ class PaperPortfolioValuationService
         return PaperPortfolioSnapshot::query()->updateOrCreate(
             [
                 'broker_account_id' => $account->id,
+                'paper_session_id' => $session?->id,
                 'snapshot_time' => $snapshotTime,
             ],
             [
@@ -81,6 +97,7 @@ class PaperPortfolioValuationService
                 'metadata_json' => [
                     'positions' => $positions->count(),
                     'mode' => 'paper',
+                    'paper_session_id' => $session?->id,
                 ],
             ]
         );

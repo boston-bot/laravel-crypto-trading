@@ -24,4 +24,3 @@ enum OrderStatus: string
         ], true);
     }
 }
-

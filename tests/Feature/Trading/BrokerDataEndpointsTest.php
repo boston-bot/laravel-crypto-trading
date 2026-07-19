@@ -15,6 +15,7 @@ use App\Models\RiskEvent;
 use App\Models\TradeAttribution;
 use App\Models\TradeDecision;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -230,6 +231,7 @@ class BrokerDataEndpointsTest extends TestCase
 
     public function test_sync_endpoint_queues_robinhood_sync_jobs(): void
     {
+        Queue::fake();
         config()->set('broker.default', 'robinhood');
 
         $this->postJson('/api/broker/sync')

@@ -33,4 +33,3 @@ class PolicyCheck extends Model
         return $this->belongsTo(TradeDecision::class);
     }
 }
-

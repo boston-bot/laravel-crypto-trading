@@ -14,6 +14,9 @@ class BacktestRun extends Model
     protected $fillable = [
         'strategy_name',
         'strategy_parameter_id',
+        'strategy_version_id',
+        'universe_version_id',
+        'research_manifest_id',
         'run_started_at',
         'run_completed_at',
         'timeframe_start',
@@ -21,6 +24,9 @@ class BacktestRun extends Model
         'status',
         'trigger',
         'metadata_json',
+        'spec_json',
+        'result_json',
+        'holdout_locked',
     ];
 
     protected function casts(): array
@@ -31,6 +37,9 @@ class BacktestRun extends Model
             'timeframe_start' => 'datetime',
             'timeframe_end' => 'datetime',
             'metadata_json' => 'array',
+            'spec_json' => 'array',
+            'result_json' => 'array',
+            'holdout_locked' => 'boolean',
         ];
     }
 

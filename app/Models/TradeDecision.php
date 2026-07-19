@@ -17,6 +17,8 @@ class TradeDecision extends Model
 
     protected $fillable = [
         'strategy_run_id',
+        'asset_evaluation_id',
+        'engine_job_id',
         'broker_account_id',
         'asset_id',
         'decision',
@@ -32,6 +34,7 @@ class TradeDecision extends Model
         'requires_human_approval',
         'approved_by',
         'approved_at',
+        'signal_expires_at',
         'status',
         'idempotency_key',
     ];
@@ -51,6 +54,7 @@ class TradeDecision extends Model
             'policy_result_json' => 'array',
             'requires_human_approval' => 'boolean',
             'approved_at' => 'datetime',
+            'signal_expires_at' => 'immutable_datetime',
             'status' => TradingDecisionStatus::class,
         ];
     }
@@ -58,6 +62,11 @@ class TradeDecision extends Model
     public function strategyRun(): BelongsTo
     {
         return $this->belongsTo(StrategyRun::class);
+    }
+
+    public function assetEvaluation(): BelongsTo
+    {
+        return $this->belongsTo(AssetEvaluation::class);
     }
 
     public function brokerAccount(): BelongsTo

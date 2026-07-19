@@ -10,8 +10,7 @@ class TaSignalService
     public function __construct(
         private readonly FeatureEngine $featureEngine,
         private readonly RegimeService $regimeService,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "laravel-crypto-strategy-engine"
+version = "0.1.0"
+description = "Point-in-time feature, replay, calibration, and database worker engine"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "psycopg[binary]>=3.1",
+    "requests>=2.31",
+    "scikit-learn>=1.4",
+    "websockets>=12",
+]
+
+[project.scripts]
+trading-engine = "trading_engine.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["trading_engine*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -5,7 +5,7 @@ namespace App\Services\Strategy;
 class ExitRuleService
 {
     /**
-     * @param array<string, mixed> $ta
+     * @param  array<string, mixed>  $ta
      */
     public function shouldExit(array $ta, array $marketRank = []): bool
     {

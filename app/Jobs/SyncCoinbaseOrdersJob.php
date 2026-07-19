@@ -19,8 +19,7 @@ class SyncCoinbaseOrdersJob implements ShouldQueue
     public function __construct(
         public readonly ?int $credentialId = null,
         public readonly ?int $brokerAccountId = null,
-    ) {
-    }
+    ) {}
 
     public function handle(
         CoinbaseClient $client,

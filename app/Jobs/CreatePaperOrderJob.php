@@ -12,12 +12,10 @@ class CreatePaperOrderJob implements ShouldQueue
 
     public function __construct(
         public readonly int $tradeDecisionId,
-    ) {
-    }
+    ) {}
 
     public function handle(TradeExecutionService $tradeExecutionService): void
     {
         $tradeExecutionService->submitDecision($this->tradeDecisionId);
     }
 }
-

@@ -7,8 +7,10 @@ use App\Models\Asset;
 use App\Services\Broker\BrokerCredentialResolver;
 use App\Services\Broker\Coinbase\CoinbaseClient;
 use App\Services\MarketData\CandleIngestionService;
+use App\Services\MarketData\CanonicalMarketEvidenceService;
 use App\Services\MarketData\QuoteSnapshotService;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Queue\Queueable;
 
 class SyncCoinbaseMarketDataJob implements ShouldQueue
@@ -18,12 +20,12 @@ class SyncCoinbaseMarketDataJob implements ShouldQueue
     public function __construct(
         public readonly ?int $credentialId = null,
         public readonly string $timeframe = '1d',
-    ) {
-    }
+    ) {}
 
     public function handle(
         CoinbaseClient $client,
         CandleIngestionService $candleIngestionService,
+        CanonicalMarketEvidenceService $marketEvidence,
         QuoteSnapshotService $quoteSnapshotService,
         BrokerCredentialResolver $credentialResolver,
     ): void {
@@ -53,13 +55,20 @@ class SyncCoinbaseMarketDataJob implements ShouldQueue
 
             $candles = $client->getCandles($credential, $asset->symbol, $this->timeframe);
             $candleIngestionService->ingest($asset, $this->timeframe, $candles, BrokerType::COINBASE->value);
+            if ($this->timeframe === '1h') {
+                $marketEvidence->rebuildDerivedForAsset(
+                    $asset,
+                    now()->utc()->subHours((int) config('research.candles.live_refresh_hours', 336)),
+                    now()->utc(),
+                );
+            }
         }
     }
 
     /**
-     * @return \Illuminate\Database\Eloquent\Collection<int, Asset>
+     * @return Collection<int, Asset>
      */
-    private function resolveAssets(): \Illuminate\Database\Eloquent\Collection
+    private function resolveAssets(): Collection
     {
         $allowedAssets = array_map('strtoupper', (array) config('trading.allowed_assets', []));
 

@@ -48,9 +48,11 @@ The signer supports:
 ## Operational Commands
 
 - `php artisan broker:sync --broker=coinbase --sync`
+- `php artisan broker:harvest --broker=coinbase --timeframes=1d,4h --interval=60`
 - `php artisan broker:health-check --broker=coinbase`
 - `php artisan broker:test-coinbase`
 - `php artisan strategy:evaluate --broker=coinbase --sync`
+- `php artisan trading:scorecard --broker=coinbase --days=30`
 
 ## Connectivity Prerequisites
 

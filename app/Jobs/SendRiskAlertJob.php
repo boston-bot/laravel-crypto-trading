@@ -12,7 +12,7 @@ class SendRiskAlertJob implements ShouldQueue
     use Queueable;
 
     /**
-     * @param array<string, mixed> $context
+     * @param  array<string, mixed>  $context
      */
     public function __construct(
         public readonly string $severity,
@@ -22,8 +22,7 @@ class SendRiskAlertJob implements ShouldQueue
         public readonly ?int $assetId = null,
         public readonly ?int $brokerOrderId = null,
         public readonly ?int $tradeDecisionId = null,
-    ) {
-    }
+    ) {}
 
     public function handle(): void
     {
@@ -46,4 +45,3 @@ class SendRiskAlertJob implements ShouldQueue
         ]);
     }
 }
-

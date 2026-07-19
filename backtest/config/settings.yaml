@@ -1,0 +1,13 @@
+data:
+  provider: yfinance
+  cache_dir: ./data
+
+backtest:
+  default_capital: 10000 
+  commission: 0.001     # 0.1% per trade
+  slippage: 0.0005      # 0.05% slippage
+
+risk:
+  max_position_size: 0.95
+  stop_loss: null
+  take_profit: null

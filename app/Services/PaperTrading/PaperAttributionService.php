@@ -30,6 +30,7 @@ class PaperAttributionService
         return TradeAttribution::query()->create([
             'trade_decision_id' => $decision->id,
             'broker_order_id' => $order->id,
+            'paper_session_id' => $order->paper_session_id,
             'asset_id' => $decision->asset_id,
             'expected_probability' => $expectedProbability,
             'expected_expectancy' => $expectedExpectancy,

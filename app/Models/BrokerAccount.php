@@ -77,4 +77,14 @@ class BrokerAccount extends Model
     {
         return $this->hasMany(PaperPortfolioSnapshot::class);
     }
+
+    public function paperSessions(): HasMany
+    {
+        return $this->hasMany(PaperSession::class);
+    }
+
+    public function pipelineCycles(): HasMany
+    {
+        return $this->hasMany(PipelineCycle::class);
+    }
 }

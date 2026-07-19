@@ -13,8 +13,7 @@ class SlippageModel
         float $volatility = 0.03,
         float $spreadBps = 30.0,
         float $liquidityScore = 0.6,
-    ): float
-    {
+    ): float {
         if ($referencePrice <= 0) {
             return 0.0;
         }

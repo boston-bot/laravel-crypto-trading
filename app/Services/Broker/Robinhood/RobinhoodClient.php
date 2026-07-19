@@ -15,8 +15,7 @@ class RobinhoodClient
     public function __construct(
         private readonly HttpFactory $http,
         private readonly RobinhoodSigner $signer,
-    ) {
-    }
+    ) {}
 
     public function ping(BrokerCredential $credential): bool
     {
@@ -153,7 +152,7 @@ class RobinhoodClient
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     public function placeOrder(BrokerCredential $credential, array $payload): array
@@ -177,8 +176,8 @@ class RobinhoodClient
     }
 
     /**
-     * @param array<string, mixed> $payload
-     * @param array<string, mixed> $query
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $query
      * @return array<string, mixed>
      */
     private function request(
@@ -263,8 +262,8 @@ class RobinhoodClient
     }
 
     /**
-     * @param array<string, mixed> $response
-     * @param array<int, string> $preferredPaths
+     * @param  array<string, mixed>  $response
+     * @param  array<int, string>  $preferredPaths
      * @return array<int, array<string, mixed>>
      */
     private function extractRecords(array $response, array $preferredPaths): array
@@ -316,7 +315,7 @@ class RobinhoodClient
     }
 
     /**
-     * @param array<string, mixed> $query
+     * @param  array<string, mixed>  $query
      */
     private function buildSignedPath(string $path, array $query): string
     {
@@ -334,7 +333,7 @@ class RobinhoodClient
     }
 
     /**
-     * @param array<string, mixed> $query
+     * @param  array<string, mixed>  $query
      * @return array<string, mixed>
      */
     private function normalizeQuery(array $query): array
@@ -384,7 +383,7 @@ class RobinhoodClient
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function encodeBody(array $payload): string
     {

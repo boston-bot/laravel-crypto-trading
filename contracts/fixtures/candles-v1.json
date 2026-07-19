@@ -1,0 +1,16 @@
+[
+  {
+    "asset_id": 1,
+    "symbol": "BTC",
+    "timeframe": "1h",
+    "candle_open_time": "2026-07-16T10:00:00+00:00",
+    "candle_close_time": "2026-07-16T11:00:00+00:00",
+    "available_at": "2026-07-16T11:00:01+00:00",
+    "is_final": true,
+    "open": 100,
+    "high": 102,
+    "low": 99,
+    "close": 101,
+    "volume": 25
+  }
+]

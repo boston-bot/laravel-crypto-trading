@@ -16,6 +16,7 @@ use App\Models\RiskEvent;
 use App\Models\TradeAttribution;
 use App\Models\TradeDecision;
 use App\Services\Broker\BrokerSyncJobFactory;
+use Illuminate\Bus\Dispatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -312,7 +313,7 @@ class BrokerDataController extends Controller
         return response()->json($query->paginate($this->perPage($request)));
     }
 
-    public function sync(Request $request, BrokerSyncJobFactory $jobFactory): JsonResponse
+    public function sync(Request $request, BrokerSyncJobFactory $jobFactory, Dispatcher $dispatcher): JsonResponse
     {
         $broker = BrokerType::tryFrom((string) $request->string('broker'))
             ?? BrokerType::default();
@@ -320,14 +321,19 @@ class BrokerDataController extends Controller
             ? (int) $request->integer('credential_id')
             : null;
         $timeframe = (string) $request->string('timeframe', '1d');
+        $sync = $request->boolean('sync', false);
 
         foreach ($jobFactory->make($broker, $credentialId, $timeframe) as $job) {
-            dispatch($job);
+            if ($sync) {
+                $dispatcher->dispatchSync($job);
+            } else {
+                dispatch($job);
+            }
         }
 
         return response()->json([
-            'message' => ucfirst($broker->value).' sync jobs queued.',
-        ], 202);
+            'message' => ucfirst($broker->value).($sync ? ' sync jobs executed synchronously.' : ' sync jobs queued.'),
+        ], $sync ? 200 : 202);
     }
 
     private function resolveBroker(Request $request): string

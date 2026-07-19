@@ -35,4 +35,3 @@ class FreezeTradingCommand extends Command
         return self::FAILURE;
     }
 }
-

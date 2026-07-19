@@ -10,8 +10,7 @@ class RegimeService
 {
     public function __construct(
         private readonly FeatureEngine $featureEngine,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>

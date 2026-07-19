@@ -41,4 +41,3 @@ class ApproveTradeDecisionCommand extends Command
         return self::SUCCESS;
     }
 }
-

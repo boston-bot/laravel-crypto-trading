@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evaluation-result-v1",
+  "type": "object",
+  "required": ["engine_version", "schema_version", "job_id", "as_of", "valid_until", "manifest_hash", "proposals"],
+  "properties": {
+    "engine_version": {"type": "string"},
+    "schema_version": {"const": "1.0"},
+    "job_id": {"type": "string", "format": "uuid"},
+    "as_of": {"type": "string", "format": "date-time"},
+    "valid_until": {"type": ["string", "null"], "format": "date-time"},
+    "manifest_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "asset", "action", "score", "calibrated_probability", "expected_value_bps", "factor_attribution", "warnings"],
+        "properties": {
+          "asset_id": {"type": "integer"},
+          "asset": {"type": "string"},
+          "action": {"enum": ["ENTER", "EXIT", "HOLD"]},
+          "score": {"type": "number"},
+          "calibrated_probability": {"type": "number", "minimum": 0, "maximum": 1},
+          "expected_value_bps": {"type": ["number", "null"]},
+          "factor_attribution": {"type": "object"},
+          "warnings": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

@@ -12,6 +12,7 @@ class PaperPosition extends Model
 
     protected $fillable = [
         'broker_account_id',
+        'paper_session_id',
         'asset_id',
         'quantity',
         'avg_entry_price',
@@ -46,6 +47,11 @@ class PaperPosition extends Model
     public function brokerAccount(): BelongsTo
     {
         return $this->belongsTo(BrokerAccount::class);
+    }
+
+    public function paperSession(): BelongsTo
+    {
+        return $this->belongsTo(PaperSession::class);
     }
 
     public function asset(): BelongsTo

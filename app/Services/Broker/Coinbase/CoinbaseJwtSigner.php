@@ -161,7 +161,7 @@ class CoinbaseJwtSigner
     private function readAsn1Tag(string $der, int &$offset): int
     {
         $tag = ord($der[$offset] ?? "\x00");
-        ++$offset;
+        $offset++;
 
         return $tag;
     }
@@ -169,7 +169,7 @@ class CoinbaseJwtSigner
     private function readAsn1Length(string $der, int &$offset): int
     {
         $length = ord($der[$offset] ?? "\x00");
-        ++$offset;
+        $offset++;
 
         if (($length & 0x80) === 0) {
             return $length;
@@ -183,7 +183,7 @@ class CoinbaseJwtSigner
         $length = 0;
         for ($i = 0; $i < $byteCount; $i++) {
             $length = ($length << 8) | ord($der[$offset] ?? "\x00");
-            ++$offset;
+            $offset++;
         }
 
         return $length;

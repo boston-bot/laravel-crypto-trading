@@ -3,6 +3,7 @@
 namespace App\Services\Broker;
 
 use App\Enums\BrokerType;
+use App\Jobs\SnapshotPaperPortfolioJob;
 use App\Jobs\SyncCoinbaseAccountJob;
 use App\Jobs\SyncCoinbaseAssetsJob;
 use App\Jobs\SyncCoinbaseMarketDataJob;
@@ -28,6 +29,7 @@ class BrokerSyncJobFactory
                 new SyncCoinbaseMarketDataJob($credentialId, $timeframe),
                 new SyncCoinbasePositionsJob($credentialId),
                 new SyncCoinbaseOrdersJob($credentialId),
+                new SnapshotPaperPortfolioJob(BrokerType::COINBASE->value),
             ],
             BrokerType::ROBINHOOD => [
                 new SyncRobinhoodAccountJob($credentialId),
@@ -35,6 +37,7 @@ class BrokerSyncJobFactory
                 new SyncRobinhoodMarketDataJob($credentialId, $timeframe),
                 new SyncRobinhoodPositionsJob($credentialId),
                 new SyncRobinhoodOrdersJob($credentialId),
+                new SnapshotPaperPortfolioJob(BrokerType::ROBINHOOD->value),
             ],
         };
     }

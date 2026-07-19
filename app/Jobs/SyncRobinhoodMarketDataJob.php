@@ -4,13 +4,14 @@ namespace App\Jobs;
 
 use App\Enums\BrokerType;
 use App\Models\Asset;
-use App\Services\Broker\BrokerException;
 use App\Services\Broker\BrokerCredentialResolver;
+use App\Services\Broker\BrokerException;
 use App\Services\Broker\Robinhood\RobinhoodClient;
 use App\Services\MarketData\CandleIngestionService;
 use App\Services\MarketData\CoinbaseMarketDataClient;
 use App\Services\MarketData\QuoteSnapshotService;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Queue\Queueable;
 
 class SyncRobinhoodMarketDataJob implements ShouldQueue
@@ -20,8 +21,7 @@ class SyncRobinhoodMarketDataJob implements ShouldQueue
     public function __construct(
         public readonly ?int $credentialId = null,
         public readonly string $timeframe = '1d',
-    ) {
-    }
+    ) {}
 
     public function handle(
         RobinhoodClient $client,
@@ -90,9 +90,9 @@ class SyncRobinhoodMarketDataJob implements ShouldQueue
     }
 
     /**
-     * @return \Illuminate\Database\Eloquent\Collection<int, Asset>
+     * @return Collection<int, Asset>
      */
-    private function resolveAssets(): \Illuminate\Database\Eloquent\Collection
+    private function resolveAssets(): Collection
     {
         $allowedAssets = array_map('strtoupper', (array) config('trading.allowed_assets', []));
 

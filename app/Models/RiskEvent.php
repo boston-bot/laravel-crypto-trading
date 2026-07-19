@@ -44,4 +44,3 @@ class RiskEvent extends Model
         return $this->belongsTo(TradeDecision::class);
     }
 }
-

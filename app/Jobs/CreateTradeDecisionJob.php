@@ -28,8 +28,10 @@ class CreateTradeDecisionJob implements ShouldQueue
         public readonly int $strategyRunId,
         public readonly int $assetId,
         public readonly int $brokerAccountId,
-    ) {
-    }
+        public readonly ?array $engineSignal = null,
+        public readonly ?string $engineJobId = null,
+        public readonly ?int $assetEvaluationId = null,
+    ) {}
 
     public function handle(
         SignalAggregator $signalAggregator,
@@ -42,11 +44,19 @@ class CreateTradeDecisionJob implements ShouldQueue
         $asset = Asset::query()->findOrFail($this->assetId);
         $brokerAccount = BrokerAccount::query()->findOrFail($this->brokerAccountId);
 
-        $signal = $signalAggregator->evaluate($asset);
-        $decisionAction = $signal['decision'] ?? TradeDecisionAction::HOLD;
-        $side = $signal['side'] ?? null;
+        $signal = $this->engineSignal ?? $signalAggregator->evaluate($asset);
+        $decisionAction = $this->normalizeAction($signal['decision'] ?? $signal['action'] ?? TradeDecisionAction::HOLD);
+        $side = $this->normalizeSide($signal['side'] ?? null);
 
         $referencePrice = $this->extractReferencePrice($signal);
+        if ($decisionAction !== TradeDecisionAction::HOLD && $referencePrice <= 0) {
+            $decisionAction = TradeDecisionAction::HOLD;
+            $side = null;
+            $signal['warnings'] = array_values(array_unique([
+                ...(array) ($signal['warnings'] ?? []),
+                'No observed reference price was available; the proposal was failed closed.',
+            ]));
+        }
         $size = $orderSizingService->size($brokerAccount, $referencePrice, $signal);
         $marketContext = (array) ($signal['market_context'] ?? []);
         $marketContext['sizing'] = [
@@ -78,6 +88,8 @@ class CreateTradeDecisionJob implements ShouldQueue
 
         $tradeDecision = TradeDecision::query()->create([
             'strategy_run_id' => $strategyRun->id,
+            'asset_evaluation_id' => $this->assetEvaluationId,
+            'engine_job_id' => $this->engineJobId,
             'broker_account_id' => $brokerAccount->id,
             'asset_id' => $asset->id,
             'decision' => $decisionAction->value,
@@ -101,8 +113,11 @@ class CreateTradeDecisionJob implements ShouldQueue
                 'context' => $policyResult->context,
             ],
             'requires_human_approval' => $policyResult->requiresHumanApproval,
+            'signal_expires_at' => now()->addMinutes((int) config('research.engine.proposal_ttl_minutes', 30)),
             'status' => $status->value,
-            'idempotency_key' => (string) Str::uuid(),
+            'idempotency_key' => $this->engineJobId !== null
+                ? hash('sha256', $this->engineJobId.'|'.$asset->id)
+                : (string) Str::uuid(),
         ]);
 
         foreach ($policyResult->checks as $policyName => $result) {
@@ -146,7 +161,7 @@ class CreateTradeDecisionJob implements ShouldQueue
     }
 
     /**
-     * @param array<string, mixed> $signal
+     * @param  array<string, mixed>  $signal
      */
     private function extractReferencePrice(array $signal): float
     {
@@ -160,8 +175,32 @@ class CreateTradeDecisionJob implements ShouldQueue
             return round($quoteMid, 8);
         }
 
-        $relativeStrength = (float) ($signal['market_context']['market_rank']['factor_breakdown']['relative_strength'] ?? 0.5);
+        return 0.0;
+    }
 
-        return round(100 + ($relativeStrength * 20), 8);
+    private function normalizeAction(mixed $action): TradeDecisionAction
+    {
+        if ($action instanceof TradeDecisionAction) {
+            return $action;
+        }
+
+        return match (strtolower((string) $action)) {
+            'enter', 'buy' => TradeDecisionAction::BUY,
+            'exit', 'sell' => TradeDecisionAction::SELL,
+            default => TradeDecisionAction::HOLD,
+        };
+    }
+
+    private function normalizeSide(mixed $side): ?OrderSide
+    {
+        if ($side instanceof OrderSide) {
+            return $side;
+        }
+
+        return match (strtolower((string) $side)) {
+            'buy' => OrderSide::BUY,
+            'sell' => OrderSide::SELL,
+            default => null,
+        };
     }
 }

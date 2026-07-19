@@ -5,8 +5,8 @@ namespace App\Services\Strategy;
 class EntryRuleService
 {
     /**
-     * @param array<string, mixed> $ta
-     * @param array<string, mixed> $marketRank
+     * @param  array<string, mixed>  $ta
+     * @param  array<string, mixed>  $marketRank
      */
     public function shouldEnter(array $ta, array $marketRank): bool
     {

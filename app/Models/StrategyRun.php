@@ -39,4 +39,3 @@ class StrategyRun extends Model
         return $this->hasMany(TradeDecision::class);
     }
 }
-

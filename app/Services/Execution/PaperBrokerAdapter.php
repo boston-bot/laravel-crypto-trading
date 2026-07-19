@@ -12,8 +12,7 @@ class PaperBrokerAdapter
 {
     public function __construct(
         private readonly PaperExecutionEngine $paperExecutionEngine,
-    ) {
-    }
+    ) {}
 
     public function submit(BrokerAccount $account, Asset $asset, TradeDecision $decision): BrokerOrder
     {

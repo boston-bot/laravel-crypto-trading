@@ -15,8 +15,7 @@ class SignalAggregator
         private readonly TaSignalService $taSignalService,
         private readonly EntryRuleService $entryRuleService,
         private readonly ExitRuleService $exitRuleService,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>

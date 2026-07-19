@@ -59,4 +59,3 @@ class DrawdownService
         return ($loss / (float) $equity) * 100;
     }
 }
-

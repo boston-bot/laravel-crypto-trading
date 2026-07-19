@@ -76,9 +76,6 @@ class QuoteSnapshotService
         return max(5.0, ($spreadBps / 2) + 4.0);
     }
 
-    /**
-     * @param  mixed  $value
-     */
     private function toFloat(mixed $value): ?float
     {
         if ($value === null || $value === '') {
@@ -88,9 +85,6 @@ class QuoteSnapshotService
         return (float) $value;
     }
 
-    /**
-     * @param  mixed  $value
-     */
     private function parseTime(mixed $value): ?CarbonImmutable
     {
         if ($value === null || $value === '') {
