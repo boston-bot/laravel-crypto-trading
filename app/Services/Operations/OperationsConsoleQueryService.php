@@ -32,6 +32,8 @@ class OperationsConsoleQueryService
         private readonly RuntimeControlService $runtime,
         private readonly ResearchStatusService $research,
         private readonly PerformanceProjectionService $performance,
+        private readonly StrategyTransparencyQueryService $transparency,
+        private readonly ResearchLabQueryService $researchLab,
     ) {}
 
     /** @return array<string, mixed> */
@@ -67,6 +69,7 @@ class OperationsConsoleQueryService
             'versions' => StrategyVersion::query()->latest('created_at')->get(),
             'backtests' => BacktestRun::query()->with('metrics')->latest('run_started_at')->limit(20)->get(),
             'latest_runs' => StrategyRun::query()->latest('started_at')->limit(20)->get(),
+            'decision_inspector' => $this->transparency->latest(),
             ...$this->performance->paper($session, now()->subDays(30), now()),
         ];
     }
@@ -149,7 +152,13 @@ class OperationsConsoleQueryService
     /** @return array<string, mixed> */
     public function research(): array
     {
-        return ['health' => $this->research->dataHealth(), 'backtests' => $this->research->backtests(), 'calibration' => $this->research->calibration(), 'spreads' => $this->research->spreads()];
+        return [
+            'health' => $this->research->dataHealth(),
+            'backtests' => $this->research->backtests(),
+            'calibration' => $this->research->calibration(),
+            'spreads' => $this->research->spreads(),
+            'lab' => $this->researchLab->experiments(),
+        ];
     }
 
     private function account(): ?BrokerAccount

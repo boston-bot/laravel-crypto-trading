@@ -40,10 +40,15 @@ Route::middleware('operations.local')->prefix('research')->group(function (): vo
 Route::middleware('operations.local')->prefix('ops/v1')->group(function (): void {
     Route::get('/overview', [OperationsConsoleDataController::class, 'overview']);
     Route::get('/strategies', [OperationsConsoleDataController::class, 'strategies']);
+    Route::get('/strategy-decisions/latest', [OperationsConsoleDataController::class, 'latestDecision']);
+    Route::get('/strategy-decisions/{assetEvaluation}', [OperationsConsoleDataController::class, 'decision']);
     Route::get('/assets', [OperationsConsoleDataController::class, 'assets']);
     Route::get('/activity', [OperationsConsoleDataController::class, 'activity']);
     Route::get('/paper', [OperationsConsoleDataController::class, 'paper']);
     Route::get('/operations', [OperationsConsoleDataController::class, 'operations']);
     Route::get('/research', [OperationsConsoleDataController::class, 'research']);
+    Route::get('/research-lab/experiments', [OperationsConsoleDataController::class, 'experiments']);
+    Route::get('/research-lab/experiments/{strategyExperiment}', [OperationsConsoleDataController::class, 'experiment']);
+    Route::get('/research-lab/runs', [OperationsConsoleDataController::class, 'researchRuns']);
     Route::get('/actions/{operatorAction}', [OperationsConsoleDataController::class, 'action']);
 });
