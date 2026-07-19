@@ -32,3 +32,10 @@ def performance_metrics(equity: pd.Series, trade_pnls: Iterable[float], periods_
         "average_loss": float(pnls[pnls < 0].mean()) if (pnls < 0).any() else 0.0,
         "net_expectancy": float(pnls.mean()) if pnls.size else 0.0,
     }
+
+
+def linked_max_drawdown(curves: Iterable[pd.Series]) -> float:
+    from .experiment_runner import link_fold_nav
+    linked = link_fold_nav(curves)
+    if linked.empty: return 0.0
+    return abs(float((linked / linked.cummax() - 1).min())) * 100

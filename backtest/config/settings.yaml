@@ -6,6 +6,11 @@ backtest:
   default_capital: 10000 
   commission: 0.001     # 0.1% per trade
   slippage: 0.0005      # 0.05% slippage
+  nested_walk_forward: true
+  mark_to_market_hours: 4
+  holdout_months: 12
+  minimum_complete_folds: 3
+  benchmark_rebalance: monthly
 
 risk:
   max_position_size: 0.95

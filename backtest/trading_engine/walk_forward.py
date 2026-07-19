@@ -37,3 +37,9 @@ def anchored_folds(spec: BacktestSpec) -> List[Fold]:
         train_end = train_end + pd.DateOffset(months=spec.step_months)
         number += 1
     return rows
+
+
+def assert_nested_boundaries(folds: List[Fold], holdout_start: datetime) -> None:
+    for fold in folds:
+        if not (fold.train_end < fold.validation_start < fold.validation_end < fold.test_start < fold.test_end <= holdout_start):
+            raise ValueError("walk-forward windows overlap or enter the locked holdout")

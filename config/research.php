@@ -59,5 +59,7 @@ return [
         'min_profit_factor' => 1.2,
         'max_drawdown_pct' => 8.0,
         'max_asset_profit_contribution_pct' => 50.0,
+        'require_positive_stressed_expectancy' => true,
+        'benchmarks' => ['point_in_time_equal_weight', 'btc_buy_hold', 'cash'],
     ],
 ];

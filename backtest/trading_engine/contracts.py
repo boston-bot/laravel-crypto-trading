@@ -116,4 +116,4 @@ class BacktestResult:
     calibration: Optional[Dict[str, Any]]
     benchmarks: Dict[str, Any]
     cost_attribution: Dict[str, Any]
-    gate: Dict[str, bool]
+    gate: Dict[str, Any]

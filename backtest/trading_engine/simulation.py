@@ -33,7 +33,7 @@ class Position:
 class PortfolioSimulator:
     """Long/flat replay that fills at the next eligible hourly bar, never the signal close."""
 
-    def __init__(self, initial_capital: float, costs: CostScenario, max_positions: int = 2, max_asset_pct: float = 0.20, max_gross_pct: float = 0.40, seed: int = 7):
+    def __init__(self, initial_capital: float, costs: CostScenario, max_positions: int = 3, max_asset_pct: float = 0.40, max_gross_pct: float = 1.0, seed: int = 7):
         self.initial_capital = float(initial_capital)
         self.costs = costs
         self.max_positions = max_positions
@@ -113,7 +113,7 @@ class PortfolioSimulator:
             equity = cash + sum(position.quantity * latest_prices.get(asset, position.entry_price) for asset, position in positions.items())
             equity_points.append((timestamp, equity))
 
-        equity_series = pd.Series({timestamp: value for timestamp, value in equity_points}, dtype=float).sort_index()
+        equity_series = self._mark_to_market(frames, fills)
         if equity_series.empty:
             equity_series = pd.Series([self.initial_capital], index=[pd.Timestamp.now(tz="UTC")], dtype=float)
         return {
@@ -124,6 +124,27 @@ class PortfolioSimulator:
             "cash": cash,
             "metrics": performance_metrics(equity_series, [trade.pnl for trade in trades]),
         }
+
+    def _mark_to_market(self, frames: Dict[str, pd.DataFrame], fills: List[Fill]) -> pd.Series:
+        indexes = [frame.index for frame in frames.values() if not frame.empty]
+        if not indexes:
+            return pd.Series(dtype=float)
+        start, end = min(index[0] for index in indexes), max(index[-1] for index in indexes)
+        timeline = pd.date_range(start.floor("4h"), end.ceil("4h"), freq="4h", tz="UTC").union(pd.DatetimeIndex([pd.Timestamp(fill.timestamp) for fill in fills])).sort_values()
+        cash = self.initial_capital; quantities: Dict[str, float] = {}; applied = set(); values = {}
+        for timestamp in timeline:
+            for index, fill in enumerate(fills):
+                if index in applied or pd.Timestamp(fill.timestamp) > timestamp or fill.status not in {"filled", "partial"}: continue
+                direction = 1 if fill.side == "BUY" else -1
+                quantities[fill.asset] = quantities.get(fill.asset, 0.0) + direction * fill.filled_quantity
+                cash += (-fill.filled_quantity * fill.fill_price - fill.fee) if direction == 1 else (fill.filled_quantity * fill.fill_price - fill.fee)
+                applied.add(index)
+            market = 0.0
+            for symbol, quantity in quantities.items():
+                eligible = frames[symbol].loc[frames[symbol].index <= timestamp]
+                if not eligible.empty: market += quantity * float(eligible.iloc[-1]["close"])
+            values[timestamp] = cash + market
+        return pd.Series(values, dtype=float)
 
     def _fill(self, timestamp: pd.Timestamp, symbol: str, side: str, requested_quantity: float, reference: float, bar: pd.Series) -> Tuple[Fill, float, float]:
         turnover = max(0.0, float(bar.get("volume", 0))) * reference

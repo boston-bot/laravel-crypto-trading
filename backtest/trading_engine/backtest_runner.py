@@ -13,6 +13,12 @@ from .database import canonical_hash
 from .features import compute_features
 from .simulation import CostScenario, PortfolioSimulator
 from .walk_forward import anchored_folds
+from .strategy_definition import StrategyDefinition, default_definition
+from .strategy_families import evaluate_family
+from .benchmarks import benchmark_curves, summarize_benchmarks
+from .attribution import trade_attribution
+from .experiment_runner import link_fold_nav
+from .robustness import assess_evidence
 
 
 def _candles(connection: Any, asset_id: int, timeframe: str, start: datetime, end: datetime) -> pd.DataFrame:
@@ -54,18 +60,26 @@ def _candles(connection: Any, asset_id: int, timeframe: str, start: datetime, en
         return pd.DataFrame([dict(zip(columns, row)) for row in cursor.fetchall()])
 
 
-def _signal_frame(features: pd.DataFrame, symbol: str) -> pd.DataFrame:
+def _signal_frame(features: pd.DataFrame, symbol: str, definition: StrategyDefinition) -> pd.DataFrame:
     factors = pd.DataFrame(index=features.index)
-    factors["score"] = (
-        features["trend"] * 0.30 + features["relative_strength"] * 0.25 + features["momentum"] * 0.20
-        + (1 - features["atr_pct"] * 20).clip(-1, 1) * 0.15
-        + features["participation"] * 0.05 + features["execution_quality"] * 0.05
-    ).clip(-1, 1)
+    evaluations = [evaluate_family(definition.family, row.to_dict()) for _, row in features.iterrows()]
+    factors["score"] = [item.score for item in evaluations]
     factors["asset"] = symbol
-    factors["action"] = np.where(
-        (factors["score"] >= 0.18) & (features["regime"] >= 0) & (features["rsi"] <= 72), "ENTER",
-        np.where((factors["score"] < -0.10) | (features["regime"] < 0) | (features["rsi"] > 78), "EXIT", "HOLD"),
-    )
+    actions=[]; opened=False; entry_count=0; held_bars=0; cooldown=0
+    for item in evaluations:
+        entry = item.score >= float(definition.parameters["entry_score"]) and all(rule["passed"] for rule in item.rules) and item.score * 100 - float(definition.parameters["cost_estimate_bps"]) >= float(definition.parameters["minimum_net_edge_bps"])
+        exit_ = item.score <= float(definition.parameters["exit_score"]) or held_bars >= int(float(definition.parameters.get("maximum_hold_days", 21)) * 6)
+        action="HOLD"
+        if cooldown: cooldown -= 1
+        elif opened:
+            held_bars += 1
+            if exit_: action="EXIT"; opened=False; held_bars=0; cooldown=int(definition.parameters.get("cooldown_bars",2))
+        elif entry:
+            entry_count += 1
+            if entry_count >= int(definition.parameters.get("entry_confirmation_bars",2)): action="ENTER"; opened=True; entry_count=0
+        else: entry_count=0
+        actions.append(action)
+    factors["action"] = actions
     factors["future_return"] = features.index.to_series().map(lambda _: np.nan)
     return factors
 
@@ -98,6 +112,7 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
         holdout_months=int(raw.get("holdout_months", 12)), fee_bps=float(raw.get("fee_bps", 60)),
         spread_bps=float(raw.get("spread_bps", 10)), slippage_bps=float(raw.get("slippage_bps", 8)),
     )
+    definition = StrategyDefinition.from_mapping(raw["strategy_definition"]) if raw.get("strategy_definition") else default_definition()
     hourly, four_hour = _load_universe(connection, list(payload["assets"]), start, end)
     feature_frames: Dict[str, pd.DataFrame] = {}
     signal_frames: Dict[str, pd.DataFrame] = {}
@@ -110,7 +125,7 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
             continue
         features = compute_features(frame, benchmark)
         feature_frames[symbol] = features
-        signals = _signal_frame(features, symbol)
+        signals = _signal_frame(features, symbol, definition)
         prices = pd.to_numeric(frame.set_index(pd.to_datetime(frame["candle_open_time"], utc=True))["close"])
         signals["future_return"] = prices.shift(-6) / prices - 1
         signal_frames[symbol] = signals
@@ -124,6 +139,7 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
     all_fills: List[Dict[str, Any]] = []
     all_equity: List[Dict[str, Any]] = []
     total_fees = 0.0
+    fold_equity_curves: List[pd.Series] = []
     for fold in folds:
         train = pd.concat([
             signals.loc[(signals.index >= fold.train_start) & (signals.index < fold.train_end), ["score", "future_return"]]
@@ -166,13 +182,15 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
             item["entry_time"] = item["entry_time"].isoformat(); item["exit_time"] = item["exit_time"].isoformat()
         for item in fills:
             item["timestamp"] = item["timestamp"].isoformat()
+            if item.get("observation_time") is not None: item["observation_time"] = item["observation_time"].isoformat()
         all_trades.extend(trades); all_fills.extend(fills)
         all_trade_pnls.extend([float(item.pnl) for item in replay["trades"]])
         total_fees += sum(float(item.fee) for item in replay["fills"])
         all_equity.extend([{"timestamp": timestamp.isoformat(), "equity": float(value), "fold": fold.fold} for timestamp, value in replay["equity"].items()])
+        fold_equity_curves.append(replay["equity"])
         fold_results.append({
             "fold": fold.fold, "windows": {key: value.isoformat() for key, value in asdict(fold).items() if key != "fold"},
-            "normal": replay["metrics"], "stressed": stressed["metrics"], "actionable_signals": int(len(actionable)),
+            "normal": replay["metrics"], "stressed": stressed["metrics"], "actionable_signals": int(len(actionable)), "child_definition_hash": definition.parameter_hash,
         })
 
     calibration = calibration_report(np.asarray(all_probabilities), np.asarray(all_outcomes)) if all_probabilities else None
@@ -190,16 +208,16 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
     for item in all_trades:
         contributions[item["asset"]] = contributions.get(item["asset"], 0.0) + max(0, float(item["pnl"]))
     contribution_pct = {asset: value / total_positive * 100 if total_positive else 0.0 for asset, value in contributions.items()}
-    gate = {
-        "min_oos_trades": len(all_trades) >= 100,
-        "min_assets": len({item["asset"] for item in all_trades}) >= 3,
-        "positive_normal_expectancy": aggregate["net_expectancy"] > 0,
-        "positive_stressed_expectancy": stressed_aggregate["net_expectancy"] > 0,
-        "min_sharpe": aggregate["sharpe"] >= 0.8,
-        "min_profit_factor": aggregate["profit_factor"] >= 1.2,
-        "max_drawdown": aggregate["max_drawdown_pct"] <= 8,
-        "asset_concentration": max(contribution_pct.values(), default=0) <= 50,
-    }
+    linked = link_fold_nav(fold_equity_curves)
+    if not linked.empty:
+        aggregate["linked_max_drawdown_pct"] = abs(float((linked / linked.cummax() - 1).min())) * 100
+        aggregate["max_drawdown_pct"] = aggregate["linked_max_drawdown_pct"]
+    gate = assess_evidence(aggregate | {"trade_count": len(all_trades)}, stressed_aggregate, fold_count=len(fold_results), asset_count=len({item["asset"] for item in all_trades}), max_asset_contribution_pct=max(contribution_pct.values(), default=0))
+    price_series = {}
+    for symbol, frame in four_hour.items():
+        if not frame.empty: price_series[symbol] = pd.to_numeric(frame.set_index(pd.to_datetime(frame["candle_open_time"], utc=True))["close"])
+    benchmark_output = summarize_benchmarks(benchmark_curves(pd.DataFrame(price_series), rebalance_cost_bps=spec.fee_bps)) if price_series else {}
+    attribution = trade_attribution(all_trades, all_fills)
     manifest = {
         "start": start.isoformat(), "end": end.isoformat(), "assets": payload["assets"],
         "rows": {symbol: {"1h": len(hourly.get(symbol, [])), "4h": len(four_hour.get(symbol, []))} for symbol in hourly},
@@ -212,6 +230,6 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
         "calibration": calibration,
         "sentiment_ablation": {"retained": False, "reason": "Sentiment cannot be retained until identical point-in-time folds improve median OOS expectancy and calibration without material drawdown degradation."},
         "trades": all_trades, "fills": all_fills, "equity": all_equity,
-        "benchmarks": {}, "cost_attribution": {"fees_usd": total_fees, "spread_and_slippage_in_fill_prices": True},
-        "asset_profit_contribution_pct": contribution_pct, "gate": gate, "gate_passed": all(gate.values()),
+        "benchmarks": benchmark_output, "cost_attribution": attribution["costs"] | {"fees_usd": total_fees, "spread_and_slippage_in_fill_prices": True}, "attribution": attribution,
+        "asset_profit_contribution_pct": contribution_pct, "gate": gate, "gate_passed": gate["gate_passed"], "evidence_status": gate["status"],
     }
