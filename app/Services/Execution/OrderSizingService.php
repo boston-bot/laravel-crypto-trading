@@ -12,6 +12,7 @@ class OrderSizingService
     public function __construct(
         private readonly DrawdownService $drawdownService,
         private readonly ExposureService $exposureService,
+        private readonly OrderIntentValidator $intentValidator,
     ) {}
 
     /**
@@ -20,6 +21,15 @@ class OrderSizingService
      */
     public function size(PortfolioContext $context, float $lastPrice, array $signal = []): array
     {
+        $intent = $signal['order_intent'] ?? null;
+        if (is_array($intent)) {
+            $assetId = (int) ($signal['asset_id'] ?? $intent['asset_id'] ?? 0);
+            $asset = \App\Models\Asset::query()->findOrFail($assetId);
+            $validated = $this->intentValidator->validate($intent, $asset);
+            $quantity = (float) $validated['normalized_base_quantity'];
+
+            return ['notional' => round($quantity * $lastPrice, 8), 'quantity' => $quantity, 'stop_distance_pct' => 0.0, 'risk_budget_usd' => 0.0, 'regime_multiplier' => 1.0];
+        }
         $equity = max(0.0, $context->equity());
         $buyingPower = max(0.0, $context->availableCash());
         $regimeState = (string) Arr::get($signal, 'market_context.regime.state', 'neutral');

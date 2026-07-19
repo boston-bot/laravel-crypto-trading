@@ -29,8 +29,20 @@ class PaperExecutionEngine
 
     public function submit(BrokerAccount $account, Asset $asset, TradeDecision $decision): BrokerOrder
     {
-        $quote = MarketQuote::query()->where('asset_id', $asset->id)->latest('snapshot_time')->first();
-        $referencePrice = $this->resolveReferencePrice($decision, $quote);
+        $earliest = data_get($decision->order_intent_json, 'earliest_execution_at');
+        $quoteQuery = MarketQuote::query()->where('asset_id', $asset->id);
+        $quote = $earliest !== null
+            ? $quoteQuery->where('snapshot_time', '>', $earliest)->oldest('snapshot_time')->first()
+            : $quoteQuery->latest('snapshot_time')->first();
+        if ($earliest !== null && $quote === null) {
+            throw new RuntimeException('Paper execution requires an executable observation strictly after the order-intent cutoff.');
+        }
+        $referencePrice = $earliest !== null
+            ? (float) ($quote?->mid_price ?: $quote?->last_price)
+            : $this->resolveReferencePrice($decision, $quote);
+        if ($referencePrice <= 0) {
+            throw new RuntimeException('The executable observation does not contain a valid price.');
+        }
         $spreadBps = (float) ($quote?->spread_bps ?? config('trading.paper.default_spread_bps', 35.0));
         $liquidityScore = (float) ($quote?->liquidity_score ?? 0.6);
         $volatility = (float) ($decision->signal_context_json['ta']['atr_pct'] ?? 0.03);
@@ -46,9 +58,9 @@ class PaperExecutionEngine
         $side = $decision->side ?? OrderSide::BUY;
         $slippageBps = $this->slippageModel->estimateSlippageBps($requestedNotional, $volatility, $spreadBps, $liquidityScore);
         $fillPrice = $this->slippageModel->estimateFillPrice($referencePrice, $side, $requestedNotional, $volatility, $spreadBps, $liquidityScore);
-        $filledNotional = round($requestedNotional, 8);
-        $filledQuantity = round($filledNotional / $fillPrice, 12);
-        $feeBps = (float) config('trading.paper.taker_fee_bps', 60.0);
+        $filledQuantity = $requestedQuantity > 0 ? $requestedQuantity : round($requestedNotional / $referencePrice, 12);
+        $filledNotional = round($filledQuantity * $fillPrice, 8);
+        $feeBps = (float) data_get($decision->order_intent_json, 'expected_costs.fee_bps', config('trading.paper.taker_fee_bps', 60.0));
         $fee = round($filledNotional * ($feeBps / 10000), 8);
         $session = PaperSession::query()
             ->where('broker_account_id', $account->id)
@@ -72,7 +84,7 @@ class PaperExecutionEngine
             return BrokerOrder::query()->findOrFail($reservation->broker_order_id);
         }
 
-        $order = DB::transaction(function () use ($account, $asset, $decision, $quote, $side, $referencePrice, $spreadBps, $slippageBps, $fillPrice, $filledNotional, $filledQuantity, $fee, $feeBps, $reservation, $intentHash): BrokerOrder {
+        $order = DB::transaction(function () use ($account, $asset, $decision, $quote, $side, $referencePrice, $spreadBps, $slippageBps, $fillPrice, $filledNotional, $filledQuantity, $fee, $feeBps, $reservation, $intentHash, $earliest): BrokerOrder {
             $lockedDecision = TradeDecision::query()->whereKey($decision->id)->lockForUpdate()->firstOrFail();
             $clientOrderId = 'paper_'.hash('sha256', (string) $lockedDecision->idempotency_key);
             $existing = BrokerOrder::query()->where('client_order_id', $clientOrderId)->first();
@@ -137,7 +149,7 @@ class PaperExecutionEngine
                 'slippage_bps' => $slippageBps,
                 'fill_id' => $fillId,
                 'fee' => $fee,
-                'payload_json' => ['mode' => 'paper', 'quote_snapshot_time' => $quote?->snapshot_time?->toIso8601String()],
+                'payload_json' => ['mode' => 'paper', 'observation_id' => $quote?->id, 'observation_time' => $quote?->snapshot_time?->toIso8601String(), 'intent_earliest_execution_at' => $earliest],
             ]);
             $this->attributionService->record($lockedDecision, $order, $position, $realizedPnl);
             $lockedDecision->update(['status' => TradingDecisionStatus::FILLED->value]);
@@ -152,6 +164,9 @@ class PaperExecutionEngine
 
     private function intentHash(PaperSession $session, Asset $asset, TradeDecision $decision, OrderSide $side, float $notional, float $quantity): string
     {
+        if ($decision->order_intent_hash !== null) {
+            return (string) $decision->order_intent_hash;
+        }
         $payload = [
             'schema_version' => '1.0',
             'paper_session_id' => $session->id,

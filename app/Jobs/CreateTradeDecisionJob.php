@@ -49,6 +49,7 @@ class CreateTradeDecisionJob implements ShouldQueue
         $portfolioContext = $portfolioContexts->resolve($strategyRun->mode->value, $brokerAccount);
 
         $signal = $this->engineSignal ?? $signalAggregator->evaluate($asset);
+        $signal['asset_id'] = $asset->id;
         $decisionAction = $this->normalizeAction($signal['decision'] ?? $signal['action'] ?? TradeDecisionAction::HOLD);
         if ($decisionAction === TradeDecisionAction::HOLD) {
             throw new LogicException('HOLD evaluations do not create trade decisions.');
@@ -124,7 +125,7 @@ class CreateTradeDecisionJob implements ShouldQueue
             'signal_expires_at' => now()->addMinutes((int) config('research.engine.proposal_ttl_minutes', 30)),
             'status' => $status->value,
             'idempotency_key' => $this->engineJobId !== null
-                ? hash('sha256', $this->engineJobId.'|'.$asset->id)
+                ? (string) data_get($signal, 'order_intent.idempotency_key', hash('sha256', $this->engineJobId.'|'.$asset->id))
                 : (string) Str::uuid(),
             'evaluation_resolution' => (string) ($signal['evaluation_resolution'] ?? 'actionable'),
             'order_intent_hash' => data_get($signal, 'order_intent.intent_hash'),
@@ -184,6 +185,11 @@ class CreateTradeDecisionJob implements ShouldQueue
         $quoteMid = (float) ($signal['market_context']['quote']['mid_price'] ?? 0.0);
         if ($quoteMid > 0.0) {
             return round($quoteMid, 8);
+        }
+
+        $intentPrice = (float) data_get($signal, 'order_intent.reference_price', 0.0);
+        if ($intentPrice > 0.0) {
+            return round($intentPrice, 8);
         }
 
         return 0.0;

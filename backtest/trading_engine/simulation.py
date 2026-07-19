@@ -10,6 +10,7 @@ import pandas as pd
 from .contracts import ClosedTrade, Fill
 from .features import ensure_utc_index
 from .metrics import performance_metrics
+from .execution_policy import fill_accounting
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,8 @@ class PortfolioSimulator:
                     continue
                 gross = sum(position.quantity * latest_prices.get(asset, position.entry_price) for asset, position in positions.items())
                 target = min(equity * self.max_asset_pct, max(0.0, equity * self.max_gross_pct - gross), cash)
-                fill, quantity, fee = self._fill(timestamp, symbol, "BUY", target / reference, reference, bar)
+                requested_quantity = float(signal.get("normalized_base_quantity", signal.get("requested_quantity", target / reference)))
+                fill, quantity, fee = self._fill(timestamp, symbol, "BUY", requested_quantity, reference, bar)
                 fills.append(fill)
                 actual_cost = quantity * fill.fill_price + fee
                 if fill.status in {"filled", "partial"} and quantity > 0 and actual_cost <= cash + 1e-8:
@@ -130,14 +132,8 @@ class PortfolioSimulator:
         filled_notional = min(requested_notional, max_notional) if max_notional > 0 else 0.0
         quantity = filled_notional / reference if reference > 0 else 0.0
         status = "filled" if quantity >= requested_quantity * 0.999 else ("partial" if quantity > 0 else "rejected")
-        volatility = max(0.0, float(bar.get("atr_pct", 0.03)))
-        size_ratio = requested_notional / max(turnover, requested_notional, 1.0)
-        slippage = self.costs.base_slippage_bps + volatility * self.costs.volatility_multiplier * 100 + np.sqrt(size_ratio) * 5
-        all_in_bps = self.costs.spread_bps / 2 + slippage
-        direction = 1 if side == "BUY" else -1
-        fill_price = reference * (1 + direction * all_in_bps / 10_000)
-        fee = quantity * fill_price * self.costs.taker_fee_bps / 10_000
-        return Fill(timestamp.to_pydatetime(), symbol, side, requested_quantity, quantity, reference, fill_price, fee, float(slippage), status, None if quantity else "insufficient_liquidity"), quantity, fee
+        accounting = fill_accounting(quantity, reference, side, fee_bps=self.costs.taker_fee_bps, spread_bps=self.costs.spread_bps, volatility=max(0.0, float(bar.get("atr_pct", .03))), liquidity_score=float(bar.get("liquidity_score", .6)))
+        return Fill(timestamp.to_pydatetime(), symbol, side, requested_quantity, quantity, reference, accounting["fill_price"], accounting["fee"], accounting["slippage_bps"], status, None if quantity else "insufficient_liquidity", str(bar.get("observation_id")) if bar.get("observation_id") is not None else None, timestamp.to_pydatetime()), quantity, accounting["fee"]
 
     def _rejection(self, timestamp: pd.Timestamp, symbol: str, action: str, reason: str) -> Fill:
         side = "BUY" if action == "ENTER" else "SELL"

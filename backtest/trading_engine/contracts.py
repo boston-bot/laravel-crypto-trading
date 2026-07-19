@@ -85,6 +85,8 @@ class Fill:
     slippage_bps: float
     status: str
     reason: Optional[str] = None
+    observation_id: Optional[str] = None
+    observation_time: Optional[datetime] = None
 
 
 @dataclass(frozen=True)

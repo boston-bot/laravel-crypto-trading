@@ -139,6 +139,8 @@ def frozen_multi_horizon_features(frames: Dict[str, pd.DataFrame], as_of: dateti
     if "4h" not in computed:
         return pd.DataFrame()
     result = computed["4h"].copy()
+    source = ensure_utc_index(frames["4h"])
+    result["reference_price"] = source["close"].reindex(result.index)
     for horizon in ("1h", "1d"):
         if horizon not in computed:
             continue

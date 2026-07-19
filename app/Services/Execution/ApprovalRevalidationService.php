@@ -28,7 +28,6 @@ class ApprovalRevalidationService
         private readonly CoinbaseClient $coinbase,
         private readonly QuoteSnapshotService $quotes,
         private readonly FeeScheduleService $fees,
-        private readonly OrderSizingService $sizing,
         private readonly RiskEngine $risk,
         private readonly PolicyEngine $policy,
         private readonly PortfolioContextResolver $portfolioContexts,
@@ -101,9 +100,7 @@ class ApprovalRevalidationService
         $mode = (string) config('broker.mode', 'paper');
         $portfolioContext = $this->portfolioContexts->resolve($mode, $decision->brokerAccount);
         $signal['market_context']['portfolio_context'] = $portfolioContext->toPayload();
-        $size = $decision->side === OrderSide::SELL
-            ? ['quantity' => (float) $decision->requested_quantity, 'notional' => (float) $decision->requested_quantity * $price]
-            : $this->sizing->size($portfolioContext, $price, $signal);
+        $size = ['quantity' => (float) $decision->requested_quantity, 'notional' => (float) $decision->requested_quantity * $price];
         $candidate = new TradeCandidate(
             assetId: $decision->asset_id,
             symbol: $decision->asset->symbol,
@@ -129,8 +126,6 @@ class ApprovalRevalidationService
         }
 
         $decision->update([
-            'requested_quantity' => $candidate->quantity,
-            'requested_notional' => $candidate->notionalUsd,
             'market_context_json' => $candidate->marketContext,
             'risk_context_json' => ['passed' => true, 'violations' => [], 'context' => $risk->context, 'revalidated_at' => now()->toIso8601String()],
             'policy_result_json' => ['passed' => true, 'checks' => $policy->checks, 'messages' => $policy->messages, 'context' => $policy->context, 'revalidated_at' => now()->toIso8601String()],
@@ -138,7 +133,7 @@ class ApprovalRevalidationService
 
         return new RevalidationResult(true, [], [
             'fresh_price' => $price, 'price_change_bps' => round($driftBps, 4),
-            'requested_quantity' => $candidate->quantity, 'requested_notional' => $candidate->notionalUsd,
+            'requested_quantity' => (float) $decision->requested_quantity, 'requested_notional' => (float) $decision->requested_notional,
         ]);
     }
 

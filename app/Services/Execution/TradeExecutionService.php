@@ -25,6 +25,7 @@ class TradeExecutionService
         private readonly RobinhoodMapper $robinhoodMapper,
         private readonly CoinbaseClient $coinbaseClient,
         private readonly CoinbaseMapper $coinbaseMapper,
+        private readonly OrderIntentValidator $intentValidator,
     ) {}
 
     public function submitDecision(int $decisionId): ?BrokerOrder
@@ -39,6 +40,9 @@ class TradeExecutionService
 
         if ($decision->side === null || $decision->brokerAccount === null || $decision->asset === null) {
             throw new ModelNotFoundException('Trade decision is missing account, asset, or side details.');
+        }
+        if (is_array($decision->order_intent_json)) {
+            $this->intentValidator->validate($decision->order_intent_json, $decision->asset);
         }
 
         $mode = (string) config('broker.mode', 'paper');
@@ -211,7 +215,7 @@ class TradeExecutionService
      */
     private function submitCoinbaseOrder(BrokerCredential $credential, TradeDecision $decision): array
     {
-        $productId = strtoupper($decision->asset->symbol).'-'.strtoupper((string) config('broker.coinbase.quote_currency', 'USD'));
+        $productId = (string) data_get($decision->order_intent_json, 'product_id', strtoupper($decision->asset->symbol).'-'.strtoupper((string) config('broker.coinbase.quote_currency', 'USD')));
         $orderConfig = [
             'market_market_ioc' => array_filter([
                 'quote_size' => $decision->requested_notional !== null ? (string) $decision->requested_notional : null,

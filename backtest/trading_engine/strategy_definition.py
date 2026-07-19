@@ -11,8 +11,18 @@ SUPPORTED_SCHEMA_VERSIONS = {"2.0"}
 SUPPORTED_FAMILIES = {"trend_rotation", "pullback_in_trend", "protected_momentum", "defensive_cash"}
 
 
+def _canonicalize(value: Any) -> Any:
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {key: _canonicalize(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_canonicalize(child) for child in value]
+    return value
+
+
 def canonical_hash(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, allow_nan=False, separators=(",", ":"), sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(_canonicalize(value), allow_nan=False, separators=(",", ":"), sort_keys=True).encode()).hexdigest()
 
 
 def _assert_finite(value: Any, path: str = "definition") -> None:
