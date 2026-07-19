@@ -2,7 +2,7 @@
 
 Date: 2026-07-19  
 Project: `laravel-crypto-trading`  
-Status: Approved in conversation; pending written-spec review
+Status: Approved design; independent specification review passed
 
 ## Purpose
 
@@ -202,7 +202,7 @@ Derived from fresh broker account state:
 - broker snapshot freshness;
 - live loss and drawdown controls.
 
-`OrderSizingService` and `RiskEngine` operate on the interface. They may apply additional live-only restrictions, but paper mode must never be blocked by unrelated live holdings or live buying power.
+`OrderSizingService` validates the canonical `PortfolioTarget` and normalized order intent against the selected `PortfolioContext`; it does not independently resize either one. `RiskEngine` may veto an intent and may apply additional live-only restrictions, but paper mode must never be blocked by unrelated live holdings or live buying power.
 
 All paper accounting is scoped by `paper_session_id`. Intent reservation, order creation, simulated fills, ledger posting, cash release, and position mutation use one idempotency lineage and database transactions with row-level locking or an equivalent serializable guarantee. Reservation keys are unique per session and intent. Cash and position updates are atomic with ledger entries, retries are idempotent, and concurrent cycles cannot reserve or spend the same cash twice. Paper tables and services cannot reference a live broker-account ID as an accounting source; live snapshots may be retained only as explicitly labeled market or diagnostic evidence.
 
@@ -336,7 +336,7 @@ A holdout-passing candidate enters a pinned paper session. Paper evidence is val
 - evidence, evaluation, decision, order, fill, ledger, and attribution hashes reconcile;
 - sufficient elapsed time and trade evidence exist across more than one regime.
 
-The initial paper evidence minimum is 90 elapsed calendar days, 15 completed round trips across at least three assets, and at least 20 final common four-hour bars in each of two preregistered regime classes. Until all thresholds are met, the candidate remains `collecting_evidence`; it is not failed merely because the market has not produced the required regimes. A 15% paper drawdown, manifest mismatch, or reconciliation failure fails the paper gate immediately and suppresses new entries.
+The initial paper evidence minimum is 90 elapsed calendar days, 15 completed round trips across at least three assets, and at least 20 final common four-hour bars in each of two preregistered regime classes. Until all thresholds are met, the candidate remains `collecting_evidence`; it is not failed merely because the market has not produced the required regimes. A paper drawdown above 15%, manifest mismatch, or reconciliation failure fails the paper gate immediately and suppresses new entries; exactly 15.00% remains within the ceiling.
 
 Live trading remains outside this design's automatic promotion path.
 
