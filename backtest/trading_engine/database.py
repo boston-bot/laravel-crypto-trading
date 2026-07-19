@@ -152,6 +152,15 @@ class EngineRepository:
             columns = [item.name for item in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
+    def strategy_definition(self, strategy_version_id: int) -> Dict[str, Any]:
+        with self.connection.cursor() as cursor:
+            cursor.execute("SELECT version, schema_version, content_hash, definition_json FROM strategy_versions WHERE id=%s", (strategy_version_id,))
+            row = cursor.fetchone()
+            if row is None:
+                raise ValueError(f"unknown strategy version: {strategy_version_id}")
+            value = row[3] if isinstance(row[3], dict) else json.loads(row[3])
+            return dict(value) | {"version": str(row[0]), "schema_version": str(row[1]), "content_hash": str(row[2])}
+
 
 def canonical_hash(payload: Any) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()

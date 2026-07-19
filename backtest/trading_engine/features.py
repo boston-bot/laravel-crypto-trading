@@ -125,6 +125,29 @@ def compute_features(frame: pd.DataFrame, benchmark_close: pd.Series | None = No
     return features.replace([np.inf, -np.inf], np.nan).fillna(0)
 
 
+def frozen_multi_horizon_features(frames: Dict[str, pd.DataFrame], as_of: datetime, benchmark_close: pd.Series | None = None) -> pd.DataFrame:
+    """Build one canonical feature frame using only observations available by the cutoff."""
+    cutoff = pd.Timestamp(as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)).tz_convert("UTC")
+    computed: Dict[str, pd.DataFrame] = {}
+    for horizon in ("1h", "4h", "1d"):
+        frame = frames.get(horizon)
+        if frame is None or frame.empty:
+            continue
+        frozen = point_in_time_slice(frame, cutoff.to_pydatetime()) if "available_at" in frame.columns else ensure_utc_index(frame).loc[:cutoff]
+        if not frozen.empty:
+            computed[horizon] = compute_features(frozen, benchmark_close)
+    if "4h" not in computed:
+        return pd.DataFrame()
+    result = computed["4h"].copy()
+    for horizon in ("1h", "1d"):
+        if horizon not in computed:
+            continue
+        latest = computed[horizon].reindex(result.index, method="ffill")
+        for column in ("trend", "momentum", "regime", "atr_pct"):
+            result[f"{horizon}_{column}"] = latest[column]
+    return result.loc[result.index <= cutoff]
+
+
 def score_latest(features: pd.DataFrame, has_position: bool = False) -> Dict[str, object]:
     if features.empty:
         return {"action": "HOLD", "score": 0.0, "factors": {}, "warnings": ["missing_features"]}

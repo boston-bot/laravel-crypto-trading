@@ -9,11 +9,11 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-import pandas as pd
-
 from . import ENGINE_VERSION
 from .database import EngineRepository, canonical_hash, connect
-from .features import compute_features, score_latest
+from .features import frozen_multi_horizon_features
+from .evaluator import PortfolioEvaluator
+from .strategy_definition import StrategyDefinition
 from .backfill import execute_backfill
 from .backtest_runner import execute_backtest
 from .sentiment import refresh_sentiment
@@ -41,36 +41,25 @@ def evaluate_job(repository: EngineRepository, job: Dict[str, Any]) -> Dict[str,
         datetime.fromisoformat(str(evidence_cutoff_value).replace("Z", "+00:00"))
         if evidence_cutoff_value else job["as_of"]
     )
-    proposals = []
+    raw_definition = payload.get("strategy_definition")
+    if raw_definition is None and job.get("strategy_version_id"):
+        raw_definition = repository.strategy_definition(int(job["strategy_version_id"]))
+    if raw_definition is None:
+        raise ValueError("canonical evaluation requires a pinned strategy definition")
+    definition = StrategyDefinition.from_mapping(raw_definition)
+    feature_frames = {}
     for asset in payload.get("assets", []):
-        rows = repository.candles(int(asset["id"]), job["as_of"], "4h", evidence_cutoff)
-        warnings = []
-        if not rows:
-            proposals.append({
-                "asset_id": int(asset["id"]), "asset": asset["symbol"], "action": "HOLD", "score": 0,
-                "calibrated_probability": 0.5, "expected_value_bps": None, "factor_attribution": {},
-                "warnings": ["missing_point_in_time_candles"],
-            })
-            continue
-        frame = pd.DataFrame(rows)
-        features = compute_features(frame)
-        scored = score_latest(features)
-        reference_price = float(frame.iloc[-1]["close"])
-        probability = min(0.99, max(0.01, 0.5 + float(scored["score"]) * 0.35))
-        warnings.extend(scored["warnings"])
-        warnings.append("uncalibrated_until_fold_training")
-        proposals.append({
-            "asset_id": int(asset["id"]), "asset": asset["symbol"], "action": scored["action"],
-            "score": scored["score"], "calibrated_probability": probability, "expected_value_bps": None,
-            "factor_attribution": scored["factors"], "warnings": warnings,
-            "signal": {
-                "decision": scored["action"], "side": "buy" if scored["action"] == "ENTER" else ("sell" if scored["action"] == "EXIT" else None),
-                "score": scored["score"], "confidence": probability,
-                "signal_context": {"scoring": {"probability": probability, "components": scored["factors"]}},
-                "market_context": {"as_of": str(job["as_of"]), "point_in_time": True, "reference_price": reference_price},
-            },
-        })
-    return {"proposals": proposals, "diagnostics": {"engine": ENGINE_VERSION, "point_in_time": True}}
+        frames = {}
+        for timeframe in ("1h", "4h", "1d"):
+            rows = repository.candles(int(asset["id"]), job["as_of"], timeframe, evidence_cutoff)
+            if rows:
+                import pandas as pd
+                frames[timeframe] = pd.DataFrame(rows)
+        feature_frames[str(asset["symbol"])] = frozen_multi_horizon_features(frames, evidence_cutoff)
+    evidence_hash = canonical_hash({"cutoff": evidence_cutoff, "assets": payload.get("assets", []), "manifest": payload.get("market_evidence_manifest_hash")})
+    result = PortfolioEvaluator(definition).evaluate(feature_frames, list(payload.get("assets", [])), job["as_of"], dict(payload.get("portfolio_context", {})), evidence_hash)
+    result["diagnostics"] |= {"engine": ENGINE_VERSION, "universe_version_id": job.get("universe_version_id"), "evidence_cutoff": str(evidence_cutoff)}
+    return result
 
 
 def run_worker(database_url: str, once: bool = False, poll_seconds: float = 2.0) -> int:

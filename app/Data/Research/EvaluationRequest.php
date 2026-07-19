@@ -25,6 +25,8 @@ final readonly class EvaluationRequest
         public ?CarbonImmutable $evidenceCutoff = null,
         public array $portfolioContext = [],
         public ?string $portfolioContextHash = null,
+        public array $strategyDefinition = [],
+        public array $universeDefinition = [],
     ) {}
 
     public function idempotencyKey(): string
@@ -65,6 +67,8 @@ final readonly class EvaluationRequest
             'pipeline_cycle_id' => $this->pipelineCycleId,
             'portfolio_context' => $this->portfolioContext,
             'portfolio_context_hash' => $this->portfolioContextHash,
+            'strategy_definition' => $this->strategyDefinition,
+            'universe_definition' => $this->universeDefinition,
         ];
     }
 }

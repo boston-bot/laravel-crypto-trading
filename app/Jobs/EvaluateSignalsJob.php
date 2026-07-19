@@ -10,6 +10,8 @@ use App\Models\BrokerAccount;
 use App\Models\EngineJob;
 use App\Models\PipelineCycle;
 use App\Models\StrategyRun;
+use App\Models\StrategyVersion;
+use App\Models\UniverseVersion;
 use App\Services\Operations\PipelineCycleService;
 use App\Services\Portfolio\PortfolioContextResolver;
 use App\Services\Strategy\SkillCatalogService;
@@ -61,6 +63,10 @@ class EvaluateSignalsJob implements ShouldQueue
         $evidenceCutoff = $cycle?->evidence_cutoff !== null
             ? CarbonImmutable::instance($cycle->evidence_cutoff)->utc()
             : $now;
+        $strategyVersion = $portfolioContext->strategyVersionId() !== null
+            ? StrategyVersion::query()->find($portfolioContext->strategyVersionId()) : null;
+        $universeVersion = $portfolioContext->universeVersionId() !== null
+            ? UniverseVersion::query()->find($portfolioContext->universeVersionId()) : null;
 
         $requestTemplate = new EvaluationRequest(
             brokerAccountId: $brokerAccount->id,
@@ -77,6 +83,17 @@ class EvaluateSignalsJob implements ShouldQueue
             evidenceCutoff: $evidenceCutoff,
             portfolioContext: $portfolioContext->toPayload(),
             portfolioContextHash: $portfolioContext->contentHash(),
+            strategyDefinition: $strategyVersion === null ? [] : array_merge((array) $strategyVersion->definition_json, [
+                'version' => $strategyVersion->version,
+                'schema_version' => $strategyVersion->schema_version,
+                'content_hash' => $strategyVersion->content_hash,
+            ]),
+            universeDefinition: $universeVersion === null ? [] : [
+                'version' => $universeVersion->version,
+                'symbols' => $universeVersion->symbols_json,
+                'rules' => $universeVersion->rules_json,
+                'content_hash' => $universeVersion->content_hash,
+            ],
         );
         $existingJob = EngineJob::query()->where('idempotency_key', $requestTemplate->idempotencyKey())->first();
         if ($existingJob !== null) {
@@ -108,6 +125,8 @@ class EvaluateSignalsJob implements ShouldQueue
             evidenceCutoff: $requestTemplate->evidenceCutoff,
             portfolioContext: $requestTemplate->portfolioContext,
             portfolioContextHash: $requestTemplate->portfolioContextHash,
+            strategyDefinition: $requestTemplate->strategyDefinition,
+            universeDefinition: $requestTemplate->universeDefinition,
         );
         $job = $strategyEngine->submit($request);
 
