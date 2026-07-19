@@ -1,7 +1,7 @@
 # Automated Crypto Trading Pipeline: Engineering Progress
 
-Date: 2026-07-16  
-Status: Research and paper-trading foundation implemented; local runtime and paper soak not yet started
+Date: 2026-07-19
+Status: Strategy transparency implementation in progress; contract baseline established
 
 ## 1. Purpose
 
@@ -357,6 +357,25 @@ CSRF-protected local mutation routes support:
 Existing broker and research read APIs remain available. While local-only mode is active, console pages and console-used APIs reject non-loopback requests.
 
 ## 9. Verification Evidence
+
+### 9.1 Strategy-transparency baseline (2026-07-19)
+
+The pre-change baseline for the strategy-transparency implementation was captured before application behavior changed:
+
+| Area | Result |
+| --- | --- |
+| Laravel unit/feature suite | 50 passed, 281 assertions; 4 PostgreSQL-only tests skipped |
+| Python synthetic unit suite | 13 passed; one LibreSSL compatibility warning from urllib3 |
+| JavaScript unit suite | 6 passed in 1 Vitest file |
+| Production frontend build | Vite build succeeded; 56 modules transformed |
+
+Known environment failures are tracked separately from implementation failures:
+
+- `cd backtest && python -m pytest -q` could not start because this shell has no `python` alias.
+- `/usr/local/bin/python3 -m pytest -q` and the existing `backtest/venv` initially lacked pytest.
+- After installing the test runner in the existing repository virtual environment, `backtest/venv/bin/python -m pytest -q` passed all 13 baseline tests.
+
+The immutable evaluation-result v1 schema and fixture remain unchanged. New portfolio-context, portfolio-target, and order-intent v1 fixtures are shared by PHP and Python tests, which verify canonical SHA-256 hashes and reject non-finite numeric data.
 
 The implementation was verified on 2026-07-16.
 

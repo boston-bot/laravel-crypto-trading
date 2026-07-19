@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "mode": "paper",
+  "context_id": "paper-session:42",
+  "paper_session_id": 42,
+  "broker_account_id": 7,
+  "broker_account_role": "execution_routing_only",
+  "strategy_version_id": 11,
+  "universe_version_id": 5,
+  "cash": 10000,
+  "reserved_cash": 0,
+  "equity": 10000,
+  "positions": [],
+  "gross_exposure_pct": 0,
+  "correlated_exposure_pct": 0,
+  "drawdown_pct": 0,
+  "realized_loss_windows": {
+    "daily": 0,
+    "weekly": 0
+  },
+  "valuation_at": "2026-07-19T16:00:00+00:00",
+  "valuation_policy": "paper-mark-to-market-v1",
+  "context_hash": "71ff52ee2c43a94a3cddca4ab0e95cce0bc0cf3dacc708c79769e7626724a721"
+}

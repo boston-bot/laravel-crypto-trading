@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "venue": "coinbase",
+  "product_id": "BTC-USD",
+  "asset_id": 1,
+  "asset": "BTC",
+  "side": "buy",
+  "target_weight": 0.4,
+  "delta_weight": 0.4,
+  "unrounded_base_quantity": 0.0039186673,
+  "normalized_base_quantity": 0.00391866,
+  "reference_price": 102050.25,
+  "minimum_notional": 1,
+  "base_increment": "0.00000001",
+  "earliest_execution_at": "2026-07-19T16:00:00+00:00",
+  "time_in_force": "IOC",
+  "expected_costs": {
+    "fee_bps": 60,
+    "spread_bps": 10,
+    "slippage_bps": 8.5
+  },
+  "portfolio_context_hash": "71ff52ee2c43a94a3cddca4ab0e95cce0bc0cf3dacc708c79769e7626724a721",
+  "portfolio_target_hash": "bed6becf625c0374c3abadb72d7f4dcbe5c00d3597bbcc54e0e1f99b6d273fa3",
+  "idempotency_key": "strategy:11:universe:5:bar:20260719T160000Z:BTC:buy",
+  "intent_hash": "1b582ae6bcbd743dcb74c828e98322859036eef67e72f42d6c6fc14aa0075271"
+}

@@ -11,10 +11,13 @@ use App\Models\FeeScheduleSnapshot;
 use App\Models\MarketCandle;
 use App\Models\MarketCandleRevision;
 use App\Models\OrderBookSummary;
+use App\Models\StrategyVersion;
 use App\Models\TradeDecision;
+use App\Models\UniverseVersion;
 use App\Services\Execution\TradeExecutionService;
 use App\Services\MarketData\CandleIngestionService;
 use App\Services\MarketData\SpreadAnalysisService;
+use App\Services\PaperTrading\PaperSessionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use RuntimeException;
@@ -36,6 +39,8 @@ class ResearchPipelineTest extends TestCase
         config()->set('research.engine.driver', 'database');
         config()->set('trading.universe.require_history', false);
         $account = $this->account();
+        $this->activatePinnedVersions();
+        app(PaperSessionService::class)->start($account, 'virtual', 10_000);
         foreach (['BTC', 'ETH', 'SOL'] as $symbol) {
             $this->asset($symbol);
         }
@@ -144,12 +149,83 @@ class ResearchPipelineTest extends TestCase
         $this->assertLessThanOrEqual(1, $fixture['proposals'][0]['calibrated_probability']);
     }
 
+    public function test_shared_portfolio_and_order_contract_fixtures_have_stable_hashes(): void
+    {
+        $fixtures = [
+            'portfolio-context-paper-v1.json' => 'context_hash',
+            'portfolio-target-v1.json' => 'target_hash',
+            'order-intent-v1.json' => 'intent_hash',
+        ];
+
+        foreach ($fixtures as $filename => $hashField) {
+            $fixture = json_decode(
+                (string) file_get_contents(base_path('contracts/fixtures/'.$filename)),
+                true,
+                flags: JSON_THROW_ON_ERROR,
+            );
+            $expectedHash = $fixture[$hashField];
+            unset($fixture[$hashField]);
+            $this->sortRecursively($fixture);
+
+            $this->assertSame('1.0', $fixture['schema_version']);
+            $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $expectedHash);
+            $this->assertSame(
+                $expectedHash,
+                hash('sha256', json_encode($fixture, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)),
+            );
+            $this->assertFiniteNumbers($fixture);
+        }
+    }
+
+    private function sortRecursively(array &$value): void
+    {
+        if (! array_is_list($value)) {
+            ksort($value);
+        }
+
+        foreach ($value as &$child) {
+            if (is_array($child)) {
+                $this->sortRecursively($child);
+            }
+        }
+    }
+
+    private function assertFiniteNumbers(mixed $value): void
+    {
+        if (is_float($value)) {
+            $this->assertTrue(is_finite($value));
+
+            return;
+        }
+
+        if (! is_array($value)) {
+            return;
+        }
+
+        foreach ($value as $child) {
+            $this->assertFiniteNumbers($child);
+        }
+    }
+
     private function account(): BrokerAccount
     {
         return BrokerAccount::query()->create([
             'broker' => 'coinbase', 'external_account_id' => uniqid('acct-', true), 'currency' => 'USD',
             'buying_power' => 10000, 'cash_balance' => 10000, 'equity' => 10000,
             'status' => 'active', 'snapshot_at' => now(),
+        ]);
+    }
+
+    private function activatePinnedVersions(): void
+    {
+        StrategyVersion::query()->create([
+            'name' => 'pipeline-test', 'version' => '1.0.0', 'schema_version' => '1.0',
+            'engine_version' => '0.1.0', 'status' => 'active', 'content_hash' => hash('sha256', 'pipeline-strategy'),
+            'definition_json' => ['family' => 'trend'], 'activated_at' => now(),
+        ]);
+        UniverseVersion::query()->create([
+            'name' => 'pipeline-test', 'version' => '1.0.0', 'status' => 'active',
+            'content_hash' => hash('sha256', 'pipeline-universe'), 'symbols_json' => ['BTC', 'ETH', 'SOL'], 'activated_at' => now(),
         ]);
     }
 

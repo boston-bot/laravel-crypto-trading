@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "strategy_version_id": 11,
+  "universe_version_id": 5,
+  "portfolio_context_hash": "71ff52ee2c43a94a3cddca4ab0e95cce0bc0cf3dacc708c79769e7626724a721",
+  "as_of": "2026-07-19T16:00:00+00:00",
+  "cash_weight": 0.6,
+  "positions": [
+    {
+      "asset_id": 1,
+      "asset": "BTC",
+      "side": "long",
+      "target_weight": 0.4
+    }
+  ],
+  "allocation_policy": "long-cash-v1",
+  "target_hash": "bed6becf625c0374c3abadb72d7f4dcbe5c00d3597bbcc54e0e1f99b6d273fa3"
+}
