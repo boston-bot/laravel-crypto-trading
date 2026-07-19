@@ -2,24 +2,21 @@
 
 namespace App\Services\Risk;
 
-use App\Models\BrokerAccount;
+use App\Contracts\PortfolioContext;
 
 class ExposureService
 {
-    public function openPositionCount(BrokerAccount $account): int
+    public function openPositionCount(PortfolioContext $context): int
     {
-        return $account->positions()
-            ->where('quantity', '>', 0)
-            ->where(function ($query): void {
-                $query->where('market_value', '>', 0)
-                    ->orWhere('avg_cost', '>', 0)
-                    ->orWhere('unrealized_pnl', '!=', 0);
-            })
-            ->count();
+        return collect($context->positions())->filter(fn (array $position): bool => (float) ($position['quantity'] ?? 0) > 0
+            && ((float) ($position['market_value'] ?? 0) > 0
+                || (float) ($position['cost_basis'] ?? 0) > 0
+                || (float) ($position['unrealized_pnl'] ?? 0) !== 0.0)
+        )->count();
     }
 
-    public function openExposureNotional(BrokerAccount $account): float
+    public function openExposureNotional(PortfolioContext $context): float
     {
-        return (float) $account->positions()->sum('market_value');
+        return $context->grossExposureNotional();
     }
 }

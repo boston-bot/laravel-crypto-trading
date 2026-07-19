@@ -2,10 +2,10 @@
 
 namespace App\Services\Risk;
 
+use App\Contracts\PortfolioContext;
 use App\Data\Trading\RiskEvaluation;
 use App\Data\Trading\TradeCandidate;
 use App\Models\Asset;
-use App\Models\BrokerAccount;
 use App\Models\TradeAttribution;
 use App\Services\Portfolio\CorrelationService;
 
@@ -17,17 +17,20 @@ class RiskEngine
         private readonly CorrelationService $correlationService,
     ) {}
 
-    public function evaluate(TradeCandidate $candidate, BrokerAccount $account): RiskEvaluation
+    public function evaluate(TradeCandidate $candidate, PortfolioContext $portfolioContext): RiskEvaluation
     {
         $violations = [];
         $context = [
             'candidate_notional' => $candidate->notionalUsd,
-            'equity' => (float) $account->equity,
-            'buying_power' => (float) $account->buying_power,
-            'open_positions' => $this->exposureService->openPositionCount($account),
+            'portfolio_context_id' => $portfolioContext->contextId(),
+            'portfolio_context_hash' => $portfolioContext->contentHash(),
+            'mode' => $portfolioContext->mode(),
+            'equity' => $portfolioContext->equity(),
+            'available_cash' => $portfolioContext->availableCash(),
+            'open_positions' => $this->exposureService->openPositionCount($portfolioContext),
         ];
-        $equity = max(1.0, (float) $account->equity);
-        $openExposure = $this->exposureService->openExposureNotional($account);
+        $equity = max(1.0, $portfolioContext->equity());
+        $openExposure = $this->exposureService->openExposureNotional($portfolioContext);
         $candidateExposurePct = ($candidate->notionalUsd / $equity) * 100;
         $portfolioHeatPct = (($candidate->side->value === 'buy'
             ? $openExposure + $candidate->notionalUsd
@@ -55,16 +58,16 @@ class RiskEngine
             $violations[] = 'Candidate exceeds the per-asset equity exposure cap.';
         }
 
-        if ($candidate->side->value === 'buy' && $account->positions()->where('asset_id', $candidate->assetId)->where('quantity', '>', 0)->exists()) {
+        if ($candidate->side->value === 'buy' && $portfolioContext->positionQuantity($candidate->assetId) > 0) {
             $violations[] = 'Pyramiding is disabled for existing long positions.';
         }
 
-        if ($candidate->side->value === 'buy' && (float) $account->buying_power < $candidate->notionalUsd) {
+        if ($candidate->side->value === 'buy' && $portfolioContext->availableCash() < $candidate->notionalUsd) {
             $violations[] = 'Insufficient buying power.';
         }
 
         if ($candidate->side->value === 'sell') {
-            $positionQuantity = (float) $account->positions()->where('asset_id', $candidate->assetId)->value('quantity');
+            $positionQuantity = $portfolioContext->positionQuantity($candidate->assetId);
             if ($positionQuantity <= 0) {
                 $violations[] = 'A long position is required before submitting a sell exit.';
             } elseif ($candidate->quantity > $positionQuantity) {
@@ -73,7 +76,7 @@ class RiskEngine
         }
 
         if (
-            $this->exposureService->openPositionCount($account) >= (int) config('risk.max_open_positions')
+            $this->exposureService->openPositionCount($portfolioContext) >= (int) config('risk.max_open_positions')
             && $candidate->side->value === 'buy'
         ) {
             $violations[] = 'Max open positions reached.';
@@ -108,7 +111,7 @@ class RiskEngine
 
         $candidateAsset = Asset::query()->find($candidate->assetId);
         if ($candidateAsset !== null && $candidate->side->value === 'buy') {
-            $correlatedExposurePct = $this->correlationService->correlatedExposurePct($account, $candidateAsset)
+            $correlatedExposurePct = $this->correlationService->correlatedExposurePct($portfolioContext, $candidateAsset)
                 + $candidateExposurePct;
             $context['correlated_exposure_pct'] = $correlatedExposurePct;
 
@@ -117,14 +120,13 @@ class RiskEngine
             }
         }
 
-        $snapshotAt = $account->snapshot_at;
-        if ($snapshotAt === null || $snapshotAt->lt(now()->subMinutes((int) config('risk.stale_account_minutes', 30)))) {
-            $violations[] = 'Account data is stale.';
+        if ($portfolioContext->valuationTime()->lt(now()->subMinutes((int) config('risk.stale_account_minutes', 30)))) {
+            $violations[] = 'Portfolio context is stale.';
         }
 
-        $dailyLossPct = $this->drawdownService->dailyLossPct($account);
-        $weeklyLossPct = $this->drawdownService->weeklyLossPct($account);
-        $drawdownPct = $this->drawdownService->drawdownPct($account);
+        $dailyLossPct = $this->drawdownService->dailyLossPct($portfolioContext);
+        $weeklyLossPct = $this->drawdownService->weeklyLossPct($portfolioContext);
+        $drawdownPct = $this->drawdownService->drawdownPct($portfolioContext);
 
         $context['daily_loss_pct'] = $dailyLossPct;
         $context['weekly_loss_pct'] = $weeklyLossPct;
@@ -142,7 +144,7 @@ class RiskEngine
             $violations[] = 'Drawdown threshold breached.';
         }
 
-        $consecutiveLosses = $this->consecutiveLossCount();
+        $consecutiveLosses = $this->consecutiveLossCount($portfolioContext);
         $context['consecutive_losses'] = $consecutiveLosses;
 
         if ($consecutiveLosses >= (int) config('risk.max_consecutive_losses', 3)) {
@@ -156,12 +158,17 @@ class RiskEngine
         );
     }
 
-    private function consecutiveLossCount(): int
+    private function consecutiveLossCount(PortfolioContext $context): int
     {
         $lookback = max(1, (int) config('risk.consecutive_loss_lookback', 8));
-        $recent = TradeAttribution::query()
+        $query = TradeAttribution::query()
             ->whereNotNull('realized_pnl')
-            ->latest('attributed_at')
+            ->when(
+                $context->mode() === 'paper',
+                fn ($query) => $query->where('paper_session_id', $context->paperSessionId()),
+                fn ($query) => $query->whereHas('tradeDecision', fn ($decision) => $decision->where('broker_account_id', $context->brokerAccountId())),
+            );
+        $recent = $query->latest('attributed_at')
             ->limit($lookback)
             ->pluck('realized_pnl')
             ->map(fn ($value): float => (float) $value)

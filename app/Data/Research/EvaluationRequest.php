@@ -23,6 +23,8 @@ final readonly class EvaluationRequest
         public ?CarbonImmutable $logicalBarClose = null,
         public ?string $pipelineCycleId = null,
         public ?CarbonImmutable $evidenceCutoff = null,
+        public array $portfolioContext = [],
+        public ?string $portfolioContextHash = null,
     ) {}
 
     public function idempotencyKey(): string
@@ -61,6 +63,8 @@ final readonly class EvaluationRequest
             'proposal_ttl_minutes' => (int) config('research.engine.proposal_ttl_minutes', 30),
             'max_signal_age_minutes' => (int) config('research.engine.max_signal_age_minutes', 240),
             'pipeline_cycle_id' => $this->pipelineCycleId,
+            'portfolio_context' => $this->portfolioContext,
+            'portfolio_context_hash' => $this->portfolioContextHash,
         ];
     }
 }

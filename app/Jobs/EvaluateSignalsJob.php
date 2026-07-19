@@ -11,6 +11,7 @@ use App\Models\EngineJob;
 use App\Models\PipelineCycle;
 use App\Models\StrategyRun;
 use App\Services\Operations\PipelineCycleService;
+use App\Services\Portfolio\PortfolioContextResolver;
 use App\Services\Strategy\SkillCatalogService;
 use App\Services\Strategy\UniverseSelectionService;
 use Carbon\CarbonImmutable;
@@ -37,6 +38,7 @@ class EvaluateSignalsJob implements ShouldQueue
         SkillCatalogService $skillCatalogService,
         UniverseSelectionService $universeSelectionService,
         PipelineCycleService $cycles,
+        PortfolioContextResolver $portfolioContexts,
     ): void {
         $brokerAccount = $this->resolveBrokerAccount();
         if ($brokerAccount === null) {
@@ -45,6 +47,12 @@ class EvaluateSignalsJob implements ShouldQueue
 
         $cycle = $this->pipelineCycleId !== null ? PipelineCycle::query()->find($this->pipelineCycleId) : null;
         $mode = $this->mode ?? (string) config('broker.mode', 'paper');
+        $portfolioContext = $portfolioContexts->resolve(
+            $mode,
+            $brokerAccount,
+            $cycle?->strategy_version_id,
+            $cycle?->universe_version_id,
+        );
         $assets = $this->resolveAssets($cycle, $universeSelectionService);
         $now = CarbonImmutable::now('UTC');
         $logicalBarClose = $this->logicalBarClose !== null
@@ -59,14 +67,16 @@ class EvaluateSignalsJob implements ShouldQueue
             strategyRunId: 0,
             asOf: $this->evaluationKind === 'trading' ? $logicalBarClose : $now,
             assets: $assets->map(fn (Asset $asset): array => ['id' => $asset->id, 'symbol' => $asset->symbol])->all(),
-            strategyVersionId: $cycle?->strategy_version_id,
-            universeVersionId: $cycle?->universe_version_id,
+            strategyVersionId: $portfolioContext->strategyVersionId(),
+            universeVersionId: $portfolioContext->universeVersionId(),
             schemaVersion: (string) config('research.engine.schema_version', '1.0'),
             mode: $mode,
             evaluationKind: $this->evaluationKind,
             logicalBarClose: $logicalBarClose,
             pipelineCycleId: $this->pipelineCycleId,
             evidenceCutoff: $evidenceCutoff,
+            portfolioContext: $portfolioContext->toPayload(),
+            portfolioContextHash: $portfolioContext->contentHash(),
         );
         $existingJob = EngineJob::query()->where('idempotency_key', $requestTemplate->idempotencyKey())->first();
         if ($existingJob !== null) {
@@ -79,7 +89,7 @@ class EvaluateSignalsJob implements ShouldQueue
             'strategy_name' => (string) config('trading.strategy_name'),
             'mode' => $mode,
             'started_at' => now(),
-            'account_equity' => $brokerAccount->equity,
+            'account_equity' => $portfolioContext->equity(),
             'status' => 'running',
         ]);
         $request = new EvaluationRequest(
@@ -96,6 +106,8 @@ class EvaluateSignalsJob implements ShouldQueue
             logicalBarClose: $requestTemplate->logicalBarClose,
             pipelineCycleId: $requestTemplate->pipelineCycleId,
             evidenceCutoff: $requestTemplate->evidenceCutoff,
+            portfolioContext: $requestTemplate->portfolioContext,
+            portfolioContextHash: $requestTemplate->portfolioContextHash,
         );
         $job = $strategyEngine->submit($request);
 
@@ -120,6 +132,8 @@ class EvaluateSignalsJob implements ShouldQueue
                 'logical_bar_close' => $logicalBarClose->toIso8601String(),
                 'evaluation_kind' => $this->evaluationKind,
                 'pipeline_cycle_id' => $this->pipelineCycleId,
+                'portfolio_context_id' => $portfolioContext->contextId(),
+                'portfolio_context_hash' => $portfolioContext->contentHash(),
             ],
             'skill_outputs_json' => ['skills' => $skillCatalogService->listLocalSkills()],
         ]);

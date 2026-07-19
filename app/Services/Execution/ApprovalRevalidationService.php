@@ -14,6 +14,7 @@ use App\Services\Broker\BrokerCredentialResolver;
 use App\Services\Broker\Coinbase\CoinbaseClient;
 use App\Services\MarketData\FeeScheduleService;
 use App\Services\MarketData\QuoteSnapshotService;
+use App\Services\Portfolio\PortfolioContextResolver;
 use App\Services\Risk\PolicyEngine;
 use App\Services\Risk\RiskEngine;
 use Illuminate\Bus\Dispatcher;
@@ -30,6 +31,7 @@ class ApprovalRevalidationService
         private readonly OrderSizingService $sizing,
         private readonly RiskEngine $risk,
         private readonly PolicyEngine $policy,
+        private readonly PortfolioContextResolver $portfolioContexts,
     ) {}
 
     public function refreshAndEvaluate(TradeDecision $decision): RevalidationResult
@@ -96,9 +98,12 @@ class ApprovalRevalidationService
             ]),
             'signal_context' => (array) $decision->signal_context_json,
         ];
+        $mode = (string) config('broker.mode', 'paper');
+        $portfolioContext = $this->portfolioContexts->resolve($mode, $decision->brokerAccount);
+        $signal['market_context']['portfolio_context'] = $portfolioContext->toPayload();
         $size = $decision->side === OrderSide::SELL
             ? ['quantity' => (float) $decision->requested_quantity, 'notional' => (float) $decision->requested_quantity * $price]
-            : $this->sizing->size($decision->brokerAccount, $price, $signal);
+            : $this->sizing->size($portfolioContext, $price, $signal);
         $candidate = new TradeCandidate(
             assetId: $decision->asset_id,
             symbol: $decision->asset->symbol,
@@ -110,7 +115,7 @@ class ApprovalRevalidationService
             marketContext: (array) $signal['market_context'],
             signalContext: (array) $signal['signal_context'],
         );
-        $risk = $this->risk->evaluate($candidate, $decision->brokerAccount);
+        $risk = $this->risk->evaluate($candidate, $portfolioContext);
         $policy = $this->policy->evaluate($candidate, $decision->asset);
         $reasons = [...$risk->violations, ...array_values($policy->messages)];
         if (! $risk->passed || ! $policy->passed || $candidate->quantity <= 0 || $candidate->notionalUsd <= 0) {

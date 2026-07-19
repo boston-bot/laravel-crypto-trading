@@ -5,6 +5,7 @@ namespace Tests\Feature\Trading;
 use App\Models\Asset;
 use App\Models\BrokerAccount;
 use App\Models\Position;
+use App\Services\Portfolio\PortfolioContextResolver;
 use App\Services\Risk\ExposureService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -44,7 +45,8 @@ class ExposureServiceDustFilterTest extends TestCase
             'snapshot_at' => now(),
         ]);
 
-        $count = app(ExposureService::class)->openPositionCount($account);
+        $context = app(PortfolioContextResolver::class)->resolve('live', $account);
+        $count = app(ExposureService::class)->openPositionCount($context);
 
         $this->assertSame(0, $count);
     }

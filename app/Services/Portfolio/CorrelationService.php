@@ -2,8 +2,8 @@
 
 namespace App\Services\Portfolio;
 
+use App\Contracts\PortfolioContext;
 use App\Models\Asset;
-use App\Models\BrokerAccount;
 
 class CorrelationService
 {
@@ -38,24 +38,19 @@ class CorrelationService
         return 0.45;
     }
 
-    public function correlatedExposurePct(BrokerAccount $account, Asset $candidateAsset): float
+    public function correlatedExposurePct(PortfolioContext $context, Asset $candidateAsset): float
     {
-        $equity = max(1.0, (float) $account->equity);
-
-        $openPositions = $account->positions()
-            ->with('asset')
-            ->where('quantity', '>', 0)
-            ->get();
+        $equity = max(1.0, $context->equity());
 
         $weightedExposure = 0.0;
-        foreach ($openPositions as $position) {
-            $symbol = (string) ($position->asset?->symbol ?? '');
+        foreach ($context->positions() as $position) {
+            $symbol = (string) ($position['symbol'] ?? '');
             if ($symbol === '') {
                 continue;
             }
 
             $corr = $this->estimateBySymbol($candidateAsset->symbol, $symbol);
-            $weightedExposure += ((float) ($position->market_value ?? 0.0)) * $corr;
+            $weightedExposure += ((float) ($position['market_value'] ?? 0.0)) * $corr;
         }
 
         return ($weightedExposure / $equity) * 100;

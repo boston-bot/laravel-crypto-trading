@@ -13,6 +13,7 @@ use App\Models\StrategyRun;
 use App\Models\TradeDecision;
 use App\Services\Audit\DecisionJournalService;
 use App\Services\Execution\OrderSizingService;
+use App\Services\Portfolio\PortfolioContextResolver;
 use App\Services\Risk\PolicyEngine;
 use App\Services\Risk\RiskEngine;
 use App\Services\Strategy\SignalAggregator;
@@ -39,10 +40,12 @@ class CreateTradeDecisionJob implements ShouldQueue
         RiskEngine $riskEngine,
         PolicyEngine $policyEngine,
         DecisionJournalService $decisionJournal,
+        PortfolioContextResolver $portfolioContexts,
     ): int {
         $strategyRun = StrategyRun::query()->findOrFail($this->strategyRunId);
         $asset = Asset::query()->findOrFail($this->assetId);
         $brokerAccount = BrokerAccount::query()->findOrFail($this->brokerAccountId);
+        $portfolioContext = $portfolioContexts->resolve($strategyRun->mode->value, $brokerAccount);
 
         $signal = $this->engineSignal ?? $signalAggregator->evaluate($asset);
         $decisionAction = $this->normalizeAction($signal['decision'] ?? $signal['action'] ?? TradeDecisionAction::HOLD);
@@ -57,8 +60,9 @@ class CreateTradeDecisionJob implements ShouldQueue
                 'No observed reference price was available; the proposal was failed closed.',
             ]));
         }
-        $size = $orderSizingService->size($brokerAccount, $referencePrice, $signal);
+        $size = $orderSizingService->size($portfolioContext, $referencePrice, $signal);
         $marketContext = (array) ($signal['market_context'] ?? []);
+        $marketContext['portfolio_context'] = $portfolioContext->toPayload();
         $marketContext['sizing'] = [
             'stop_distance_pct' => $size['stop_distance_pct'] ?? null,
             'risk_budget_usd' => $size['risk_budget_usd'] ?? null,
@@ -77,7 +81,7 @@ class CreateTradeDecisionJob implements ShouldQueue
             signalContext: (array) ($signal['signal_context'] ?? []),
         );
 
-        $riskResult = $riskEngine->evaluate($candidate, $brokerAccount);
+        $riskResult = $riskEngine->evaluate($candidate, $portfolioContext);
         $policyResult = $policyEngine->evaluate($candidate, $asset);
         $status = $this->resolveStatus(
             $decisionAction,

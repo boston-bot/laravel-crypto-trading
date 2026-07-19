@@ -2,7 +2,7 @@
 
 namespace App\Services\Execution;
 
-use App\Models\BrokerAccount;
+use App\Contracts\PortfolioContext;
 use App\Services\Risk\DrawdownService;
 use App\Services\Risk\ExposureService;
 use Illuminate\Support\Arr;
@@ -18,17 +18,17 @@ class OrderSizingService
      * @param  array<string, mixed>  $signal
      * @return array{notional: float, quantity: float, stop_distance_pct: float, risk_budget_usd: float, regime_multiplier: float}
      */
-    public function size(BrokerAccount $account, float $lastPrice, array $signal = []): array
+    public function size(PortfolioContext $context, float $lastPrice, array $signal = []): array
     {
-        $equity = max(0.0, (float) $account->equity);
-        $buyingPower = max(0.0, (float) $account->buying_power);
+        $equity = max(0.0, $context->equity());
+        $buyingPower = max(0.0, $context->availableCash());
         $regimeState = (string) Arr::get($signal, 'market_context.regime.state', 'neutral');
         $probability = (float) Arr::get($signal, 'signal_context.scoring.probability', Arr::get($signal, 'confidence', 0.5));
         $atrPct = (float) Arr::get($signal, 'signal_context.ta.atr_pct', config('trading.sizing.default_atr_pct', 0.03));
         $atrPct = $atrPct > 0 ? $atrPct : (float) config('trading.sizing.default_atr_pct', 0.03);
 
-        $drawdownPct = $this->drawdownService->drawdownPct($account);
-        $openExposure = $this->exposureService->openExposureNotional($account);
+        $drawdownPct = $this->drawdownService->drawdownPct($context);
+        $openExposure = $this->exposureService->openExposureNotional($context);
         $heatPct = $equity > 0 ? ($openExposure / $equity) * 100 : 0.0;
 
         $regimeMultiplier = match ($regimeState) {
