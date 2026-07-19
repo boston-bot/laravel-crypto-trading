@@ -18,14 +18,20 @@ use App\Models\PipelineCycle;
 use App\Models\RuntimeProcess;
 use App\Models\StrategyRun;
 use App\Models\StrategyVersion;
+use App\Models\TradeAttribution;
 use App\Models\TradeDecision;
+use App\Services\Analytics\PerformanceProjectionService;
 use App\Services\Research\ResearchStatusService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class OperationsConsoleQueryService
 {
-    public function __construct(private readonly RuntimeControlService $runtime, private readonly ResearchStatusService $research) {}
+    public function __construct(
+        private readonly RuntimeControlService $runtime,
+        private readonly ResearchStatusService $research,
+        private readonly PerformanceProjectionService $performance,
+    ) {}
 
     /** @return array<string, mixed> */
     public function overview(int $windowDays = 30): array
@@ -35,17 +41,16 @@ class OperationsConsoleQueryService
         $cycle = $account ? PipelineCycle::query()->with(['steps', 'evaluations.asset'])->where('broker_account_id', $account->id)->latest('created_at')->first() : null;
         $processes = $this->processes();
         $snapshot = $session ? PaperPortfolioSnapshot::query()->where('paper_session_id', $session->id)->latest('snapshot_time')->first() : null;
-        $opening = (float) ($session?->opening_cash ?? 0);
-        $equity = (float) ($snapshot?->equity ?? $opening);
+        $projection = $this->performance->paper($session, now()->subDays($windowDays), now());
 
         return [
             'meta' => ['generated_at' => now()->toIso8601String(), 'window_days' => $windowDays, 'mode' => (string) config('broker.mode', 'paper'), 'local_only' => true],
             'account' => $account,
-            'paper' => ['session' => $session, 'snapshot' => $snapshot, 'return_pct' => $opening > 0 ? round((($equity - $opening) / $opening) * 100, 4) : null],
+            'paper' => ['session' => $session, 'snapshot' => $snapshot, ...$projection],
             'latest_cycle' => $cycle,
             'latest_explanation' => $cycle?->summary_json['explanation'] ?? ($session ? 'No pipeline cycle has completed for this session yet.' : 'No paper action can occur until a virtual or mirrored paper session is started.'),
             'activity' => ActivityEvent::query()->with('asset')->latest('occurred_at')->limit(12)->get(),
-            'assets' => $this->assetPerformance($windowDays, $session),
+            'assets' => $this->assetPerformance($windowDays, $session, $projection),
             'system' => ['healthy' => $processes->isNotEmpty() && $processes->every(fn (RuntimeProcess $process): bool => $this->processState($process) === 'running'), 'processes' => $processes, 'engine_pending' => EngineJob::query()->whereIn('status', ['pending', 'leased'])->count()],
         ];
     }
@@ -53,11 +58,15 @@ class OperationsConsoleQueryService
     /** @return array<string, mixed> */
     public function strategies(): array
     {
+        $account = $this->account();
+        $session = $account ? $this->activeSession($account->id) : null;
+
         return [
             'active_name' => (string) config('trading.strategy_name'),
             'versions' => StrategyVersion::query()->latest('created_at')->get(),
             'backtests' => BacktestRun::query()->with('metrics')->latest('run_started_at')->limit(20)->get(),
             'latest_runs' => StrategyRun::query()->latest('started_at')->limit(20)->get(),
+            ...$this->performance->paper($session, now()->subDays(30), now()),
         ];
     }
 
@@ -66,8 +75,9 @@ class OperationsConsoleQueryService
     {
         $account = $this->account();
         $session = $account ? $this->activeSession($account->id) : null;
+        $projection = $this->performance->paper($session, now()->subDays($windowDays), now());
 
-        return ['window_days' => $windowDays, 'assets' => $this->assetPerformance($windowDays, $session)];
+        return ['window_days' => $windowDays, ...$projection, 'assets' => $this->assetPerformance($windowDays, $session, $projection)];
     }
 
     /** @return array<string, mixed> */
@@ -154,14 +164,25 @@ class OperationsConsoleQueryService
     }
 
     /** @return array<int, array<string, mixed>> */
-    private function assetPerformance(int $windowDays, ?PaperSession $session): array
+    private function assetPerformance(int $windowDays, ?PaperSession $session, array $projection): array
     {
         $start = now()->subDays(max(1, min(365, $windowDays)));
-        $openingEquity = (float) ($session?->opening_cash ?? 0);
+        $startEquity = data_get($projection, 'portfolio_summary.source_values.start_equity');
+        $measured = data_get($projection, 'performance.measurement_state') === 'measured';
 
-        return Asset::query()->where('broker', BrokerType::default()->value)->whereIn('symbol', (array) config('research.universe', []))->orderBy('symbol')->get()->map(function (Asset $asset) use ($start, $openingEquity, $session): array {
+        return Asset::query()->where('broker', BrokerType::default()->value)->whereIn('symbol', (array) config('research.universe', []))->orderBy('symbol')->get()->map(function (Asset $asset) use ($start, $startEquity, $measured, $session): array {
             $position = $session ? PaperPosition::query()->where('paper_session_id', $session->id)->where('asset_id', $asset->id)->first() : null;
-            $netPnl = (float) ($position?->realized_pnl ?? 0) + (float) ($position?->unrealized_pnl ?? 0);
+            $attributions = $session ? TradeAttribution::query()
+                ->where('paper_session_id', $session->id)
+                ->where('asset_id', $asset->id)
+                ->whereBetween('attributed_at', [$start, now()])
+                ->whereNotNull('realized_return_pct')
+                ->get(['realized_pnl', 'realized_return_pct']) : collect();
+            $netPnl = $attributions->isEmpty() ? null : (float) $attributions->sum('realized_pnl');
+            $linkedReturn = $attributions->isEmpty() ? null : ($attributions->reduce(
+                fn (float $linked, TradeAttribution $attribution): float => $linked * (1 + ((float) $attribution->realized_return_pct / 100)),
+                1.0,
+            ) - 1) * 100;
             $first = MarketCandle::query()->where('asset_id', $asset->id)->where('timeframe', '1h')->where('is_final', true)->where('candle_close_time', '>=', $start)->orderBy('candle_close_time')->first();
             $last = MarketCandle::query()->where('asset_id', $asset->id)->where('timeframe', '1h')->where('is_final', true)->where('candle_close_time', '<=', now())->where('available_at', '<=', now())->latest('candle_close_time')->first();
             $benchmark = $first && $last && (float) $first->close > 0 ? (((float) $last->close / (float) $first->close) - 1) * 100 : null;
@@ -170,9 +191,11 @@ class OperationsConsoleQueryService
             return [
                 'id' => $asset->id,
                 'symbol' => $asset->symbol,
-                'net_pnl' => round($netPnl, 8),
-                'portfolio_contribution_pct' => $openingEquity > 0 ? round(($netPnl / $openingEquity) * 100, 4) : null,
-                'benchmark_return_pct' => $benchmark !== null ? round($benchmark, 4) : null,
+                'net_pnl' => $netPnl !== null ? round($netPnl, 8) : null,
+                'pnl_contribution_pct' => $measured && $netPnl !== null && (float) $startEquity > 0 ? round(($netPnl / (float) $startEquity) * 100, 4) : null,
+                'held_period_linked_return_pct' => $measured && $linkedReturn !== null ? round($linkedReturn, 4) : null,
+                'buy_and_hold_price_return_pct' => $benchmark !== null ? round($benchmark, 4) : null,
+                'costs_included' => false,
                 'position' => $position,
                 'latest_evaluation' => $latestEvaluation,
                 'benchmark_available' => $benchmark !== null,

@@ -10,8 +10,8 @@
 @php
     $pages = [
         'overview' => ['label' => 'Overview', 'path' => '/dashboard', 'title' => 'What happened?', 'subtitle' => 'The latest strategy cycle, its evidence, and its outcome.'],
-        'strategies' => ['label' => 'Strategies', 'path' => '/strategies', 'title' => 'Strategy performance', 'subtitle' => 'Immutable versions, backtests, paper evidence, and promotion gates.'],
-        'assets' => ['label' => 'Assets', 'path' => '/assets', 'title' => 'Asset performance', 'subtitle' => 'Strategy contribution beside buy-and-hold context.'],
+        'strategies' => ['label' => 'Strategies', 'path' => '/strategies', 'title' => 'Strategy performance', 'subtitle' => 'Measured portfolio returns, immutable versions, replay evidence, and promotion gates.'],
+        'assets' => ['label' => 'Assets', 'path' => '/assets', 'title' => 'Asset attribution', 'subtitle' => 'P&L contribution and held-period return beside cost-exclusive buy-and-hold price context.'],
         'activity' => ['label' => 'Activity', 'path' => '/activity', 'title' => 'Decision trail', 'subtitle' => 'Evaluation, proposal, execution, and operational events in order.'],
         'paper' => ['label' => 'Paper', 'path' => '/paper', 'title' => 'Paper portfolio', 'subtitle' => 'Session capital, cash accounting, positions, and proposals.'],
         'operations' => ['label' => 'Operations', 'path' => '/operations', 'title' => 'Runtime operations', 'subtitle' => 'Workers, queues, cycles, data freshness, and safe controls.'],

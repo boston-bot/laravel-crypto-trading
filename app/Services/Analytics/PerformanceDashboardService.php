@@ -7,6 +7,7 @@ use App\Models\BacktestRun;
 use App\Models\BrokerAccount;
 use App\Models\PaperOrderEvent;
 use App\Models\PaperPortfolioSnapshot;
+use App\Models\PaperSession;
 use App\Models\RiskEvent;
 use App\Models\TradeAttribution;
 use App\Services\Research\ResearchStatusService;
@@ -16,6 +17,8 @@ use Illuminate\Support\Str;
 
 class PerformanceDashboardService
 {
+    public function __construct(private readonly PerformanceProjectionService $projection) {}
+
     public function build(
         string $broker,
         ?int $accountId,
@@ -33,8 +36,19 @@ class PerformanceDashboardService
         $windowStart = now()->subDays($windowDays);
         $limitTrades = max(1, min(300, $limitTrades));
         $limitRiskEvents = max(1, min(300, $limitRiskEvents));
+        $session = PaperSession::query()
+            ->where('broker_account_id', $account->id)
+            ->where('status', 'active')
+            ->latest('started_at')
+            ->first();
+        $performance = $this->projection->paper($session, $windowStart, now());
 
-        $snapshots = $account->paperPortfolioSnapshots()
+        $snapshots = PaperPortfolioSnapshot::query()
+            ->when(
+                $session !== null,
+                fn (Builder $query): Builder => $query->where('paper_session_id', $session->id),
+                fn (Builder $query): Builder => $query->whereRaw('1 = 0'),
+            )
             ->where('snapshot_time', '>=', $windowStart)
             ->orderBy('snapshot_time')
             ->get([
@@ -81,7 +95,7 @@ class PerformanceDashboardService
         $tradeStats = $this->tradeStats($account->id, $windowStart);
         $riskStats = $this->riskStats($account->id, $windowStart);
         $operations = $this->operationsStats($account->id, $windowStart, $account, $latestSnapshot, $riskStats);
-        $kpis = $this->paperKpis($equitySeries, $drawdownSeries, $tradeStats, $latestSnapshot, $operations);
+        $kpis = $this->paperKpis($equitySeries, $drawdownSeries, $tradeStats, $latestSnapshot, $operations, $performance);
         $backtest = $this->latestBacktestMetrics();
 
         return [
@@ -114,6 +128,7 @@ class PerformanceDashboardService
                 'paper_snapshot_staleness_minutes' => $operations['paper_snapshot_staleness_minutes'],
                 'account_snapshot_staleness_minutes' => $operations['account_snapshot_staleness_minutes'],
             ],
+            ...$performance,
             'kpis' => $kpis,
             'paper_series' => [
                 'equity' => $equitySeries,
@@ -196,6 +211,7 @@ class PerformanceDashboardService
         array $tradeStats,
         ?PaperPortfolioSnapshot $latestSnapshot,
         array $operations,
+        array $performance,
     ): array {
         $snapshotRealizedPnl = $this->nullableFloat($latestSnapshot?->realized_pnl ?? null);
 
@@ -203,14 +219,7 @@ class PerformanceDashboardService
             ? (float) ($equitySeries[count($equitySeries) - 1]['v'] ?? 0.0)
             : null;
 
-        $paperReturnPct = null;
-        if (count($equitySeries) >= 2) {
-            $startEquity = (float) ($equitySeries[0]['v'] ?? 0.0);
-            $endEquity = (float) ($equitySeries[count($equitySeries) - 1]['v'] ?? 0.0);
-            if ($startEquity > 0) {
-                $paperReturnPct = (($endEquity - $startEquity) / $startEquity) * 100;
-            }
-        }
+        $paperReturnPct = data_get($performance, 'portfolio_summary.strategy_return_pct');
 
         $maxDrawdownPct = null;
         if ($drawdownSeries !== []) {

@@ -7,6 +7,7 @@ use App\Models\BacktestRun;
 use App\Models\BacktestRunMetric;
 use App\Models\BrokerAccount;
 use App\Models\PaperPortfolioSnapshot;
+use App\Models\PaperSession;
 use App\Models\RiskEvent;
 use App\Models\TradeAttribution;
 use App\Models\TradeDecision;
@@ -55,10 +56,24 @@ class PerformanceDashboardEndpointTest extends TestCase
             'is_enabled' => true,
         ]);
 
+        $session = PaperSession::query()->create([
+            'broker_account_id' => $account->id,
+            'funding_mode' => 'virtual',
+            'status' => 'active',
+            'currency' => 'USD',
+            'opening_cash' => 10_000,
+            'reserved_cash' => 0,
+            'fee_scenario' => 'coinbase-taker-current',
+            'slippage_scenario' => 'observed-spread-volatility-v1',
+            'valuation_at' => now()->subDays(30),
+            'started_at' => now()->subDays(30),
+        ]);
+
         $equities = [10000, 10150, 10075, 10320, 10460];
         foreach ($equities as $index => $equity) {
             PaperPortfolioSnapshot::query()->create([
                 'broker_account_id' => $account->id,
+                'paper_session_id' => $session->id,
                 'snapshot_time' => now()->subDays(4 - $index)->startOfDay()->addHours(12),
                 'equity' => $equity,
                 'cash' => 8000,
@@ -165,6 +180,9 @@ class PerformanceDashboardEndpointTest extends TestCase
             ->assertJsonPath('window_summary.snapshot_count', 5)
             ->assertJsonPath('window_summary.trade_count', 3)
             ->assertJsonPath('window_summary.risk_event_count', 1)
+            ->assertJsonPath('performance.measurement_state', 'measured')
+            ->assertJsonPath('performance.completeness_state', 'complete')
+            ->assertJsonPath('portfolio_summary.strategy_return_pct', 4.6)
             ->assertJsonPath('kpis.paper_trade_count', 3)
             ->assertJsonPath('kpis.paper_wins', 2)
             ->assertJsonPath('kpis.paper_losses', 1)
