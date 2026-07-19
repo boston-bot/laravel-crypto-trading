@@ -6,6 +6,7 @@ use App\Data\Trading\TradeCandidate;
 use App\Enums\OrderSide;
 use App\Enums\TradeDecisionAction;
 use App\Enums\TradingDecisionStatus;
+use LogicException;
 use App\Models\Asset;
 use App\Models\BrokerAccount;
 use App\Models\PolicyCheck;
@@ -49,6 +50,9 @@ class CreateTradeDecisionJob implements ShouldQueue
 
         $signal = $this->engineSignal ?? $signalAggregator->evaluate($asset);
         $decisionAction = $this->normalizeAction($signal['decision'] ?? $signal['action'] ?? TradeDecisionAction::HOLD);
+        if ($decisionAction === TradeDecisionAction::HOLD) {
+            throw new LogicException('HOLD evaluations do not create trade decisions.');
+        }
         $side = $this->normalizeSide($signal['side'] ?? null);
 
         $referencePrice = $this->extractReferencePrice($signal);
@@ -122,6 +126,9 @@ class CreateTradeDecisionJob implements ShouldQueue
             'idempotency_key' => $this->engineJobId !== null
                 ? hash('sha256', $this->engineJobId.'|'.$asset->id)
                 : (string) Str::uuid(),
+            'evaluation_resolution' => (string) ($signal['evaluation_resolution'] ?? 'actionable'),
+            'order_intent_hash' => data_get($signal, 'order_intent.intent_hash'),
+            'order_intent_json' => $signal['order_intent'] ?? null,
         ]);
 
         foreach ($policyResult->checks as $policyName => $result) {
@@ -149,11 +156,11 @@ class CreateTradeDecisionJob implements ShouldQueue
         bool $policyPassed,
         bool $requiresHumanApproval,
     ): TradingDecisionStatus {
-        if ($action === TradeDecisionAction::HOLD) {
-            return TradingDecisionStatus::BLOCKED_BY_POLICY;
+        if (! $riskPassed) {
+            return TradingDecisionStatus::BLOCKED_BY_PORTFOLIO_RISK;
         }
 
-        if (! $riskPassed || ! $policyPassed) {
+        if (! $policyPassed) {
             return TradingDecisionStatus::BLOCKED_BY_POLICY;
         }
 

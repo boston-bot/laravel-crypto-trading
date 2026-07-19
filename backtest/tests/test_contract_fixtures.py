@@ -15,6 +15,20 @@ HASH_FIELDS = {
 }
 
 
+def test_v2_evaluation_fixture_carries_a_trace_for_every_expected_asset() -> None:
+    payload = json.loads((FIXTURES / "evaluation-result-v2.json").read_text(encoding="utf-8"))
+
+    assert payload["schema_version"] == "2.0"
+    assert payload["proposals"]
+    for proposal in payload["proposals"]:
+        trace = proposal["decision_trace"]
+        assert trace["strategy_family"] == payload["strategy_family"]
+        assert len(trace["evidence_hash"]) == 64
+        assert len(trace["parameter_hash"]) == 64
+        assert isinstance(trace["rule_checklist"], list)
+        assert_finite_numbers(trace)
+
+
 def canonical_hash(payload: dict[str, Any], hash_field: str) -> str:
     content = {key: value for key, value in payload.items() if key != hash_field}
     canonical = json.dumps(

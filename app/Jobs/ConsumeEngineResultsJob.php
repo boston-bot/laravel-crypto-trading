@@ -2,6 +2,8 @@
 
 namespace App\Jobs;
 
+use App\Data\Research\DecisionTrace;
+use App\Enums\EvaluationResolution;
 use App\Models\AssetEvaluation;
 use App\Models\EngineResult;
 use App\Models\PipelineCycle;
@@ -62,6 +64,7 @@ class ConsumeEngineResultsJob implements ShouldQueue
             $resultFresh = $locked->valid_until === null || $locked->valid_until->isFuture();
             $logicalDeadline = $logicalBarClose->addMinutes((int) config('research.engine.max_signal_age_minutes', 240));
             $logicalFresh = $logicalDeadline->isFuture();
+            $promotableSchema = in_array($locked->schema_version, (array) config('research.promotable_schema_versions', ['2.0']), true);
 
             foreach ($expected as $assetId => $asset) {
                 $proposal = $proposals->get((int) $assetId);
@@ -75,15 +78,36 @@ class ConsumeEngineResultsJob implements ShouldQueue
                 ] : $proposal;
                 $action = strtoupper((string) ($proposal['action'] ?? 'HOLD'));
                 $warnings = array_values(array_unique(array_map('strval', (array) ($proposal['warnings'] ?? []))));
+                $trace = null;
+                if ($promotableSchema && isset($proposal['decision_trace']) && is_array($proposal['decision_trace'])) {
+                    try {
+                        $trace = DecisionTrace::fromArray($proposal['decision_trace']);
+                    } catch (\InvalidArgumentException) {
+                        $warnings[] = 'invalid_decision_trace';
+                    }
+                } elseif ($promotableSchema) {
+                    $warnings[] = 'missing_decision_trace';
+                }
                 if ($missing && ! in_array('missing_engine_proposal', $warnings, true)) {
                     $warnings[] = 'missing_engine_proposal';
                 }
                 $probability = (float) ($proposal['calibrated_probability'] ?? 0.5);
                 $entryThreshold = (float) config('trading.entry.min_probability', 0.52);
-                $eligible = ! $missing && ! in_array('missing_point_in_time_candles', $warnings, true);
-                $suppressionReason = $this->suppressionReason($evaluationKind, $action, $eligible, $outputComplete, $resultFresh, $logicalFresh);
+                $eligible = ! $missing && ! in_array('missing_point_in_time_candles', $warnings, true) && $trace !== null;
+                if (! $promotableSchema) {
+                    $eligible = false;
+                }
+                $resolution = EvaluationResolution::tryFrom((string) ($proposal['resolution'] ?? ''))
+                    ?? ($action === 'HOLD' ? EvaluationResolution::HOLD : EvaluationResolution::BLOCKED_BY_EVIDENCE);
+                if ($trace === null && $promotableSchema) {
+                    $resolution = EvaluationResolution::BLOCKED_BY_EVIDENCE;
+                }
+                if ($action === 'HOLD' && $resolution === EvaluationResolution::ACTIONABLE) {
+                    $resolution = EvaluationResolution::HOLD;
+                }
+                $suppressionReason = $this->suppressionReason($evaluationKind, $resolution, $eligible, $outputComplete, $resultFresh, $logicalFresh, $promotableSchema);
                 $actionable = $suppressionReason === null;
-                $explanation = $this->explanation($action, $probability, $entryThreshold, $warnings, $suppressionReason);
+                $explanation = $trace?->primaryExplanation ?? $this->explanation($action, $probability, $entryThreshold, $warnings, $suppressionReason);
                 $evaluation = AssetEvaluation::query()->firstOrCreate(
                     ['engine_result_id' => $locked->id, 'asset_id' => (int) $assetId],
                     [
@@ -101,6 +125,15 @@ class ConsumeEngineResultsJob implements ShouldQueue
                         'action_suppressed_at' => $actionable ? null : now(),
                         'action_suppression_reason' => $suppressionReason,
                         'action' => $action,
+                        'evaluation_resolution' => $resolution->value,
+                        'strategy_family' => $trace?->strategyFamily,
+                        'strategy_definition_version' => $trace?->strategyDefinitionVersion,
+                        'decision_trace_hash' => $trace?->canonicalHash(),
+                        'evidence_hash' => $trace?->evidenceHash,
+                        'parameter_hash' => $trace?->parameterHash,
+                        'decision_trace_json' => $trace?->toArray(),
+                        'portfolio_target_json' => isset($proposal['portfolio_target']) ? (array) $proposal['portfolio_target'] : null,
+                        'order_intent_json' => isset($proposal['order_intent']) ? (array) $proposal['order_intent'] : null,
                         'score' => (float) ($proposal['score'] ?? 0),
                         'calibrated_probability' => $probability,
                         'expected_value_bps' => $proposal['expected_value_bps'] ?? null,
@@ -110,8 +143,8 @@ class ConsumeEngineResultsJob implements ShouldQueue
                             'result_valid_until' => $locked->valid_until?->toIso8601String(),
                             'logical_bar_deadline' => $logicalDeadline->toIso8601String(),
                         ],
-                        'factor_attribution_json' => (array) ($proposal['factor_attribution'] ?? []),
-                        'reason_codes_json' => array_values(array_unique([...$warnings, ...($suppressionReason !== null ? [$suppressionReason] : [])])),
+                        'factor_attribution_json' => $trace?->factorContributions ?? (array) ($proposal['factor_attribution'] ?? []),
+                        'reason_codes_json' => array_values(array_unique([...($trace?->reasonCodes ?? []), ...$warnings, ...($suppressionReason !== null ? [$suppressionReason] : [])])),
                         'warnings_json' => $warnings,
                         'candle_evidence_json' => [
                             'manifest_hash' => $locked->manifest_hash,
@@ -140,6 +173,8 @@ class ConsumeEngineResultsJob implements ShouldQueue
                 $signal['score'] = (float) ($proposal['score'] ?? 0);
                 $signal['confidence'] = $probability;
                 $signal['warnings'] = $warnings;
+                $signal['evaluation_resolution'] = $resolution->value;
+                $signal['order_intent'] = $proposal['order_intent'] ?? null;
                 $signal['signal_context'] = array_merge((array) ($signal['signal_context'] ?? []), [
                     'engine' => [
                         'job_id' => $job->id,
@@ -239,10 +274,13 @@ class ConsumeEngineResultsJob implements ShouldQueue
         return sprintf('%s was proposed with %.1f%% calibrated probability.', $action, $probability * 100);
     }
 
-    private function suppressionReason(string $evaluationKind, string $action, bool $eligible, bool $outputComplete, bool $resultFresh, bool $logicalFresh): ?string
+    private function suppressionReason(string $evaluationKind, EvaluationResolution $resolution, bool $eligible, bool $outputComplete, bool $resultFresh, bool $logicalFresh, bool $promotableSchema): ?string
     {
         if (! $outputComplete) {
             return 'incomplete_engine_output';
+        }
+        if (! $promotableSchema) {
+            return 'legacy_schema_non_promotable';
         }
         if (! $eligible) {
             return 'ineligible_evidence';
@@ -250,8 +288,8 @@ class ConsumeEngineResultsJob implements ShouldQueue
         if ($evaluationKind !== 'trading') {
             return 'diagnostic_evaluation';
         }
-        if ($action === 'HOLD') {
-            return 'hold';
+        if (! $resolution->permitsDecision()) {
+            return $resolution->value;
         }
         if (! $resultFresh) {
             return 'expired_result';

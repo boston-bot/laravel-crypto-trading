@@ -3,7 +3,7 @@
 return [
     'engine' => [
         'driver' => env('STRATEGY_ENGINE_DRIVER', 'legacy'),
-        'schema_version' => env('STRATEGY_ENGINE_SCHEMA_VERSION', '1.0'),
+        'schema_version' => env('STRATEGY_ENGINE_SCHEMA_VERSION', '2.0'),
         'version' => env('STRATEGY_ENGINE_VERSION', '0.1.0'),
         'lease_seconds' => (int) env('STRATEGY_ENGINE_LEASE_SECONDS', 300),
         'max_attempts' => (int) env('STRATEGY_ENGINE_MAX_ATTEMPTS', 3),
@@ -12,6 +12,7 @@ return [
         'max_signal_age_minutes' => (int) env('STRATEGY_MAX_SIGNAL_AGE_MINUTES', 240),
     ],
     'universe' => ['BTC', 'ETH', 'SOL', 'LINK', 'LTC'],
+    'promotable_schema_versions' => ['2.0'],
     'candles' => [
         'canonical_source' => 'coinbase',
         'canonical_timeframe' => '1h',

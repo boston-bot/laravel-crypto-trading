@@ -17,6 +17,8 @@ final readonly class EvaluationResult
         public string $manifestHash,
         public array $proposals,
         public array $diagnostics = [],
+        public ?string $strategyFamily = null,
+        public ?string $strategyDefinitionVersion = null,
     ) {}
 
     public static function fromModel(EngineResult $result): self
@@ -32,6 +34,15 @@ final readonly class EvaluationResult
             manifestHash: $result->manifest_hash,
             proposals: (array) ($payload['proposals'] ?? []),
             diagnostics: (array) ($payload['diagnostics'] ?? []),
+            strategyFamily: isset($payload['strategy_family']) ? (string) $payload['strategy_family'] : null,
+            strategyDefinitionVersion: isset($payload['strategy_definition_version']) ? (string) $payload['strategy_definition_version'] : null,
         );
+    }
+
+    public function isPromotable(): bool
+    {
+        return version_compare($this->schemaVersion, '2.0', '>=')
+            && $this->strategyFamily !== null
+            && $this->strategyDefinitionVersion !== null;
     }
 }

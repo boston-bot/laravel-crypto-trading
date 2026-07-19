@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evaluation-result-v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["engine_version", "schema_version", "job_id", "as_of", "valid_until", "manifest_hash", "strategy_family", "strategy_definition_version", "proposals"],
+  "properties": {
+    "engine_version": {"type": "string", "minLength": 1},
+    "schema_version": {"const": "2.0"},
+    "job_id": {"type": "string", "format": "uuid"},
+    "as_of": {"type": "string", "format": "date-time"},
+    "valid_until": {"type": ["string", "null"], "format": "date-time"},
+    "manifest_hash": {"$ref": "#/$defs/hash"},
+    "strategy_family": {"type": "string", "minLength": 1},
+    "strategy_definition_version": {"type": "string", "minLength": 1},
+    "diagnostics": {"type": "object"},
+    "proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["asset_id", "asset", "action", "resolution", "decision_trace"],
+        "properties": {
+          "asset_id": {"type": "integer", "minimum": 1},
+          "asset": {"type": "string", "minLength": 1},
+          "action": {"enum": ["ENTER", "EXIT", "HOLD"]},
+          "resolution": {"enum": ["actionable", "hold", "blocked_by_evidence", "blocked_by_strategy", "blocked_by_portfolio_risk", "blocked_by_policy"]},
+          "decision_trace": {"$ref": "#/$defs/decision_trace"},
+          "portfolio_target": {"$ref": "#/$defs/portfolio_target"},
+          "order_intent": {"anyOf": [{"$ref": "#/$defs/order_intent"}, {"type": "null"}]},
+          "warnings": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "decision_trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy_family", "strategy_definition_version", "rank", "portfolio_state", "rule_checklist", "factor_contributions", "gross_edge_bps", "cost_estimate_bps", "net_edge_bps", "primary_explanation", "reason_codes", "counterfactual", "evidence_hash", "parameter_hash"],
+      "properties": {
+        "strategy_family": {"type": "string", "minLength": 1},
+        "strategy_definition_version": {"type": "string", "minLength": 1},
+        "rank": {"type": "integer", "minimum": 1},
+        "portfolio_state": {"type": "object"},
+        "rule_checklist": {"type": "array", "items": {"type": "object", "required": ["rule", "passed"], "properties": {"rule": {"type": "string"}, "passed": {"type": "boolean"}, "observed": {}, "required": {}}}},
+        "factor_contributions": {"type": "object", "additionalProperties": {"type": "number"}},
+        "gross_edge_bps": {"type": "number"},
+        "cost_estimate_bps": {"type": "number", "minimum": 0},
+        "net_edge_bps": {"type": "number"},
+        "primary_explanation": {"type": "string", "minLength": 1},
+        "reason_codes": {"type": "array", "items": {"type": "string"}},
+        "counterfactual": {"type": "string", "minLength": 1},
+        "evidence_hash": {"$ref": "#/$defs/hash"},
+        "parameter_hash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "portfolio_target": {
+      "type": "object",
+      "required": ["cash_weight", "positions", "target_hash"],
+      "properties": {"cash_weight": {"type": "number", "minimum": 0, "maximum": 1}, "positions": {"type": "array"}, "target_hash": {"$ref": "#/$defs/hash"}}
+    },
+    "order_intent": {
+      "type": "object",
+      "required": ["venue", "product_id", "side", "normalized_base_quantity", "reference_price", "earliest_execution_at", "idempotency_key", "intent_hash"],
+      "properties": {
+        "venue": {"const": "coinbase"}, "product_id": {"type": "string"}, "side": {"enum": ["buy", "sell"]},
+        "normalized_base_quantity": {"type": "number", "exclusiveMinimum": 0}, "reference_price": {"type": "number", "exclusiveMinimum": 0},
+        "earliest_execution_at": {"type": "string", "format": "date-time"}, "idempotency_key": {"type": "string", "minLength": 1}, "intent_hash": {"$ref": "#/$defs/hash"}
+      }
+    }
+  }
+}

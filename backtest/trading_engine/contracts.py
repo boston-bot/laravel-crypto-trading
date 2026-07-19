@@ -16,6 +16,10 @@ class Proposal:
     factor_attribution: Dict[str, float]
     warnings: List[str] = field(default_factory=list)
     signal: Dict[str, Any] = field(default_factory=dict)
+    resolution: str = "hold"
+    decision_trace: Dict[str, Any] = field(default_factory=dict)
+    portfolio_target: Dict[str, Any] = field(default_factory=dict)
+    order_intent: Optional[Dict[str, Any]] = None
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,8 @@ class EvaluationResult:
     manifest_hash: str
     proposals: List[Proposal]
     diagnostics: Dict[str, Any] = field(default_factory=dict)
+    strategy_family: Optional[str] = None
+    strategy_definition_version: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         value = asdict(self)

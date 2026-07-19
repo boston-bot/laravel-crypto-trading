@@ -60,7 +60,14 @@ class CreateTradeDecisionJobTest extends TestCase
         ]);
 
         $decisionId = app(Dispatcher::class)->dispatchSync(
-            new CreateTradeDecisionJob($strategyRun->id, $asset->id, $account->id)
+            new CreateTradeDecisionJob($strategyRun->id, $asset->id, $account->id, [
+                'action' => 'ENTER',
+                'side' => 'buy',
+                'score' => 0.8,
+                'confidence' => 0.7,
+                'market_context' => ['reference_price' => 100, 'regime' => ['state' => 'risk_on']],
+                'signal_context' => ['ta' => ['atr_pct' => 0.03]],
+            ])
         );
         $decisionId = $decisionId ?: (int) $strategyRun->tradeDecisions()->value('id');
 

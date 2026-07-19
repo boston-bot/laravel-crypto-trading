@@ -37,6 +37,9 @@ class TradeDecision extends Model
         'signal_expires_at',
         'status',
         'idempotency_key',
+        'evaluation_resolution',
+        'order_intent_hash',
+        'order_intent_json',
     ];
 
     protected function casts(): array
@@ -56,6 +59,7 @@ class TradeDecision extends Model
             'approved_at' => 'datetime',
             'signal_expires_at' => 'immutable_datetime',
             'status' => TradingDecisionStatus::class,
+            'order_intent_json' => 'array',
         ];
     }
 

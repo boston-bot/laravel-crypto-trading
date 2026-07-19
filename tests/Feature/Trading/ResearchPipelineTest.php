@@ -149,6 +149,17 @@ class ResearchPipelineTest extends TestCase
         $this->assertLessThanOrEqual(1, $fixture['proposals'][0]['calibrated_probability']);
     }
 
+    public function test_v2_evaluation_fixture_has_a_trace_and_v1_is_not_promotable(): void
+    {
+        $v2 = json_decode((string) file_get_contents(base_path('contracts/fixtures/evaluation-result-v2.json')), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('2.0', $v2['schema_version']);
+        $this->assertArrayHasKey('decision_trace', $v2['proposals'][0]);
+        $this->assertSame('blocked_by_strategy', $v2['proposals'][0]['resolution']);
+
+        $this->assertContains('2.0', config('research.promotable_schema_versions'));
+        $this->assertNotContains('1.0', config('research.promotable_schema_versions'));
+    }
+
     public function test_shared_portfolio_and_order_contract_fixtures_have_stable_hashes(): void
     {
         $fixtures = [

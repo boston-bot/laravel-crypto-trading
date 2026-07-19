@@ -1,0 +1,38 @@
+{
+  "engine_version": "0.2.0",
+  "schema_version": "2.0",
+  "job_id": "123e4567-e89b-12d3-a456-426614174000",
+  "as_of": "2026-07-19T16:00:00+00:00",
+  "valid_until": "2026-07-19T16:30:00+00:00",
+  "manifest_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "strategy_family": "trend_rotation",
+  "strategy_definition_version": "2.0.0",
+  "proposals": [
+    {
+      "asset_id": 1,
+      "asset": "BTC",
+      "action": "HOLD",
+      "resolution": "blocked_by_strategy",
+      "decision_trace": {
+        "strategy_family": "trend_rotation",
+        "strategy_definition_version": "2.0.0",
+        "rank": 1,
+        "portfolio_state": {"state": "flat", "cash_weight": 1.0, "gross_exposure": 0.0},
+        "rule_checklist": [{"rule": "minimum_net_edge", "passed": false, "observed": 4.0, "required": 12.0}],
+        "factor_contributions": {"trend": 18.0, "momentum": -6.0},
+        "gross_edge_bps": 12.0,
+        "cost_estimate_bps": 8.0,
+        "net_edge_bps": 4.0,
+        "primary_explanation": "BTC remains in cash because estimated net edge is below the entry requirement.",
+        "reason_codes": ["insufficient_net_edge"],
+        "counterfactual": "Enter after net edge reaches 12 bps while the trend rule remains valid.",
+        "evidence_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "parameter_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "portfolio_target": {"cash_weight": 1.0, "positions": [], "target_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+      "order_intent": null,
+      "warnings": []
+    }
+  ],
+  "diagnostics": {"point_in_time": true}
+}
