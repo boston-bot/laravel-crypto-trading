@@ -35,6 +35,16 @@ class OperationsConsoleTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_strategies_page_is_decision_first_and_keeps_hold_separate_from_failure(): void
+    {
+        $this->withoutVite();
+
+        $this->get('/strategies')
+            ->assertOk()
+            ->assertSee('Why this decision?')
+            ->assertSee('rule mechanics, counterfactual, and immutable evidence trail');
+    }
+
     public function test_virtual_paper_session_start_is_idempotent_and_posts_opening_cash(): void
     {
         $account = $this->account();

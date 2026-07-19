@@ -1,5 +1,6 @@
 import './bootstrap';
 import { buildActionPayload } from './idempotency-key';
+import { renderStrategyInspector } from './console/strategy-inspector';
 
 const body = document.body;
 const page = body.dataset.consolePage || 'overview';
@@ -92,7 +93,8 @@ function renderStrategies(data) {
     const versions = data.versions || [];
     const tests = data.backtests || [];
     const runs = data.latest_runs || [];
-    return `<section class="ops-feature-strip"><div><span class="ops-section-label">Active strategy</span><h2>${escapeHtml(data.active_name)}</h2><p>Closed 4-hour bars · spot long/flat · five-asset universe</p></div><div class="ops-feature-stat"><span>30d strategy return</span><strong>${formatMeasuredPerformance(data.portfolio_summary?.strategy_return_pct, data.performance)}</strong></div><div class="ops-feature-stat"><span>Evidence state</span><strong>${performanceStateLabel(data.performance)}</strong></div></section>
+    return `${renderStrategyInspector(data.decision_inspector)}
+        <section class="ops-feature-strip ops-strategy-footnote"><div><span class="ops-section-label">Portfolio context</span><h2>${escapeHtml(data.active_name)}</h2><p>Closed 4-hour bars · spot long/flat · immutable decision lineage</p></div><div class="ops-feature-stat"><span>30d strategy return</span><strong>${formatMeasuredPerformance(data.portfolio_summary?.strategy_return_pct, data.performance)}</strong></div><div class="ops-feature-stat"><span>Evidence state</span><strong>${performanceStateLabel(data.performance)}</strong></div></section>
         <section class="ops-two-column"><article class="ops-panel"><header><div><span class="ops-section-label">Immutable evidence</span><h3>Strategy versions</h3></div></header>${versions.length ? renderTable(['Version', 'State', 'Engine', 'Activated'], versions.map(v => [v.version, statusTag(v.status), v.engine_version, formatTime(v.activated_at)])) : emptyState('No immutable strategy version yet', 'The legacy strategy is active, but it has not been frozen as a version.', null)}</article>
         <article class="ops-panel"><header><div><span class="ops-section-label">Recent execution</span><h3>Strategy runs</h3></div></header>${runs.length ? renderTable(['Started', 'Mode', 'State'], runs.map(r => [formatTime(r.started_at), r.mode, statusTag(r.status)])) : emptyState('No strategy runs yet', 'Run a paper cycle from Overview.', 'Run from overview', 'link', '/dashboard')}</article></section>
         <section class="ops-panel"><header><div><span class="ops-section-label">Historical replay</span><h3>Backtest runs</h3></div></header>${tests.length ? renderTable(['Started', 'Window', 'Status', 'Sharpe', 'Drawdown'], tests.map(r => [formatTime(r.run_started_at), `${shortDate(r.timeframe_start)} → ${shortDate(r.timeframe_end)}`, statusTag(r.status), metric(r.metrics, 'sharpe_ratio'), `${metric(r.metrics, 'max_drawdown_pct')}%`])) : emptyState('No completed backtests', 'Queue a backtest to populate fold and calibration evidence.', null)}</section>`;
@@ -135,9 +137,29 @@ function renderOperations(data) {
 }
 
 function handleChange(event) {
-    if (event.target.dataset.action !== 'window') return;
-    state.windowDays = Number(event.target.value) || 30;
-    refresh();
+    if (event.target.dataset.action === 'window') {
+        state.windowDays = Number(event.target.value) || 30;
+        refresh();
+        return;
+    }
+    if (event.target.dataset.action === 'decision-selection') loadDecisionSelection();
+}
+
+async function loadDecisionSelection() {
+    const assetId = content.querySelector('[name="decision_asset"]')?.value || '';
+    const cycleId = content.querySelector('[name="decision_cycle"]')?.value || '';
+    const params = new URLSearchParams();
+    if (assetId) params.set('asset_id', assetId);
+    if (cycleId) params.set('cycle_id', cycleId);
+    try {
+        const response = await fetch(`/api/ops/v1/strategy-decisions/latest?${params}`, { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error(`Status ${response.status}`);
+        const payload = await response.json();
+        state.lastGood.decision_inspector = payload.data;
+        render(state.lastGood);
+    } catch (_error) {
+        showToast('The selected decision could not be loaded.', true);
+    }
 }
 
 function renderResearch(data) {

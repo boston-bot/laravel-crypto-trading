@@ -10,7 +10,7 @@
 @php
     $pages = [
         'overview' => ['label' => 'Overview', 'path' => '/dashboard', 'title' => 'What happened?', 'subtitle' => 'The latest strategy cycle, its evidence, and its outcome.'],
-        'strategies' => ['label' => 'Strategies', 'path' => '/strategies', 'title' => 'Strategy performance', 'subtitle' => 'Measured portfolio returns, immutable versions, replay evidence, and promotion gates.'],
+        'strategies' => ['label' => 'Strategies', 'path' => '/strategies', 'title' => 'Why this decision?', 'subtitle' => 'The latest action, its rule mechanics, counterfactual, and immutable evidence trail.'],
         'assets' => ['label' => 'Assets', 'path' => '/assets', 'title' => 'Asset attribution', 'subtitle' => 'P&L contribution and held-period return beside cost-exclusive buy-and-hold price context.'],
         'activity' => ['label' => 'Activity', 'path' => '/activity', 'title' => 'Decision trail', 'subtitle' => 'Evaluation, proposal, execution, and operational events in order.'],
         'paper' => ['label' => 'Paper', 'path' => '/paper', 'title' => 'Paper portfolio', 'subtitle' => 'Session capital, cash accounting, positions, and proposals.'],
