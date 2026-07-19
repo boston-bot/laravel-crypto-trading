@@ -59,7 +59,7 @@ These are evidence and parity problems. Improving displayed numbers by adjusting
 
 ### Immutable Champion/Challenger Candidates
 
-Each candidate is an immutable `StrategyVersion` whose `definition_json` fully specifies:
+An experiment candidate begins as an immutable `CandidateSpecification`. It defines the family, feature set, deterministic calibration procedure, bounded parameter search space, and every rule used to select parameters. A concrete `StrategyVersion` always contains one fully resolved parameter set; it never means “whatever parameters the optimizer chooses later.” Its `definition_json` fully specifies:
 
 - strategy family and semantic version;
 - feature definitions and horizons;
@@ -73,6 +73,8 @@ Each candidate is an immutable `StrategyVersion` whose `definition_json` fully s
 - engine schema and implementation version.
 
 Changing any value creates a new content hash and a new candidate version. Historical and paper results remain pinned to the exact version that produced them.
+
+During nested walk-forward evaluation, each outer fold creates an immutable child `StrategyVersion` using only that fold's inner training and validation data. The linked outer OOS result therefore supports the candidate specification and its calibration procedure, not any one fold's parameter values. After development, that same preregistered calibration procedure runs once over the permitted development history to create a single frozen deployable `StrategyVersion`. Its exact hash is recorded before holdout access. The locked holdout evaluates that exact version without recalibration. Forward paper also uses that exact version.
 
 ### Candidate Families
 
@@ -98,7 +100,11 @@ The canonical evaluator accepts:
 - current strategy portfolio state;
 - cost and execution-quality context.
 
-It returns an evaluation for every asset plus a portfolio recommendation and decision trace. The legacy PHP adapter may remain available for diagnostics, but its output cannot be used as strategy-promotion evidence.
+It returns an evaluation for every asset plus a versioned `PortfolioTarget`, decision trace, and proposed order intents. The `PortfolioTarget` is the sole strategy-sizing authority. A versioned execution-policy manifest deterministically converts targets into executable order intents using the supplied portfolio and market context. Laravel may validate or veto an intent through risk and policy controls, but it may not silently resize or reinterpret it. A veto and its reason are persisted. Any additional live-only veto does not invalidate research parity, but evidence produced under a materially different allocation or execution policy is not comparable promotion evidence.
+
+The order-intent contract contains strategy, universe, portfolio-context, evidence, and execution-policy hashes; side; target and delta weights; unrounded and normalized base quantity; reference price; Coinbase product precision and minimums; earliest execution time; time in force; expected fees, spread, and slippage; and idempotency key. Replay and paper use the same allocation, precision, minimum-notional, cost, and fill-state rules. An intent becomes fill-eligible only on the first executable market observation strictly after the decision cutoff. Replay uses the first canonical one-hour observation after that cutoff; paper uses the first fresh executable quote after submission. Both record the observation and apply the same versioned spread, slippage, fee, partial-fill, rejection, and mark-to-market rules.
+
+The legacy PHP adapter may remain available for diagnostics, but its output cannot be used as strategy-promotion evidence.
 
 This boundary removes the need to maintain subtly different Python replay and PHP live signal logic. Golden fixtures still verify that the database job contract, decoded strategy definition, and stored output are stable across language boundaries.
 
@@ -156,7 +162,7 @@ Each asset follows an explicit state machine:
 
 Entering requires stronger evidence than continuing to hold. A small rank change cannot create immediate churn. Confirmation and hysteresis durations are parameters selected inside the development process.
 
-Typical holdings should last 2–21 days. Earlier exit is allowed for protective conditions. A position is not retained merely to satisfy a minimum holding period.
+Ordinary holdings last at least 2 days and no more than 21 days. Protective stops, regime failure, data invalidation, delisting, or thesis invalidation may exit earlier. No minimum holding period can override a protective exit. Every surviving position exits or renews through a separately versioned and tested thesis no later than day 21; the initial candidate families do not permit renewal.
 
 ### Exit Requirements
 
@@ -198,6 +204,8 @@ Derived from fresh broker account state:
 
 `OrderSizingService` and `RiskEngine` operate on the interface. They may apply additional live-only restrictions, but paper mode must never be blocked by unrelated live holdings or live buying power.
 
+All paper accounting is scoped by `paper_session_id`. Intent reservation, order creation, simulated fills, ledger posting, cash release, and position mutation use one idempotency lineage and database transactions with row-level locking or an equivalent serializable guarantee. Reservation keys are unique per session and intent. Cash and position updates are atomic with ledger entries, retries are idempotent, and concurrent cycles cannot reserve or spend the same cash twice. Paper tables and services cannot reference a live broker-account ID as an accounting source; live snapshots may be retained only as explicitly labeled market or diagnostic evidence.
+
 Decision statuses distinguish at least:
 
 - `hold`;
@@ -213,7 +221,7 @@ Decision statuses distinguish at least:
 
 ### Data Segmentation
 
-The most recent 12 months are a locked final holdout. Candidate code, parameters, and search results cannot read this window during development.
+The experiment preregistration anchors the most recent 12 complete months as an immutable half-open `[holdout_start, holdout_end)` interval. Candidate code, parameters, search results, general query APIs, exports, and UI projections cannot read rows in that interval during development. Authorization is granted only to the holdout evaluator after a single frozen candidate hash is recorded.
 
 Earlier history is evaluated using nested anchored walk-forward folds:
 
@@ -224,6 +232,12 @@ Earlier history is evaluated using nested anchored walk-forward folds:
 5. The window advances without allowing future observations to modify earlier decisions.
 
 Outer test windows must be non-overlapping when their returns are linked into the primary compounded out-of-sample result.
+
+### Point-in-Time Universe
+
+Universe membership is time-versioned with `effective_from` and `effective_to`, Coinbase product ID, quote currency, spot-trading status, listing time, delisting time, precision, minimums, and the evidence timestamp that established each fact. Replay may include an asset at a bar only if the product was known, listed, eligible, and tradable at that time. Current market-cap rankings, current listings, or a later universe version cannot rewrite earlier membership.
+
+Selection criteria use only information available at the logical bar. Newly listed assets cannot receive prelisting candles or synthetic history. A delisted or halted asset becomes ineligible for new entries immediately; an open position follows the preregistered forced-exit policy at the first executable observation. If no reliable liquidation observation exists, the fold is marked incomplete rather than valuing the asset optimistically. Universe changes create a new immutable universe version and do not mutate completed experiments.
 
 ### Optimization Objective
 
@@ -240,6 +254,23 @@ Hard constraints:
 - minimum evidence counts must be satisfied without encouraging unnecessary churn;
 - all folds must complete with identical strategy and manifest semantics;
 - point-in-time, next-bar, and version-parity checks must pass.
+
+Initial minimum evidence gates, frozen in the experiment manifest before execution, are:
+
+- at least four non-overlapping outer test folds;
+- at least 30 completed round trips across outer OOS windows;
+- trades in at least three assets, with at least five completed round trips in each of three assets;
+- at least two preregistered market-regime classes represented by at least 20 final common four-hour bars each.
+
+These gates measure whether a conclusion is supportable; they do not force entries. A candidate that remains in cash and misses a gate is `inconclusive`, not retroactively tuned to trade more often.
+
+### Drawdown and Equity Definition
+
+All return and drawdown gates use net marked-to-market equity sampled at every final common four-hour bar. Equity includes cash, reserved cash, open positions valued under the versioned valuation policy, realized P&L, fees, spread, slippage, and forced-exit adjustments. Open positions remain open for trade statistics but are fully reflected in the equity path and final NAV.
+
+Each outer fold begins at normalized equity 1.0 and has independent positions and cash. Non-overlapping outer test return paths are linked geometrically in chronological order by scaling each next fold's normalized path to the prior fold's ending equity; the reset does not erase losses. Gaps between folds are flat cash unless the manifest specifies an observable cash return. Primary development OOS maximum drawdown is calculated from the resulting linked high-water-mark path, with fold-level drawdowns reported separately.
+
+The 15% ceiling applies independently to the linked development OOS path, the locked holdout path, and the forward paper path. Exceeding it fails the candidate at that stage; in paper it also suppresses new entries and requests orderly risk exits under the pinned policy.
 
 Tie breakers, in order:
 
@@ -265,7 +296,20 @@ A candidate is disqualified when:
 
 ### Holdout Rules
 
-The holdout may be opened only for a frozen finalist. Opening it writes an immutable audit event containing candidate hash, manifest hash, code version, operator, and timestamp.
+The anchored holdout interval may be opened only for one frozen finalist hash. The database enforces one authorized opening for the tuple of holdout interval, experiment, manifest, and candidate hash. Retries are allowed only when they are idempotent continuations with identical hashes; a different candidate, manifest, code version, or experiment is denied. Once any row in an interval is revealed, that exact interval and every overlapping interval are permanently ineligible as a locked holdout for later experiments.
+
+Opening writes an immutable audit event containing interval, candidate hash, manifest hash, code version, operator, authorization, purpose, and timestamp. Storage access is mediated by a holdout-aware repository or database role; ordinary research APIs, exports, jobs, logs, and UI endpoints fail closed for unrevealed rows. A direct-access attempt records an audit incident.
+
+Holdout pass gates are preregistered and cannot change after opening. A pass requires:
+
+- a complete, reconciled run with no evidence, parity, valuation, or manifest failure;
+- positive net marked-to-market return;
+- positive return under the preregistered stressed-cost scenario;
+- maximum drawdown no greater than 15% in both normal and stressed paths;
+- at least 10 completed round trips across at least two assets;
+- every preregistered concentration, execution, and data-quality constraint to pass.
+
+A missing evidence-count gate is `inconclusive` and is treated as non-promotable. Any other failed gate rejects and archives the candidate. Neither result authorizes tuning against the revealed interval.
 
 Once opened:
 
@@ -284,6 +328,8 @@ A holdout-passing candidate enters a pinned paper session. Paper evidence is val
 - evidence, evaluation, decision, order, fill, ledger, and attribution hashes reconcile;
 - sufficient elapsed time and trade evidence exist across more than one regime.
 
+The initial paper evidence minimum is 90 elapsed calendar days, 15 completed round trips across at least three assets, and at least 20 final common four-hour bars in each of two preregistered regime classes. Until all thresholds are met, the candidate remains `collecting_evidence`; it is not failed merely because the market has not produced the required regimes. A 15% paper drawdown, manifest mismatch, or reconciliation failure fails the paper gate immediately and suppresses new entries.
+
 Live trading remains outside this design's automatic promotion path.
 
 ## Backtest and Simulator Corrections
@@ -294,6 +340,7 @@ The research implementation must correct the following before candidate comparis
 - evaluate the locked holdout as an explicit, audited stage;
 - make prediction and holding horizons consistent with adaptive swing behavior;
 - apply cross-sectional ranking and portfolio allocation, not independent asset thresholds;
+- replay point-in-time universe membership, listing, halting, and delisting state;
 - emit signals on state transitions instead of generating repeated ENTER requests each bar;
 - mark every open position to current prices throughout replay;
 - value and report open positions at each fold end without pretending they are closed trades;
@@ -324,6 +371,8 @@ A new experiment record groups one preregistered research round:
 - status, selected finalist, and failure reason;
 - hashes for code, inputs, and experiment definition.
 
+Each experiment has immutable candidate-specification records. Fold child `StrategyVersion` rows link to the candidate specification, fold, calibration input boundary, and selected-parameter evidence. A final deployable version links to the same specification and records the development-only calibration boundary used to freeze it.
+
 ### `backtest_runs` and metrics
 
 Backtest runs link to an experiment and declare an evaluation stage:
@@ -337,7 +386,7 @@ Fold, regime, asset, holding-period, cost, and parameter-neighborhood metrics ar
 
 ### Holdout Access Audit
 
-An append-only holdout access record stores the exact experiment, strategy version, manifest, engine version, code hash, actor, and open time. Database constraints prevent update or deletion.
+An append-only holdout access record stores the exact interval, experiment, strategy version, manifest, engine version, code hash, actor, authorization, purpose, and open time. Exclusion and uniqueness constraints prevent overlapping holdout reuse, multiple candidate openings, update, or deletion while permitting idempotent retries for the exact authorized evaluation.
 
 ### Decision Trace
 
@@ -407,15 +456,19 @@ The deeper Research Lab uses the approved research cockpit concept:
 - holdout state (`locked`, `opened`, `passed`, `failed`);
 - archived candidates and explicit rejection reasons.
 
-### Assets Performance Labels
+### Performance Semantics and Assets Labels
 
-The Assets screen shows three distinct columns:
+Every performance projection declares `period_start`, `as_of`, bar interval, completeness, freshness, strategy/universe versions, valuation policy, cost policy, and benchmark definition. The default 90-day view ends at the latest final common four-hour bar and begins 90 calendar days earlier. An incomplete interval displays `Incomplete` and does not silently annualize or substitute zero.
 
-1. Strategy return.
-2. Buy-and-hold benchmark return.
-3. Relative performance.
+Portfolio strategy return is the net time-weighted change in marked-to-market NAV over the selected period, including realized and unrealized P&L and all modeled costs. Portfolio benchmarks are independently investable series over the same timestamps: equal-weight point-in-time eligible universe, BTC buy-and-hold, and cash. Relative performance is the arithmetic percentage-point difference `strategy_return - selected_benchmark_return`; the API also exposes the two source returns so the UI never reconstructs it ambiguously.
 
-When no strategy replay exists, strategy and relative return show `Not measured`; they never show zero. Benchmark values are labeled as market outcomes and cannot be styled or described as strategy losses.
+The Assets table does not label a rotating portfolio result as an asset-level “strategy return.” It shows:
+
+1. Net strategy P&L contribution for the asset, divided by portfolio NAV at period start.
+2. Strategy holding-window return for that asset, labeled as applying only while held.
+3. Full-period asset buy-and-hold return.
+
+Portfolio strategy and relative returns appear in the portfolio summary, not repeated per asset. When no eligible strategy replay or paper ledger covers the interval, strategy fields show `Not measured`; they never show zero. Benchmark values are labeled as market outcomes and cannot be styled or described as strategy losses.
 
 ### APIs
 
@@ -425,6 +478,7 @@ Read APIs return stable transparency projections rather than asking the browser 
 - candidate and experiment summaries;
 - fold and robustness metrics;
 - benchmark and relative performance;
+- point-in-time universe membership and eligibility state;
 - holdout audit state;
 - paper portfolio context and blockers;
 - entry thesis/current thesis comparison.
@@ -460,6 +514,8 @@ No UI endpoint recalculates historical strategy logic.
 - adaptive exits use the stored entry thesis;
 - fold-end valuation includes open positions correctly;
 - next-hour fills and costs are deterministic under a fixed seed.
+- order-intent normalization, minimums, precision, fills, rejections, and valuation match between replay and paper fixtures;
+- point-in-time membership prevents prelisting history and current-universe survivorship;
 
 ### Optimization
 
@@ -475,11 +531,13 @@ No UI endpoint recalculates historical strategy logic.
 - live positions do not consume virtual paper position capacity;
 - paper positions, cash, drawdown, and correlation do constrain paper trades;
 - live mode continues to use fresh live broker context.
+- concurrent paper decisions cannot double-reserve cash, duplicate fills, or cross session/accounting boundaries;
 
 ### Transparency UI
 
 - benchmark losses cannot be labeled as strategy losses;
 - unavailable strategy returns render `Not measured`;
+- portfolio return, asset contribution, holding-window return, benchmark return, and relative return reconcile to their documented period and formula;
 - every action and blocker has a decision trace;
 - HOLDs show failed rules and counterfactuals;
 - Research Lab metrics reconcile with immutable backtest results;
@@ -524,8 +582,9 @@ The design is complete when:
 3. Backtest and live paper evaluations share the same immutable Python strategy definition and evaluator.
 4. At least the three challenger families and defensive cash baseline run through nested walk-forward development without holdout access.
 5. Candidate selection maximizes net compounded OOS return while enforcing the 15% drawdown ceiling and robustness gates.
-6. Holdout access is technically restricted, single-use, and audited.
+6. Holdout access is technically restricted to one frozen hash, single-use across overlapping intervals, idempotent only for exact retries, and audited.
 7. Every evaluation has a layered decision trace suitable for the selected UI.
 8. Research and UI metrics reconcile with immutable versions, manifests, fills, and costs.
 9. All causality, parity, portfolio, paper-context, holdout, and UI-labeling tests pass.
 10. No step enables live trading automatically.
+11. Drawdown, evidence-count, duration, order-intent, execution, universe-membership, and performance-reporting semantics are versioned and mechanically testable.
