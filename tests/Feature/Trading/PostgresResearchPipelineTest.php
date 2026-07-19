@@ -122,6 +122,42 @@ class PostgresResearchPipelineTest extends TestCase
         }
     }
 
+    public function test_revealed_holdout_intervals_cannot_overlap(): void
+    {
+        $pdo = $this->newPdo();
+        $pdo->beginTransaction();
+        try {
+            $intervalIds = [$this->createPgHoldoutInterval($pdo, 'overlap-1'), $this->createPgHoldoutInterval($pdo, 'overlap-2')];
+            $pdo->exec("UPDATE holdout_intervals SET status='authorized' WHERE id=".(int) $intervalIds[0]);
+            $pdo->exec("UPDATE holdout_intervals SET status='running', revealed_at=now() WHERE id=".(int) $intervalIds[0]);
+            $pdo->exec("UPDATE holdout_intervals SET status='authorized' WHERE id=".(int) $intervalIds[1]);
+
+            $this->expectException(\PDOException::class);
+            $pdo->exec("UPDATE holdout_intervals SET status='running', revealed_at=now() WHERE id=".(int) $intervalIds[1]);
+        } finally {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
+    }
+
+    public function test_holdout_authorization_identity_is_database_immutable(): void
+    {
+        $pdo = $this->newPdo();
+        $pdo->beginTransaction();
+        try {
+            $intervalId = $this->createPgHoldoutInterval($pdo, 'authorization');
+            $pdo->exec("UPDATE holdout_intervals SET status='authorized', candidate_hash='".hash('sha256', 'candidate')."', manifest_hash='".hash('sha256', 'manifest')."', engine_version='test', code_hash='".hash('sha256', 'code')."', authorization_idempotency_key='".hash('sha256', 'authorization')."', authorized_by='test', purpose='single use', authorized_at=now() WHERE id=".$intervalId);
+
+            $this->expectException(\PDOException::class);
+            $pdo->exec("UPDATE holdout_intervals SET purpose='rewritten' WHERE id=".$intervalId);
+        } finally {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
+    }
+
     public function test_paper_session_lock_serializes_competing_buy_reservations(): void
     {
         [$accountId, $assetId, $sessionId] = $this->createPaperFixture();
@@ -202,6 +238,23 @@ class PostgresResearchPipelineTest extends TestCase
         $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', $config['host'], $config['port'], $config['database']);
 
         return new PDO($dsn, $config['username'], $config['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    }
+
+    private function createPgHoldoutInterval(PDO $pdo, string $suffix): int
+    {
+        $universeId = $pdo->query("INSERT INTO universe_versions (name,version,status,content_hash,symbols_json,created_at,updated_at) VALUES ('pg-holdout-{$suffix}','v1','research','".hash('sha256', Str::uuid().'-u')."','[\"BTC\",\"ETH\",\"SOL\"]',now(),now()) RETURNING id")->fetchColumn();
+        $experiment = $pdo->prepare(<<<'SQL'
+            INSERT INTO strategy_experiments
+                (schema_version,name,status,universe_version_id,objective,constraints_json,search_budget,seeds_json,regimes_json,cost_policy_json,attribution_policy_json,benchmark_policy_json,execution_policy_version,execution_policy_hash,development_start,development_end,holdout_start,holdout_end,content_hash,created_at,updated_at)
+            VALUES
+                ('1.0',?,'queued',?,'maximize_compounded_net_oos_return','{}',4,'[7]','[]','{}','{}','{}','coinbase-ioc-v1',?,now()-interval '3 years','2025-01-01','2025-01-01','2026-01-01',?,now(),now())
+            RETURNING id
+        SQL);
+        $experiment->execute(['pg-holdout-'.$suffix, $universeId, hash('sha256', 'execution-'.$suffix), hash('sha256', Str::uuid().'-e')]);
+        $interval = $pdo->prepare("INSERT INTO holdout_intervals (strategy_experiment_id,holdout_start,holdout_end,status,content_hash,created_at,updated_at) VALUES (?,'2025-01-01','2026-01-01','locked',?,now(),now()) RETURNING id");
+        $interval->execute([$experiment->fetchColumn(), hash('sha256', Str::uuid().'-h')]);
+
+        return (int) $interval->fetchColumn();
     }
 
     /** @return array{int, int, int} */

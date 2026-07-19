@@ -2,10 +2,12 @@
 
 namespace App\Jobs;
 
+use App\Enums\EvaluationStage;
 use App\Models\BacktestRun;
 use App\Models\BacktestRunMetric;
 use App\Models\EngineResult;
 use App\Models\ResearchManifest;
+use App\Services\Research\HoldoutEvaluationService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +21,7 @@ class ConsumeBacktestResultsJob implements ShouldQueue
     {
         EngineResult::query()
             ->whereNull('consumed_at')
-            ->where('result_kind', 'backtest')
+            ->whereIn('result_kind', ['backtest', 'holdout'])
             ->orderBy('id')
             ->limit(10)
             ->get()
@@ -85,6 +87,9 @@ class ConsumeBacktestResultsJob implements ShouldQueue
                 'holding_period' => (array) ($payload['holding_periods'] ?? []),
                 'parameter_neighborhood' => (array) ($payload['parameter_neighborhood'] ?? []),
             ]);
+            if ($run->evaluation_stage === EvaluationStage::Holdout) {
+                app(HoldoutEvaluationService::class)->recordResult($run->load('experiment.holdoutInterval'), $payload);
+            }
             $locked->update(['consumed_at' => now()]);
         });
     }

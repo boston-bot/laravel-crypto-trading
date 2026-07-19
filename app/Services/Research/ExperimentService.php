@@ -6,6 +6,7 @@ use App\Enums\EvaluationStage;
 use App\Enums\ExperimentStatus;
 use App\Models\BacktestRun;
 use App\Models\EngineJob;
+use App\Models\HoldoutInterval;
 use App\Models\StrategyExperiment;
 use App\Models\UniverseVersion;
 use Carbon\CarbonImmutable;
@@ -56,7 +57,22 @@ class ExperimentService
         return DB::transaction(function () use ($input, $universe, $experimentDefinition, $experimentHash, $executionPolicy, $executionPolicyHash, $developmentStart, $developmentEnd, $holdoutStart, $holdoutEnd, $seeds, $families, $searchBudgetPerFamily): StrategyExperiment {
             $existing = StrategyExperiment::query()->where('content_hash', $experimentHash)->first();
             if ($existing !== null) {
-                return $existing->load(['candidates', 'runs.engineJob']);
+                if (! $existing->holdoutInterval()->exists()) {
+                    HoldoutInterval::query()->create([
+                        'strategy_experiment_id' => $existing->id,
+                        'holdout_start' => $existing->holdout_start,
+                        'holdout_end' => $existing->holdout_end,
+                        'status' => 'locked',
+                        'content_hash' => $this->canonicalHash([
+                            'schema_version' => '1.0',
+                            'experiment_hash' => $existing->content_hash,
+                            'holdout_start' => $existing->holdout_start->toIso8601String(),
+                            'holdout_end' => $existing->holdout_end->toIso8601String(),
+                        ]),
+                    ]);
+                }
+
+                return $existing->load(['candidates', 'runs.engineJob', 'holdoutInterval']);
             }
 
             $experiment = StrategyExperiment::query()->create([
@@ -79,6 +95,18 @@ class ExperimentService
                 'holdout_start' => $holdoutStart,
                 'holdout_end' => $holdoutEnd,
                 'content_hash' => $experimentHash,
+            ]);
+            HoldoutInterval::query()->create([
+                'strategy_experiment_id' => $experiment->id,
+                'holdout_start' => $holdoutStart,
+                'holdout_end' => $holdoutEnd,
+                'status' => 'locked',
+                'content_hash' => $this->canonicalHash([
+                    'schema_version' => '1.0',
+                    'experiment_hash' => $experimentHash,
+                    'holdout_start' => $holdoutStart->toIso8601String(),
+                    'holdout_end' => $holdoutEnd->toIso8601String(),
+                ]),
             ]);
 
             foreach ($families as $index => $family) {
@@ -157,7 +185,7 @@ class ExperimentService
                 ]);
             }
 
-            return $experiment->load(['candidates', 'runs.engineJob']);
+            return $experiment->load(['candidates', 'runs.engineJob', 'holdoutInterval']);
         });
     }
 

@@ -17,7 +17,7 @@ from .strategy_definition import StrategyDefinition, default_definition
 from .strategy_families import evaluate_family
 from .benchmarks import benchmark_curves, summarize_benchmarks
 from .attribution import trade_attribution
-from .experiment_runner import link_fold_nav
+from .experiment_runner import evaluate_holdout, link_fold_nav
 from .robustness import assess_evidence
 
 
@@ -232,4 +232,93 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
         "trades": all_trades, "fills": all_fills, "equity": all_equity,
         "benchmarks": benchmark_output, "cost_attribution": attribution["costs"] | {"fees_usd": total_fees, "spread_and_slippage_in_fill_prices": True}, "attribution": attribution,
         "asset_profit_contribution_pct": contribution_pct, "gate": gate, "gate_passed": gate["gate_passed"], "evidence_status": gate["status"],
+    }
+
+
+def execute_holdout(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]:
+    raw = payload["spec"]
+    start = datetime.fromisoformat(str(raw["start"]).replace("Z", "+00:00"))
+    end = datetime.fromisoformat(str(raw["end"]).replace("Z", "+00:00"))
+    warmup_start = datetime.fromisoformat(str(raw.get("warmup_start", raw["start"])).replace("Z", "+00:00"))
+    definition = StrategyDefinition.from_mapping(raw["strategy_definition"])
+    hourly, four_hour = _load_universe(connection, list(payload["assets"]), warmup_start, end)
+    signal_frames: list[pd.DataFrame] = []
+    benchmark = None
+    if not four_hour.get("BTC", pd.DataFrame()).empty:
+        btc = four_hour["BTC"]
+        benchmark = pd.to_numeric(btc.set_index(pd.to_datetime(btc["candle_open_time"], utc=True))["close"])
+    for symbol, frame in four_hour.items():
+        if frame.empty:
+            continue
+        signals = _signal_frame(compute_features(frame, benchmark), symbol, definition)
+        signal_frames.append(signals.loc[(signals.index >= start) & (signals.index < end)])
+    signals = pd.concat(signal_frames).sort_index() if signal_frames else pd.DataFrame(columns=["asset", "action"])
+    actionable = signals.loc[signals["action"] != "HOLD", ["asset", "action"]] if not signals.empty else signals
+    price_frames = {
+        symbol: frame.loc[
+            (pd.to_datetime(frame["candle_open_time"], utc=True) >= pd.Timestamp(start))
+            & (pd.to_datetime(frame["candle_open_time"], utc=True) < pd.Timestamp(end))
+        ]
+        for symbol, frame in hourly.items()
+        if not frame.empty
+    }
+    capital = float(raw.get("initial_capital", 100_000.0))
+    normal = PortfolioSimulator(
+        capital,
+        CostScenario(float(raw.get("fee_bps", 60)), float(raw.get("spread_bps", 10)), float(raw.get("slippage_bps", 8))),
+        seed=int(raw.get("random_seed", 7)),
+    ).run(price_frames, actionable)
+    stressed = PortfolioSimulator(
+        capital,
+        CostScenario(float(raw.get("fee_bps", 60)) * 1.5, float(raw.get("spread_bps", 10)) * 2, float(raw.get("slippage_bps", 8)) * 2),
+        seed=int(raw.get("random_seed", 7)),
+    ).run(price_frames, actionable)
+    trades = [asdict(item) for item in normal["trades"]]
+    fills = [asdict(item) for item in normal["fills"]]
+    for item in trades:
+        item["entry_time"] = item["entry_time"].isoformat()
+        item["exit_time"] = item["exit_time"].isoformat()
+    for item in fills:
+        item["timestamp"] = item["timestamp"].isoformat()
+        if item.get("observation_time") is not None:
+            item["observation_time"] = item["observation_time"].isoformat()
+    positive = {asset: 0.0 for asset in price_frames}
+    for trade in trades:
+        positive[str(trade["asset"])] += max(0.0, float(trade["pnl"]))
+    total_positive = sum(positive.values())
+    max_contribution = max((value / total_positive * 100 for value in positive.values()), default=0.0) if total_positive else 0.0
+    execution_passed = not any(fill.get("reason") in {"invalid_price", "no_next_eligible_price"} for fill in fills)
+    evidence = {
+        "complete": len(price_frames) >= 2 and all(not frame.empty for frame in price_frames.values()),
+        "reconciled": bool(np.isfinite(float(normal["equity"].iloc[-1]))),
+        "data_quality_passed": True,
+        "execution_passed": execution_passed,
+        "concentration_passed": max_contribution <= 50.0,
+        "trade_count": len(trades),
+        "asset_count": len({trade["asset"] for trade in trades}),
+        "normal_return_pct": float(normal["metrics"]["total_return_pct"]),
+        "stressed_return_pct": float(stressed["metrics"]["total_return_pct"]),
+        "normal_max_drawdown_pct": float(normal["metrics"]["max_drawdown_pct"]),
+        "stressed_max_drawdown_pct": float(stressed["metrics"]["max_drawdown_pct"]),
+    }
+    gate = evaluate_holdout(evidence)
+    manifest = {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "warmup_start": warmup_start.isoformat(),
+        "assets": payload["assets"],
+        "rows": {symbol: {"1h": len(hourly.get(symbol, [])), "4h": len(four_hour.get(symbol, []))} for symbol in hourly},
+        "initial_state": gate["initial_state"],
+    }
+    return {
+        "manifest": manifest,
+        "manifest_hash": canonical_hash(manifest),
+        "aggregate_metrics": normal["metrics"],
+        "stressed_metrics": stressed["metrics"],
+        "trades": trades,
+        "fills": fills,
+        "equity": [{"timestamp": timestamp.isoformat(), "equity": float(value)} for timestamp, value in normal["equity"].items()],
+        "holdout_gate": gate,
+        "gate": gate,
+        "evidence_status": gate["status"],
     }

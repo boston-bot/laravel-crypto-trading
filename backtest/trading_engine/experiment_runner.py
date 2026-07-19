@@ -30,3 +30,39 @@ def link_fold_nav(fold_curves: Iterable[pd.Series]) -> pd.Series:
         if linked and normalized.index[0] == linked[-1].index[-1]: normalized = normalized.iloc[1:]
         linked.append(normalized); multiplier = float(normalized.iloc[-1]); previous_end = clean.index[-1]
     return pd.concat(linked) if linked else pd.Series(dtype=float)
+
+
+def evaluate_holdout(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Apply the frozen holdout gates without exposing data-dependent tuning hooks."""
+    initial_state = {"nav": 1.0, "cash_weight": 1.0, "positions": {}, "asset_states": "flat"}
+    counts_pass = int(evidence.get("trade_count", 0)) >= 10 and int(evidence.get("asset_count", 0)) >= 2
+    integrity_checks = {
+        "complete": bool(evidence.get("complete", False)),
+        "reconciled": bool(evidence.get("reconciled", False)),
+        "data_quality": bool(evidence.get("data_quality_passed", False)),
+        "execution": bool(evidence.get("execution_passed", False)),
+        "concentration": bool(evidence.get("concentration_passed", False)),
+    }
+    performance_checks = {
+        "positive_normal_return": float(evidence.get("normal_return_pct", 0.0)) > 0.0,
+        "positive_stressed_return": float(evidence.get("stressed_return_pct", 0.0)) > 0.0,
+        "normal_drawdown_ceiling": float(evidence.get("normal_max_drawdown_pct", 100.0)) <= 15.0,
+        "stressed_drawdown_ceiling": float(evidence.get("stressed_max_drawdown_pct", 100.0)) <= 15.0,
+    }
+    if (not counts_pass or not integrity_checks["complete"]) and all(
+        value for key, value in integrity_checks.items() if key != "complete"
+    ) and all(performance_checks.values()):
+        status = "inconclusive"
+        reason = "insufficient_or_incomplete_evidence"
+    elif all(integrity_checks.values()) and all(performance_checks.values()) and counts_pass:
+        status = "passed"
+        reason = None
+    else:
+        status = "failed"
+        reason = "one_or_more_frozen_holdout_gates_failed"
+    return {
+        "status": status,
+        "reason": reason,
+        "checks": integrity_checks | performance_checks | {"minimum_evidence_counts": counts_pass},
+        "initial_state": initial_state,
+    }

@@ -6,6 +6,7 @@ use App\Enums\ExperimentStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use LogicException;
 
 class StrategyExperiment extends Model
@@ -54,5 +55,10 @@ class StrategyExperiment extends Model
     public function runs(): HasMany
     {
         return $this->hasMany(BacktestRun::class);
+    }
+
+    public function holdoutInterval(): HasOne
+    {
+        return $this->hasOne(HoldoutInterval::class);
     }
 }

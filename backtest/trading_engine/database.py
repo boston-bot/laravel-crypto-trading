@@ -54,6 +54,77 @@ class EngineRepository:
                 )
                 return cursor.rowcount == 1
 
+    def assert_development_window_allowed(self, start: Any, end: Any) -> None:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT 1 FROM holdout_intervals
+                WHERE holdout_start < %s AND holdout_end > %s
+                LIMIT 1
+                """,
+                (end, start),
+            )
+            if cursor.fetchone() is not None:
+                raise PermissionError("development jobs cannot query a locked or revealed holdout interval")
+
+    def record_holdout_access(self, job: Dict[str, Any], payload: Dict[str, Any]) -> None:
+        interval_id = int(payload["holdout_interval_id"])
+        lineage = dict(payload.get("lineage", {}))
+        with self.connection.transaction():
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id, status, engine_job_id, strategy_experiment_id,
+                           authorized_strategy_version_id, research_manifest_id,
+                           candidate_hash, manifest_hash, engine_version, code_hash,
+                           authorized_by, purpose, authorization_idempotency_key, revealed_at
+                    FROM holdout_intervals
+                    WHERE id=%s
+                    FOR UPDATE
+                    """,
+                    (interval_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    raise PermissionError("unknown holdout authorization")
+                (
+                    _, status, engine_job_id, experiment_id, strategy_version_id,
+                    manifest_id, candidate_hash, manifest_hash, engine_version,
+                    code_hash, actor, purpose, authorization_key, revealed_at,
+                ) = row
+                if str(engine_job_id) != str(job["id"]):
+                    raise PermissionError("worker job does not match the authorized holdout job")
+                expected = {
+                    "strategy_hash": candidate_hash,
+                    "manifest_hash": manifest_hash,
+                    "engine_version": engine_version,
+                    "code_hash": code_hash,
+                }
+                if any(str(lineage.get(key, "")) != str(value) for key, value in expected.items()):
+                    raise PermissionError("holdout lineage does not match the authorization")
+                if status == "authorized":
+                    cursor.execute(
+                        "UPDATE holdout_intervals SET status='running', revealed_at=now(), updated_at=now() WHERE id=%s",
+                        (interval_id,),
+                    )
+                elif status != "running" or revealed_at is None:
+                    raise PermissionError("holdout interval is not authorized for access")
+                event_key = canonical_hash(["access", authorization_key, str(job["id"])])
+                cursor.execute(
+                    """
+                    INSERT INTO holdout_access_events
+                        (holdout_interval_id,event_type,strategy_experiment_id,strategy_version_id,
+                         research_manifest_id,engine_job_id,candidate_hash,manifest_hash,engine_version,
+                         code_hash,actor,purpose,idempotency_key,details_json,occurred_at,created_at,updated_at)
+                    VALUES (%s,'accessed',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'{}',now(),now(),now())
+                    ON CONFLICT (holdout_interval_id,event_type,idempotency_key) DO NOTHING
+                    """,
+                    (
+                        interval_id, experiment_id, strategy_version_id, manifest_id, job["id"],
+                        candidate_hash, manifest_hash, engine_version, code_hash, actor, purpose, event_key,
+                    ),
+                )
+
     def complete(self, job: Dict[str, Any], payload: Dict[str, Any], manifest_hash: str, engine_version: str) -> None:
         from psycopg.types.json import Jsonb
 

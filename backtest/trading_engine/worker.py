@@ -15,7 +15,7 @@ from .features import frozen_multi_horizon_features
 from .evaluator import PortfolioEvaluator
 from .strategy_definition import StrategyDefinition
 from .backfill import execute_backfill
-from .backtest_runner import execute_backtest
+from .backtest_runner import execute_backtest, execute_holdout
 from .sentiment import refresh_sentiment
 
 LOGGER = logging.getLogger(__name__)
@@ -90,10 +90,17 @@ def run_worker(database_url: str, once: bool = False, poll_seconds: float = 2.0)
                     result = execute_backfill(connection, payload)
                 elif job["kind"] == "backtest":
                     payload = job["payload_json"] if isinstance(job["payload_json"], dict) else json.loads(job["payload_json"])
+                    repository.assert_development_window_allowed(payload["spec"]["start"], payload["spec"]["end"])
                     result = execute_backtest(connection, payload)
                     completion_manifest_hash = str(result["manifest_hash"])
                     if payload.get("lineage"):
                         result["lineage"] = dict(payload["lineage"]) | {"manifest_hash": completion_manifest_hash}
+                elif job["kind"] == "holdout":
+                    payload = job["payload_json"] if isinstance(job["payload_json"], dict) else json.loads(job["payload_json"])
+                    repository.record_holdout_access(job, payload)
+                    result = execute_holdout(connection, payload)
+                    completion_manifest_hash = str(result["manifest_hash"])
+                    result["lineage"] = dict(payload["lineage"]) | {"manifest_hash": completion_manifest_hash}
                 elif job["kind"] == "sentiment_refresh":
                     payload = job["payload_json"] if isinstance(job["payload_json"], dict) else json.loads(job["payload_json"])
                     result = refresh_sentiment(connection, payload.get("url", "https://api.alternative.me/fng/"), int(payload.get("limit", 90)))

@@ -2,11 +2,13 @@
 
 namespace App\Services\Research;
 
+use App\Enums\EvaluationStage;
 use App\Models\Asset;
 use App\Models\AssetEvaluation;
 use App\Models\BacktestRun;
 use App\Models\DataQualityIncident;
 use App\Models\EngineJob;
+use App\Models\HoldoutInterval;
 use App\Models\IngestionCheckpoint;
 use App\Models\MarketCandle;
 use App\Models\OrderBookSummary;
@@ -92,6 +94,10 @@ class ResearchStatusService
             'books' => $books,
             'engine_queue' => EngineJob::query()->select('status', DB::raw('COUNT(*) AS total'))->groupBy('status')->pluck('total', 'status'),
             'latest_manifest' => ResearchManifest::query()->latest('frozen_at')->first(),
+            'holdout' => HoldoutInterval::query()->latest('id')->first()?->only([
+                'id', 'strategy_experiment_id', 'status', 'authorized_strategy_version_id',
+                'authorized_at', 'revealed_at', 'terminal_at',
+            ]),
             'spread_shadow' => [
                 'execution_enabled' => false,
                 'observations_24h' => SpreadObservation::query()->where('observed_at', '>=', now()->subDay())->count(),
@@ -103,7 +109,22 @@ class ResearchStatusService
 
     public function backtests(int $limit = 25): array
     {
-        return BacktestRun::query()->with('metrics')->latest('run_started_at')->limit(max(1, min(100, $limit)))->get()->all();
+        return BacktestRun::query()
+            ->with(['metrics', 'experiment.holdoutInterval'])
+            ->latest('run_started_at')
+            ->limit(max(1, min(100, $limit)))
+            ->get()
+            ->map(function (BacktestRun $run): BacktestRun {
+                $holdoutStatus = $run->experiment?->holdoutInterval?->status;
+                if ($run->evaluation_stage === EvaluationStage::Holdout
+                    && ! $holdoutStatus?->isTerminal()) {
+                    $run->makeHidden(['timeframe_start', 'timeframe_end', 'spec_json', 'result_json']);
+                }
+                $run->unsetRelation('experiment');
+
+                return $run;
+            })
+            ->all();
     }
 
     public function calibration(int $limit = 10): array
