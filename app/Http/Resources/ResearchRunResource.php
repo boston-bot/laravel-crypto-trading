@@ -22,6 +22,8 @@ class ResearchRunResource extends JsonResource
             'failed' => 'incomplete',
             default => 'not_measured',
         };
+        $normalEquity = collect((array) data_get($this->result_json, 'equity', []))->pluck('equity')->map(fn ($value): float => (float) $value)->all();
+        $stressedEquity = collect((array) data_get($this->result_json, 'stressed_equity', []))->pluck('equity')->map(fn ($value): float => (float) $value)->all();
 
         return [
             'id' => $this->id,
@@ -43,10 +45,10 @@ class ResearchRunResource extends JsonResource
                 'stale' => false,
             ],
             'metrics' => [
-                'aggregate' => $metrics['aggregate'] ?? [],
-                'stressed' => $metrics['stressed'] ?? [],
+                'aggregate' => $metrics['oos_normal'] ?? [],
+                'stressed' => $metrics['oos_stressed'] ?? [],
                 'folds' => $metrics['fold'] ?? [],
-                'robustness' => $metrics['robustness'] ?? [],
+                'robustness' => $metrics['parameter_neighborhood'] ?? [],
                 'costs' => $metrics['cost'] ?? [],
                 'benchmarks' => $metrics['benchmark'] ?? [],
                 'attribution' => [
@@ -55,6 +57,12 @@ class ResearchRunResource extends JsonResource
                     'holding_period' => $metrics['holding_period'] ?? [],
                     'exit' => $metrics['exit'] ?? [],
                 ],
+            ],
+            'series' => [
+                'normal_equity' => $normalEquity,
+                'stressed_equity' => $stressedEquity,
+                'normal_drawdown' => $this->drawdownSeries($normalEquity),
+                'stressed_drawdown' => $this->drawdownSeries($stressedEquity),
             ],
             'gate' => data_get($this->result_json, 'gate', ['status' => $state === 'measured' ? 'unknown' : $state, 'reasons' => []]),
             'lineage' => [
@@ -65,5 +73,17 @@ class ResearchRunResource extends JsonResource
                 'execution_policy_hash' => $this->execution_policy_hash,
             ],
         ];
+    }
+
+    /** @param array<int, float> $equity @return array<int, float> */
+    private function drawdownSeries(array $equity): array
+    {
+        $peak = null;
+
+        return array_map(function (float $value) use (&$peak): float {
+            $peak = $peak === null ? $value : max($peak, $value);
+
+            return $peak > 0 ? round((($value / $peak) - 1) * 100, 6) : 0.0;
+        }, $equity);
     }
 }

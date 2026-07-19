@@ -15,6 +15,15 @@ class ResearchLabEndpointTest extends TestCase
     public function test_experiment_list_detail_and_runs_are_bounded_and_measurement_aware(): void
     {
         $experiment = $this->experiment();
+        $experiment->runs()->oldest('id')->firstOrFail()->update([
+            'status' => 'completed',
+            'run_completed_at' => now(),
+            'result_json' => [
+                'equity' => [['equity' => 100], ['equity' => 90], ['equity' => 108]],
+                'stressed_equity' => [['equity' => 100], ['equity' => 85], ['equity' => 97]],
+                'gate' => ['status' => 'passed', 'reasons' => []],
+            ],
+        ]);
 
         $this->getJson('/api/ops/v1/research-lab/experiments?per_page=1')
             ->assertOk()
@@ -29,6 +38,8 @@ class ResearchLabEndpointTest extends TestCase
             ->assertJsonPath('data.experiment.holdout.status', 'locked')
             ->assertJsonPath('data.experiment.holdout.values_revealed', false)
             ->assertJsonPath('data.experiment.holdout.result', null)
+            ->assertJsonPath('data.experiment.candidates.0.runs.0.series.normal_drawdown.1', -10)
+            ->assertJsonPath('data.experiment.candidates.0.runs.0.series.stressed_drawdown.1', -15)
             ->assertJsonStructure(['data' => ['experiment' => ['candidates', 'constraints', 'policies', 'lineage']]]);
 
         $this->getJson('/api/ops/v1/research-lab/runs?experiment_id='.$experiment->id.'&per_page=2')

@@ -1,5 +1,6 @@
 import './bootstrap';
 import { buildActionPayload } from './idempotency-key';
+import { renderResearchLab } from './console/research-lab';
 import { renderStrategyInspector } from './console/strategy-inspector';
 
 const body = document.body;
@@ -12,7 +13,7 @@ const toast = document.getElementById('opsToast');
 const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 const endpoint = `/api/ops/v1/${page === 'overview' ? 'overview' : page}`;
 
-const state = { timer: null, controller: null, lastGood: null, failures: 0, windowDays: 30 };
+const state = { timer: null, controller: null, lastGood: null, failures: 0, windowDays: 30, researchExperiment: null };
 
 document.addEventListener('DOMContentLoaded', () => {
     content.addEventListener('click', handleClick);
@@ -143,6 +144,7 @@ function handleChange(event) {
         return;
     }
     if (event.target.dataset.action === 'decision-selection') loadDecisionSelection();
+    if (event.target.dataset.action === 'experiment-selection') loadResearchExperiment(event.target.value);
 }
 
 async function loadDecisionSelection() {
@@ -162,11 +164,25 @@ async function loadDecisionSelection() {
     }
 }
 
+async function loadResearchExperiment(experimentId) {
+    try {
+        const response = await fetch(`/api/ops/v1/research-lab/experiments/${Number(experimentId)}`, { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error(`Status ${response.status}`);
+        const payload = await response.json();
+        state.researchExperiment = payload.data.experiment;
+        render(state.lastGood);
+    } catch (_error) {
+        showToast('The selected experiment could not be loaded.', true);
+    }
+}
+
 function renderResearch(data) {
     const health = data.health || {};
     const candles = health.candles || [];
     const spread = data.spreads || {};
-    return `<section class="ops-feature-strip"><div><span class="ops-section-label">Point-in-time foundation</span><h2>${health.open_incidents?.length ? 'Data needs attention' : 'Research data health'}</h2><p>${health.latest_manifest ? `Manifest ${health.latest_manifest.content_hash?.slice(0, 12)}…` : 'No immutable manifest frozen yet'}</p></div><div class="ops-feature-stat"><span>Backtests</span><strong>${data.backtests?.length || 0}</strong></div><div class="ops-feature-stat"><span>Shadow spreads</span><strong>${spread.recent?.length || 0}</strong></div></section>
+    const selected = state.researchExperiment && (data.lab?.experiments || []).some(item => item.id === state.researchExperiment.id) ? state.researchExperiment : null;
+    return `${renderResearchLab(data.lab, selected)}
+        <section class="ops-feature-strip"><div><span class="ops-section-label">Point-in-time foundation</span><h2>${health.open_incidents?.length ? 'Data needs attention' : 'Research data health'}</h2><p>${health.latest_manifest ? `Manifest ${health.latest_manifest.content_hash?.slice(0, 12)}…` : 'No immutable manifest frozen yet'}</p></div><div class="ops-feature-stat"><span>Backtests</span><strong>${data.backtests?.length || 0}</strong></div><div class="ops-feature-stat"><span>Shadow spreads</span><strong>${spread.recent?.length || 0}</strong></div></section>
         <section class="ops-two-column"><article class="ops-panel"><header><div><span class="ops-section-label">Canonical 1-hour bars</span><h3>Candle coverage</h3></div></header>${candles.length ? renderTable(['Asset', 'Latest final', 'Lag', 'Missing 7d', 'Quality'], candles.map(c => [c.asset, formatTime(c.latest_final_bar), c.lag_minutes == null ? '—' : `${c.lag_minutes}m`, c.missing_bars_7d, statusTag(c.quality_state || 'unknown')])) : emptyState('No canonical candle coverage', 'Run the historical backfill or market-data sync.', 'Open operations', 'link', '/operations')}</article>
         <article class="ops-panel"><header><div><span class="ops-section-label">Coinbase / Kraken</span><h3>Spread feasibility</h3></div><span class="ops-state-pill partial">Shadow only</span></header><div class="ops-callout"><strong>Execution remains disabled</strong><p>${spread.classifications?.length || 0} classifications are available for this window. Only observations surviving depth, fees, latency, impact, rebalancing, and the safety buffer can be labeled executable.</p></div>${(spread.classifications || []).map(x => `<div class="ops-key-row"><span>${escapeHtml(x.classification)}</span><strong>${x.total}</strong></div>`).join('')}</article></section>`;
 }

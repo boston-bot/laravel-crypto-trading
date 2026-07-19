@@ -15,7 +15,7 @@
         'activity' => ['label' => 'Activity', 'path' => '/activity', 'title' => 'Decision trail', 'subtitle' => 'Evaluation, proposal, execution, and operational events in order.'],
         'paper' => ['label' => 'Paper', 'path' => '/paper', 'title' => 'Paper portfolio', 'subtitle' => 'Session capital, cash accounting, positions, and proposals.'],
         'operations' => ['label' => 'Operations', 'path' => '/operations', 'title' => 'Runtime operations', 'subtitle' => 'Workers, queues, cycles, data freshness, and safe controls.'],
-        'research' => ['label' => 'Research', 'path' => '/research', 'title' => 'Research evidence', 'subtitle' => 'Data quality, calibration, backtests, and shadow spreads.'],
+        'research' => ['label' => 'Research', 'path' => '/research', 'title' => 'Candidate research lab', 'subtitle' => 'Champion/challenger evidence, rejection gates, sealed holdout state, and data integrity.'],
     ];
     $current = $pages[$page] ?? $pages['overview'];
 @endphp

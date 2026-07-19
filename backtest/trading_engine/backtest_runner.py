@@ -138,8 +138,10 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
     all_trades: List[Dict[str, Any]] = []
     all_fills: List[Dict[str, Any]] = []
     all_equity: List[Dict[str, Any]] = []
+    all_stressed_equity: List[Dict[str, Any]] = []
     total_fees = 0.0
     fold_equity_curves: List[pd.Series] = []
+    stressed_fold_equity_curves: List[pd.Series] = []
     for fold in folds:
         train = pd.concat([
             signals.loc[(signals.index >= fold.train_start) & (signals.index < fold.train_end), ["score", "future_return"]]
@@ -187,14 +189,16 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
         all_trade_pnls.extend([float(item.pnl) for item in replay["trades"]])
         total_fees += sum(float(item.fee) for item in replay["fills"])
         all_equity.extend([{"timestamp": timestamp.isoformat(), "equity": float(value), "fold": fold.fold} for timestamp, value in replay["equity"].items()])
+        all_stressed_equity.extend([{"timestamp": timestamp.isoformat(), "equity": float(value), "fold": fold.fold} for timestamp, value in stressed["equity"].items()])
         fold_equity_curves.append(replay["equity"])
+        stressed_fold_equity_curves.append(stressed["equity"])
         fold_results.append({
             "fold": fold.fold, "windows": {key: value.isoformat() for key, value in asdict(fold).items() if key != "fold"},
             "normal": replay["metrics"], "stressed": stressed["metrics"], "actionable_signals": int(len(actionable)), "child_definition_hash": definition.parameter_hash,
         })
 
     calibration = calibration_report(np.asarray(all_probabilities), np.asarray(all_outcomes)) if all_probabilities else None
-    metric_keys = ["sharpe", "sortino", "max_drawdown_pct", "profit_factor", "net_expectancy", "trade_count"]
+    metric_keys = ["total_return_pct", "sharpe", "sortino", "max_drawdown_pct", "profit_factor", "net_expectancy", "trade_count"]
     aggregate = {
         key: float(np.median([fold["normal"][key] for fold in fold_results])) if fold_results else 0.0
         for key in metric_keys
@@ -209,9 +213,13 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
         contributions[item["asset"]] = contributions.get(item["asset"], 0.0) + max(0, float(item["pnl"]))
     contribution_pct = {asset: value / total_positive * 100 if total_positive else 0.0 for asset, value in contributions.items()}
     linked = link_fold_nav(fold_equity_curves)
+    stressed_linked = link_fold_nav(stressed_fold_equity_curves)
     if not linked.empty:
         aggregate["linked_max_drawdown_pct"] = abs(float((linked / linked.cummax() - 1).min())) * 100
         aggregate["max_drawdown_pct"] = aggregate["linked_max_drawdown_pct"]
+    if not stressed_linked.empty:
+        stressed_aggregate["linked_max_drawdown_pct"] = abs(float((stressed_linked / stressed_linked.cummax() - 1).min())) * 100
+        stressed_aggregate["max_drawdown_pct"] = stressed_aggregate["linked_max_drawdown_pct"]
     gate = assess_evidence(aggregate | {"trade_count": len(all_trades)}, stressed_aggregate, fold_count=len(fold_results), asset_count=len({item["asset"] for item in all_trades}), max_asset_contribution_pct=max(contribution_pct.values(), default=0))
     price_series = {}
     for symbol, frame in four_hour.items():
@@ -229,7 +237,7 @@ def execute_backtest(connection: Any, payload: Dict[str, Any]) -> Dict[str, Any]
         "aggregate_metrics": aggregate, "stressed_metrics": stressed_aggregate,
         "calibration": calibration,
         "sentiment_ablation": {"retained": False, "reason": "Sentiment cannot be retained until identical point-in-time folds improve median OOS expectancy and calibration without material drawdown degradation."},
-        "trades": all_trades, "fills": all_fills, "equity": all_equity,
+        "trades": all_trades, "fills": all_fills, "equity": all_equity, "stressed_equity": all_stressed_equity,
         "benchmarks": benchmark_output, "cost_attribution": attribution["costs"] | {"fees_usd": total_fees, "spread_and_slippage_in_fill_prices": True}, "attribution": attribution,
         "asset_profit_contribution_pct": contribution_pct, "gate": gate, "gate_passed": gate["gate_passed"], "evidence_status": gate["status"],
     }

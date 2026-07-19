@@ -1814,6 +1814,114 @@
     .ops-lineage { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin-top: 0.8rem; color: var(--ops-dim); font: 0.61rem ui-monospace, Menlo, monospace; text-transform: uppercase; }
     .ops-strategy-footnote h2 { font-size: clamp(1.35rem, 2vw, 2rem); }
 
+    .ops-lab-shell {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .ops-lab-shell > header {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 2rem;
+        padding: clamp(1.4rem, 3vw, 2.6rem);
+        border: 1px solid var(--ops-line);
+        background:
+            linear-gradient(115deg, rgba(85, 196, 156, 0.07), transparent 40%),
+            linear-gradient(150deg, rgba(29, 39, 37, 0.98), rgba(14, 20, 19, 0.98));
+    }
+
+    .ops-lab-shell > header h2 {
+        margin: 0.5rem 0 0.55rem;
+        color: #f3f6f4;
+        font-size: clamp(1.8rem, 3.5vw, 3.7rem);
+        font-weight: 530;
+        letter-spacing: -0.055em;
+        line-height: 1;
+    }
+
+    .ops-lab-shell > header p { max-width: 720px; margin: 0; color: var(--ops-muted); line-height: 1.6; }
+    .ops-lab-shell > header p strong { color: var(--ops-positive); font-family: ui-monospace, Menlo, monospace; text-transform: uppercase; }
+    .ops-lab-shell > header label { min-width: 260px; display: grid; gap: 0.4rem; color: var(--ops-dim); font: 0.62rem ui-monospace, Menlo, monospace; letter-spacing: 0.1em; text-transform: uppercase; }
+    .ops-lab-shell > header select { border: 1px solid var(--ops-line); border-radius: 0; background: var(--ops-rail); padding: 0.75rem; color: var(--ops-ink); }
+    .ops-lab-shell > header select:focus-visible { outline: 2px solid var(--ops-accent); outline-offset: 3px; }
+
+    .ops-lab-banner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.7rem 1.4rem;
+        padding: 0.8rem 1rem;
+        border: 1px solid var(--ops-line);
+        background: var(--ops-rail);
+        color: var(--ops-dim);
+        font: 0.67rem ui-monospace, Menlo, monospace;
+    }
+    .ops-lab-banner > div { display: flex; gap: 0.45rem; }
+
+    .ops-holdout-panel {
+        padding: 1.15rem;
+        border: 1px solid var(--ops-line);
+        background: rgba(255, 255, 255, 0.015);
+    }
+    .ops-holdout-panel > header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 1rem; }
+    .ops-holdout-panel h3 { margin: 0; color: var(--ops-ink); font-size: 0.9rem; }
+    .ops-holdout-life { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; }
+    .ops-holdout-life span { position: relative; padding: 0.7rem 0.5rem; border-top: 2px solid var(--ops-line); color: var(--ops-dim); font: 0.61rem ui-monospace, Menlo, monospace; text-align: center; text-transform: uppercase; }
+    .ops-holdout-life span.current { border-color: var(--ops-accent); background: rgba(243, 154, 75, 0.06); color: var(--ops-accent); }
+    .ops-holdout-note { display: flex; gap: 1rem; margin-top: 0.8rem; color: var(--ops-muted); font-size: 0.75rem; }
+    .ops-holdout-note strong { color: var(--ops-ink); text-transform: capitalize; }
+    .ops-holdout-note p { margin: 0; }
+
+    .ops-candidate-stack { display: grid; gap: 1rem; }
+    .ops-candidate-card {
+        overflow: hidden;
+        border: 1px solid var(--ops-line);
+        background: linear-gradient(150deg, rgba(27, 37, 35, 0.98), rgba(16, 23, 22, 0.98));
+    }
+    .ops-candidate-card.champion { border-top: 2px solid var(--ops-positive); }
+    .ops-candidate-card.challenger { border-top: 2px solid var(--ops-line); }
+    .ops-candidate-card > header { display: flex; justify-content: space-between; gap: 1rem; padding: 1.2rem 1.35rem; border-bottom: 1px solid var(--ops-line); }
+    .ops-candidate-card > header h3 { margin: 0.35rem 0 0.1rem; color: #f0f4f1; font-size: 1.35rem; font-weight: 560; text-transform: capitalize; }
+    .ops-candidate-card > header p { margin: 0; color: var(--ops-dim); font: 0.66rem ui-monospace, Menlo, monospace; }
+    .ops-candidate-card > header > div:last-child { display: flex; align-items: start; gap: 0.4rem; }
+
+    .ops-lab-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--ops-line); }
+    .ops-lab-metric { min-height: 92px; display: flex; flex-direction: column; justify-content: space-between; padding: 0.85rem 1rem; border-right: 1px solid var(--ops-line); }
+    .ops-lab-metric:last-child { border-right: 0; }
+    .ops-lab-metric span { color: var(--ops-dim); font: 0.61rem ui-monospace, Menlo, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+    .ops-lab-metric strong { color: var(--ops-ink); font: 0.9rem ui-monospace, Menlo, monospace; }
+
+    .ops-research-chart { margin: 0; padding: 1rem 1.2rem; border-bottom: 1px solid var(--ops-line); }
+    .ops-chart-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ops-chart-pair .ops-research-chart:first-child { border-right: 1px solid var(--ops-line); }
+    .ops-research-chart figcaption { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.8rem; }
+    .ops-research-chart figcaption strong { font-size: 0.8rem; }
+    .ops-research-chart figcaption span { color: var(--ops-dim); font: 0.61rem ui-monospace, Menlo, monospace; text-transform: uppercase; }
+    .ops-research-chart svg { width: 100%; height: 180px; overflow: visible; background: repeating-linear-gradient(0deg, transparent 0 44px, var(--ops-line-soft) 45px); }
+    .ops-research-chart polyline { fill: none; stroke: var(--ops-positive); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+    .ops-research-chart polyline.stressed { stroke: var(--ops-warning); stroke-dasharray: 7 5; }
+    .ops-chart-legend { display: flex; gap: 1rem; margin-top: 0.7rem; color: var(--ops-dim); font-size: 0.65rem; }
+    .ops-chart-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+    .ops-chart-legend i { width: 18px; height: 2px; background: var(--ops-positive); }
+    .ops-chart-legend span:last-child i { background: repeating-linear-gradient(90deg, var(--ops-warning) 0 5px, transparent 5px 8px); }
+    .ops-research-chart.empty > div { min-height: 120px; display: grid; place-content: center; gap: 0.25rem; border: 1px dashed var(--ops-line); color: var(--ops-muted); text-align: center; }
+    .ops-research-chart.empty small { color: var(--ops-dim); }
+
+    .ops-research-evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ops-lab-table { min-width: 0; padding: 1rem 1.2rem; border-right: 1px solid var(--ops-line); border-bottom: 1px solid var(--ops-line); }
+    .ops-lab-table:nth-child(even) { border-right: 0; }
+    .ops-lab-table h4 { margin: 0 0 0.65rem; color: var(--ops-ink); font-size: 0.75rem; }
+    .ops-lab-table p { margin: 0; color: var(--ops-dim); font-size: 0.72rem; font-style: italic; }
+    .ops-lab-table th, .ops-lab-table td { padding: 0.38rem; font-size: 0.66rem; }
+    .ops-lab-table td:last-child { font-family: ui-monospace, Menlo, monospace; }
+
+    .ops-rejection-box { padding: 1rem 1.2rem; background: rgba(0, 0, 0, 0.1); }
+    .ops-rejection-box > span { color: var(--ops-accent); font: 0.61rem ui-monospace, Menlo, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+    .ops-rejection-box p, .ops-rejection-box ul { margin: 0.45rem 0 0; color: var(--ops-muted); font-size: 0.75rem; }
+    .ops-rejection-box ul { padding-left: 1.1rem; }
+    .ops-visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
     @media (max-width: 1050px) {
         .ops-decision-shell > header { align-items: stretch; flex-direction: column; }
         .ops-inspector-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1821,6 +1929,7 @@
         .ops-inspector-metric:nth-child(-n+3) { border-bottom: 1px solid var(--ops-line); }
         .ops-inspector-columns { grid-template-columns: 1fr; }
         .ops-inspector-layer + .ops-inspector-layer { border-top: 1px solid var(--ops-line); border-left: 0; }
+        .ops-lab-shell > header { align-items: stretch; flex-direction: column; }
     }
 
     @media (max-width: 640px) {
@@ -1829,6 +1938,11 @@
         .ops-inspector-metric:last-child { border-bottom: 0; }
         .ops-blocker-groups > div, .ops-factor-list > div { grid-template-columns: 1fr; }
         .ops-factor-list strong { text-align: left; }
+        .ops-holdout-life, .ops-lab-metrics, .ops-research-evidence-grid, .ops-chart-pair { grid-template-columns: 1fr; }
+        .ops-holdout-life span { text-align: left; }
+        .ops-holdout-note, .ops-candidate-card > header, .ops-research-chart figcaption { flex-direction: column; }
+        .ops-lab-metric, .ops-lab-table { border-right: 0; }
+        .ops-chart-pair .ops-research-chart:first-child { border-right: 0; }
     }
 
     @media (prefers-reduced-motion: reduce) {

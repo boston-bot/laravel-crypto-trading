@@ -45,6 +45,16 @@ class OperationsConsoleTest extends TestCase
             ->assertSee('rule mechanics, counterfactual, and immutable evidence trail');
     }
 
+    public function test_research_page_leads_with_the_candidate_lab_and_sealed_holdout_state(): void
+    {
+        $this->withoutVite();
+
+        $this->get('/research')
+            ->assertOk()
+            ->assertSee('Candidate research lab')
+            ->assertSee('sealed holdout state');
+    }
+
     public function test_virtual_paper_session_start_is_idempotent_and_posts_opening_cash(): void
     {
         $account = $this->account();
