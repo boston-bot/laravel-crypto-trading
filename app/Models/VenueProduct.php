@@ -15,6 +15,13 @@ class VenueProduct extends Model
         return ['valid_from' => 'immutable_datetime', 'valid_to' => 'immutable_datetime', 'metadata_json' => 'array'];
     }
 
-    public function asset(): BelongsTo { return $this->belongsTo(Asset::class); }
-    public function universeMemberships(): HasMany { return $this->hasMany(UniverseMembership::class); }
+    public function asset(): BelongsTo
+    {
+        return $this->belongsTo(Asset::class);
+    }
+
+    public function universeMemberships(): HasMany
+    {
+        return $this->hasMany(UniverseMembership::class);
+    }
 }

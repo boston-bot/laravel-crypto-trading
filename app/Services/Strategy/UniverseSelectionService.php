@@ -39,7 +39,9 @@ class UniverseSelectionService
             ]);
             if ($version->wasRecentlyCreated) {
                 foreach ($products as $index => $product) {
-                    if ($product->asset_id === null) { continue; }
+                    if ($product->asset_id === null) {
+                        continue;
+                    }
                     $asset = $product->asset;
                     $rowEvidence = $evidence[$index];
                     UniverseMembership::query()->create([
@@ -53,6 +55,7 @@ class UniverseSelectionService
                     ]);
                 }
             }
+
             return $version->load('memberships.asset');
         });
     }

@@ -14,7 +14,18 @@ class UniverseMembership extends Model
         return ['valid_from' => 'immutable_datetime', 'valid_to' => 'immutable_datetime', 'listed_at' => 'immutable_datetime', 'delisted_at' => 'immutable_datetime', 'minimum_notional' => 'decimal:8', 'evidence_json' => 'array'];
     }
 
-    public function universeVersion(): BelongsTo { return $this->belongsTo(UniverseVersion::class); }
-    public function asset(): BelongsTo { return $this->belongsTo(Asset::class); }
-    public function venueProduct(): BelongsTo { return $this->belongsTo(VenueProduct::class); }
+    public function universeVersion(): BelongsTo
+    {
+        return $this->belongsTo(UniverseVersion::class);
+    }
+
+    public function asset(): BelongsTo
+    {
+        return $this->belongsTo(Asset::class);
+    }
+
+    public function venueProduct(): BelongsTo
+    {
+        return $this->belongsTo(VenueProduct::class);
+    }
 }

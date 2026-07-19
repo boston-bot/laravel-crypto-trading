@@ -1,7 +1,7 @@
 # Automated Crypto Trading Pipeline: Engineering Progress
 
 Date: 2026-07-19
-Status: Strategy transparency implementation in progress; contract baseline established
+Status: Strategy iteration transparency implemented; operational evidence collection pending
 
 ## 1. Purpose
 
@@ -13,7 +13,7 @@ The implementation is intentionally research-first. Coinbase remains the only or
 
 The repository now contains the core architecture needed to collect research data, evaluate versioned strategies, simulate realistic portfolio execution, operate funded paper sessions, explain every evaluation, and supervise the local processes from a focused operations console.
 
-The main remaining work combines evidence collection with several promotion blockers: run the collectors and backfill, establish Python/PHP parity, require paper sessions to pin an exact active strategy/universe version, accumulate the required out-of-sample and paper results, and evaluate the promotion gates.
+The implementation gates now cover canonical parity, future-data causality, experiment/holdout lineage, exact paper pinning, and stable transparency projections. The remaining work is operational evidence collection: complete the canonical backfill, run one preregistered experiment, explicitly authorize one finalist holdout, and accumulate forward paper evidence.
 
 At the last local verification:
 
@@ -84,9 +84,9 @@ Implemented:
 
 Current transition state:
 
-- `STRATEGY_ENGINE_DRIVER=legacy` remains the safe default;
-- the database/Python adapter is available but should not become the paper default until fixture parity and a paper soak are complete;
-- the legacy evaluator has not been removed.
+- `STRATEGY_ENGINE_DRIVER=database` is the paper default after canonical parity and causality tests passed;
+- the legacy evaluator remains installed for diagnostics only and is not promotion-eligible;
+- changing the engine driver never enables live trading.
 
 ### 5.2 Point-in-time market and research data
 
@@ -191,7 +191,7 @@ Implemented:
 
 Current limitation:
 
-- session creation stores the latest active strategy/universe IDs when available, but currently permits both IDs to be null and offers no exact-version selection. Until strict pinning is implemented, a paper session cannot be treated as promotion evidence for one immutable strategy/universe version;
+- operational paper sessions may remain unpinned, but evidence-eligible sessions require and freeze the exact holdout-passing strategy, universe, and execution-policy hashes;
 - mirror funding does not yet enforce that the selected account is Coinbase and records the mutable broker-account row ID as `source_account_snapshot_id` rather than referencing an immutable account-snapshot record;
 - automatic `Liquidate and end` is not implemented; positions must be resolved through normal paper orders before ending a session.
 
@@ -230,12 +230,12 @@ The control agent must be started outside the web process. If it is offline, the
 The former single noisy dashboard has been replaced with a focused, automatically refreshing console:
 
 - `/dashboard` — latest cycle, primary explanation, paper summary, system summary, evidence trail, and asset contribution;
-- `/strategies` — immutable versions, backtests, and recent strategy runs;
+- `/strategies` — latest decision, rule mechanics, counterfactual, factors, immutable lineage, versions, and runs;
 - `/assets` — per-asset paper contribution beside Coinbase buy-and-hold context;
 - `/activity` — append-only evaluation, proposal, execution, and operational events;
 - `/paper` — session funding, cash ledger, positions, proposals, and session controls;
 - `/operations` — supervised processes, queues, engine jobs, pipeline cycles, and safe controls;
-- `/research` — candle health, manifests, backtests, calibration, and shadow spreads.
+- `/research` — champion/challenger evidence, linked normal/stressed curves, robustness, attribution, holdout lifecycle, candle health, and shadow spreads.
 
 UI behavior includes:
 
@@ -292,7 +292,7 @@ BROKER=coinbase
 BROKER_MODE=paper
 TRADING_ENABLED=false
 HUMAN_APPROVAL_REQUIRED=true
-STRATEGY_ENGINE_DRIVER=legacy
+STRATEGY_ENGINE_DRIVER=database
 OPERATIONS_LOCAL_ONLY=true
 LIVE_CONSOLE_ACTIONS_ENABLED=false
 ```
@@ -340,11 +340,16 @@ Focused console read projections are available under:
 
 - `GET /api/ops/v1/overview`
 - `GET /api/ops/v1/strategies`
+- `GET /api/ops/v1/strategy-decisions/latest`
+- `GET /api/ops/v1/strategy-decisions/{assetEvaluation}`
 - `GET /api/ops/v1/assets`
 - `GET /api/ops/v1/activity`
 - `GET /api/ops/v1/paper`
 - `GET /api/ops/v1/operations`
 - `GET /api/ops/v1/research`
+- `GET /api/ops/v1/research-lab/experiments`
+- `GET /api/ops/v1/research-lab/experiments/{strategyExperiment}`
+- `GET /api/ops/v1/research-lab/runs`
 
 CSRF-protected local mutation routes support:
 
@@ -358,7 +363,20 @@ Existing broker and research read APIs remain available. While local-only mode i
 
 ## 9. Verification Evidence
 
-### 9.1 Strategy-transparency baseline (2026-07-19)
+### 9.1 Strategy-transparency completion gate (2026-07-19)
+
+| Area | Result |
+| --- | --- |
+| Laravel unit/feature suite | 81 passed, 460 assertions; 10 PostgreSQL-only tests skipped in SQLite |
+| PostgreSQL integration gate | 11 passed, 23 assertions |
+| Python synthetic/parity/causality suite | 36 passed; one local LibreSSL warning |
+| JavaScript unit suite | 14 passed in 3 Vitest files |
+| Production frontend build | Vite build succeeded; 60 modules transformed |
+| PHP formatting | Full Laravel Pint check passed |
+
+The completed gate includes canonical transport/order-intent parity, appended-future causality for decisions/fills/equity, preregistration through immutable terminal holdout, locked-value redaction, database immutability/concurrency, paper evidence pinning, and the decision/research transparency projections. These synthetic and contract checks establish reproducibility; they are not evidence that a strategy is profitable.
+
+### 9.2 Strategy-transparency baseline (2026-07-19)
 
 The pre-change baseline for the strategy-transparency implementation was captured before application behavior changed:
 
@@ -410,23 +428,23 @@ Representative automated coverage includes:
 - pipeline-cycle coalescing;
 - runtime-control allowlisting.
 
-The Python test count should not be read as end-to-end engine validation. The current 12 tests do not exercise the database worker, engine-job leasing/heartbeats, historical backfill execution, end-to-end backtest jobs, live public collectors, or a checksum comparison against a known Kraken fixture. PostgreSQL leasing is covered separately from PHP, but Python worker/collector integration coverage remains necessary.
+The Python suite now covers a synthetic end-to-end experiment and future-data causality, but it still does not run a live PostgreSQL worker, historical Coinbase backfill, or public collector against external feeds. PostgreSQL leasing is covered separately from PHP; captured-feed and live collector integration remain operational work.
 
 ## 10. Known Limitations and Deferred Work
 
 The following items are incomplete or intentionally deferred:
 
 1. The five-year candle dataset and prospective Level 2 dataset still need to be collected and monitored for gaps.
-2. Python/PHP golden-fixture parity and the legacy-adapter removal gate have not been completed.
-3. No strategy has yet passed the backtest gate or the eight-week/30-trade paper gate.
+2. Canonical parity and causality are automated; the legacy adapter remains intentionally available for diagnostics until a separate removal decision.
+3. No strategy has yet passed the operational development, holdout, and 90-day/15-round-trip paper evidence gates.
 4. No active paper session has been started in the verified local environment.
-5. Paper sessions do not yet require a non-null exact strategy/universe version, so current sessions cannot satisfy the immutable-version paper gate.
+5. Only explicitly evidence-eligible sessions count toward promotion evidence; operational unpinned paper sessions do not.
 6. Mirror funding does not yet enforce Coinbase or reference an immutable account-snapshot record.
 7. The runtime processes were implemented and inspected but were not left running after verification.
 8. Fully normalized per-asset strategy-versus-buy-and-hold replay remains to be added to the asset view.
 9. `Liquidate and end` for paper sessions is not implemented.
 10. Dedicated UI controls for retrying failed cycle boundaries and running retention/maintenance are not yet exposed.
-11. Python database-worker, backfill, collector, and end-to-end backtest integration tests remain incomplete.
+11. Python database-worker, backfill, and live collector integration tests remain incomplete; synthetic end-to-end experiment coverage is present.
 12. Authentication, operator/approver roles, and production authorization are not implemented.
 13. AWS ECS/Fargate, RDS, Secrets Manager, EventBridge, and CloudWatch deployment is documented as a mapping, not deployed infrastructure.
 14. Arbitrage execution, Kraken funding, transfers, inventory balancing, and two-leg orders remain out of scope.
@@ -437,13 +455,13 @@ The following items are incomplete or intentionally deferred:
 1. Run the Coinbase historical backfill and resolve all reported candle gaps or quality incidents.
 2. Start `php artisan trading:runtime` and verify sustained heartbeats for the scheduler, queue, engine, and collector.
 3. Run captured-feed and prospective Level 2 collection long enough to characterize feed gaps and after-cost spread feasibility.
-4. Complete shared-fixture parity between the legacy PHP and Python evaluators.
-5. Freeze an immutable strategy/universe/data version and execute the full walk-forward backtest gate.
-6. Make exact non-null strategy/universe pinning mandatory at paper-session creation, then start a funded paper session for that exact version and complete the minimum eight-week/30-closed-trade soak.
+4. Review the automated canonical parity and causality gates before any engine contract change.
+5. Run one preregistered four-family experiment and review every development gate in Research Lab.
+6. Authorize the single-use holdout only for one passing frozen finalist, then start an evidence-eligible pinned paper session and complete the 90-day/15-round-trip gate.
 7. Compare modeled and realized slippage, reconcile every paper fill, and resolve every critical data incident.
 8. Finish normalized asset benchmark replay, failure retry/maintenance controls, and paper liquidation workflow.
 9. Add authentication and explicit operator/approver roles before exposing the console outside loopback or deploying it to AWS.
-10. Consider capped live eligibility only after the exact immutable version passes both gates. Continue to require fresh human approval and Coinbase IOC revalidation.
+10. Design any live-capital path separately after the exact immutable version passes every evidence gate. Continue to require fresh human approval and Coinbase IOC revalidation.
 
 ## 12. Key File Map
 
@@ -461,10 +479,10 @@ The following items are incomplete or intentionally deferred:
 | Console query projections | `app/Services/Operations/OperationsConsoleQueryService.php` |
 | Console frontend | `resources/views/operations-console.blade.php`, `resources/js/operations-console.js`, `resources/css/app.css` |
 | Console routes | `routes/web.php`, `routes/api.php`, `routes/console.php` |
-| Research/operations migrations | `database/migrations/2026_07_16_000005_create_research_pipeline_tables.php` through `2026_07_16_000007_create_operations_console_tables.php` |
+| Research/operations migrations | `database/migrations/2026_07_16_000005_create_research_pipeline_tables.php` through `2026_07_19_000015_add_paper_evidence_gate.php` |
 | PHP integration coverage | `tests/Feature/Trading` |
-| Python engine coverage | `backtest/tests/test_engine.py` |
+| Python engine coverage | `backtest/tests`, including append-future causality and end-to-end experiment gates |
 
 ## 13. Promotion Reminder
 
-Implementation completion is not evidence of profitability. The latest 12 months must remain locked during research, earlier data must pass the configured walk-forward folds under normal and stressed costs, and the same immutable strategy must then survive the paper gate. Strict paper-session version pinning is a prerequisite that is not yet enforced. Only an exact strategy/data version with verifiable backtest and paper evidence may become eligible for capped live consideration, and eligibility must not bypass Coinbase-only execution, risk brakes, fresh revalidation, or human approval.
+Implementation completion is not evidence of profitability. The latest 12 months remain locked during development, earlier data must pass the configured walk-forward folds under normal and stressed costs, and the same immutable strategy must then survive the pinned forward-paper gate. Satisfaction remains evidence only and cannot enable live trading. Any live-capital consideration needs a separate reviewed design and must preserve Coinbase-only execution, risk brakes, fresh revalidation, and human approval.

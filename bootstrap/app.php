@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureLocalOperationsRequest;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,7 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'operations.local' => \App\Http\Middleware\EnsureLocalOperationsRequest::class,
+            'operations.local' => EnsureLocalOperationsRequest::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

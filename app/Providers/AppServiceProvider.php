@@ -15,7 +15,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(StrategyEngine::class, function ($app): StrategyEngine {
-            return match ((string) config('research.engine.driver', 'legacy')) {
+            return match ((string) config('research.engine.driver', 'database')) {
                 'database', 'python' => $app->make(DatabaseStrategyEngineAdapter::class),
                 default => $app->make(LegacyPhpStrategyEngineAdapter::class),
             };

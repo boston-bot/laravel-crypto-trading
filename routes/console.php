@@ -50,7 +50,7 @@ if ($defaultBroker === BrokerType::COINBASE) {
 Schedule::job(new PipelineHeartbeatJob)->everyMinute()->withoutOverlapping();
 Schedule::job(new ConsumeEngineResultsJob)->everyMinute();
 Schedule::job(new ConsumeBacktestResultsJob)->everyMinute();
-if (in_array((string) config('research.engine.driver', 'legacy'), ['database', 'python'], true)) {
+if (in_array((string) config('research.engine.driver', 'database'), ['database', 'python'], true)) {
     Schedule::job(new EnqueueSentimentRefreshJob)->dailyAt('00:10');
 } else {
     Schedule::job(new SyncFearGreedSentimentJob)->dailyAt('00:10');

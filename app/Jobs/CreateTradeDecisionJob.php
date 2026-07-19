@@ -6,7 +6,6 @@ use App\Data\Trading\TradeCandidate;
 use App\Enums\OrderSide;
 use App\Enums\TradeDecisionAction;
 use App\Enums\TradingDecisionStatus;
-use LogicException;
 use App\Models\Asset;
 use App\Models\BrokerAccount;
 use App\Models\PolicyCheck;
@@ -21,6 +20,7 @@ use App\Services\Strategy\SignalAggregator;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Str;
+use LogicException;
 
 class CreateTradeDecisionJob implements ShouldQueue
 {

@@ -2,9 +2,9 @@
 
 return [
     'engine' => [
-        'driver' => env('STRATEGY_ENGINE_DRIVER', 'legacy'),
+        'driver' => env('STRATEGY_ENGINE_DRIVER', 'database'),
         'schema_version' => env('STRATEGY_ENGINE_SCHEMA_VERSION', '2.0'),
-        'version' => env('STRATEGY_ENGINE_VERSION', '0.1.0'),
+        'version' => env('STRATEGY_ENGINE_VERSION', '0.2.0'),
         'lease_seconds' => (int) env('STRATEGY_ENGINE_LEASE_SECONDS', 300),
         'max_attempts' => (int) env('STRATEGY_ENGINE_MAX_ATTEMPTS', 3),
         'job_ttl_minutes' => (int) env('STRATEGY_ENGINE_JOB_TTL_MINUTES', 60),

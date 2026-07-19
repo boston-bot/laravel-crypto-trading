@@ -3,8 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use LogicException;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
 
 class UniverseVersion extends Model
 {

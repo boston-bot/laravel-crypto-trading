@@ -144,7 +144,7 @@ class EvaluateSignalsJob implements ShouldQueue
             'completed_at' => in_array($job->status, ['failed', 'expired'], true) ? now() : null,
             'summary_json' => [
                 'engine_job_id' => $job->id,
-                'engine_driver' => (string) config('research.engine.driver', 'legacy'),
+                'engine_driver' => (string) config('research.engine.driver', 'database'),
                 'assets_submitted' => $assets->count(),
                 'as_of' => $request->asOf->toIso8601String(),
                 'evidence_cutoff' => $evidenceCutoff->toIso8601String(),

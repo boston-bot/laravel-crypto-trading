@@ -3,7 +3,6 @@
 namespace Tests\Feature\Trading;
 
 use App\Models\Asset;
-use App\Models\UniverseVersion;
 use App\Models\VenueProduct;
 use App\Services\Strategy\UniverseSelectionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;

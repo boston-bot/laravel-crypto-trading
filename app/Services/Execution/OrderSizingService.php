@@ -3,6 +3,7 @@
 namespace App\Services\Execution;
 
 use App\Contracts\PortfolioContext;
+use App\Models\Asset;
 use App\Services\Risk\DrawdownService;
 use App\Services\Risk\ExposureService;
 use Illuminate\Support\Arr;
@@ -24,7 +25,7 @@ class OrderSizingService
         $intent = $signal['order_intent'] ?? null;
         if (is_array($intent)) {
             $assetId = (int) ($signal['asset_id'] ?? $intent['asset_id'] ?? 0);
-            $asset = \App\Models\Asset::query()->findOrFail($assetId);
+            $asset = Asset::query()->findOrFail($assetId);
             $validated = $this->intentValidator->validate($intent, $asset);
             $quantity = (float) $validated['normalized_base_quantity'];
 

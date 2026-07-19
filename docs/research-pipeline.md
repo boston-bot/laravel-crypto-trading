@@ -25,7 +25,7 @@ php artisan migrate
 docker compose -f compose.research.yml up -d web scheduler queue engine collector
 ```
 
-Keep `STRATEGY_ENGINE_DRIVER=legacy` while comparing shared fixtures. After parity, set it to `database` for paper mode only. This setting changes signal computation, not the live-trading switches.
+Parity, causality, and end-to-end contract gates now pass for the canonical seam, so paper defaults to `STRATEGY_ENGINE_DRIVER=database`. The legacy adapter remains available only for diagnostics. This setting changes signal computation, not the live-trading switches.
 
 Backfill and test:
 
@@ -44,6 +44,8 @@ The backtest reserves the latest 12 months as a locked holdout. Earlier data use
 - `research_manifests`, `strategy_versions`, and `universe_versions` make completed research reproducible.
 - Raw Level 2 payloads use daily PostgreSQL partitions and seven-day retention. One-second book summaries and all spread classifications are permanent.
 - Alternative.me sentiment is stored point-in-time and remains ablation-only; it cannot independently trigger a trade.
+- `strategy_experiments`, candidates, development/holdout runs, fold metrics, access events, and terminal results preserve the champion/challenger lineage.
+- Evidence-eligible paper sessions freeze strategy, universe, and execution-policy pins; cycles and evaluator results must match them exactly.
 
 ## AWS mapping
 
@@ -51,4 +53,6 @@ Build the Laravel and Python images unchanged. Run Laravel web, scheduler, queue
 
 ## Promotion
 
-No code path promotes a strategy automatically. A version must pass the immutable backtest gate and then run unchanged for at least eight weeks and 30 closed paper trades. Promotion makes that exact version eligible for capped, human-approved Coinbase IOC orders; it does not bypass approval or risk checks.
+No code path promotes a strategy automatically. A version must pass development and a globally single-use 12-month holdout, then run unchanged for at least 90 days, 15 closed round trips, three assets, and two sufficiently observed regimes with reconciliation and no more than 15% drawdown. A satisfied forward-paper gate remains `live_eligible=false`; any live-capital decision requires a separate reviewed design.
+
+See `docs/strategy-research-runbook.md` for experiment creation, monitoring, failure recovery, holdout authorization, paper pinning, and evidence interpretation.

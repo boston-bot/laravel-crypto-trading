@@ -123,14 +123,18 @@ class CanonicalMarketEvidenceService
         foreach (MarketCandleRevision::query()->where('market_candle_id', $candle->id)->where('available_at', '<=', $at)->where('first_seen_at', '<=', $at)->get() as $revision) {
             $versions->push(array_merge((array) $revision->values_json, ['available_at' => $revision->available_at, 'first_seen_at' => $revision->first_seen_at, 'observation_id' => 'revision:'.$revision->id]));
         }
+
         return $versions->filter(fn (array $row): bool => $this->validNumericVersion($row))->sortByDesc(fn (array $row): int => $row['available_at']->getTimestamp())->first();
     }
 
     private function validNumericVersion(array $row): bool
     {
         foreach (['open', 'high', 'low', 'close', 'volume'] as $field) {
-            if (! isset($row[$field]) || ! is_numeric($row[$field]) || ! is_finite((float) $row[$field])) { return false; }
+            if (! isset($row[$field]) || ! is_numeric($row[$field]) || ! is_finite((float) $row[$field])) {
+                return false;
+            }
         }
+
         return (bool) ($row['is_final'] ?? true) && in_array((string) ($row['quality_state'] ?? 'valid'), ['valid', 'verified'], true)
             && (float) $row['high'] >= max((float) $row['open'], (float) $row['close'], (float) $row['low'])
             && (float) $row['low'] <= min((float) $row['open'], (float) $row['close'], (float) $row['high'])
