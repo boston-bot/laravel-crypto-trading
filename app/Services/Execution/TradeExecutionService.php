@@ -27,14 +27,14 @@ class TradeExecutionService
         private readonly CoinbaseMapper $coinbaseMapper,
     ) {}
 
-    public function submitDecision(int $decisionId): void
+    public function submitDecision(int $decisionId): ?BrokerOrder
     {
         $decision = TradeDecision::query()
             ->with(['asset', 'brokerAccount'])
             ->findOrFail($decisionId);
 
         if ($decision->status !== TradingDecisionStatus::APPROVED) {
-            return;
+            return BrokerOrder::query()->where('trade_decision_id', $decision->id)->latest('id')->first();
         }
 
         if ($decision->side === null || $decision->brokerAccount === null || $decision->asset === null) {
@@ -43,13 +43,13 @@ class TradeExecutionService
 
         $mode = (string) config('broker.mode', 'paper');
         if ($mode === 'paper') {
-            $this->paperBrokerAdapter->submit($decision->brokerAccount, $decision->asset, $decision);
+            $order = $this->paperBrokerAdapter->submit($decision->brokerAccount, $decision->asset, $decision);
 
             $decision->update([
                 'status' => TradingDecisionStatus::FILLED->value,
             ]);
 
-            return;
+            return $order;
         }
 
         if ($decision->requires_human_approval && ($decision->approved_at === null || $decision->signal_expires_at?->isPast())) {
@@ -74,7 +74,7 @@ class TradeExecutionService
 
         [$payload, $raw, $mapped] = $this->submitLiveOrder($broker, $credential, $decision);
 
-        BrokerOrder::query()->create([
+        $order = BrokerOrder::query()->create([
             'broker_account_id' => $decision->broker_account_id,
             'asset_id' => $decision->asset_id,
             'trade_decision_id' => $decision->id,
@@ -99,6 +99,8 @@ class TradeExecutionService
         $decision->update([
             'status' => TradingDecisionStatus::SUBMITTED->value,
         ]);
+
+        return $order;
     }
 
     public function reconcileOrder(BrokerOrder $order): void

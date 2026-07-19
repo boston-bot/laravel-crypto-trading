@@ -85,7 +85,11 @@ class PaperExecutionTest extends TestCase
             'source' => 'test',
         ]);
 
-        app(TradeExecutionService::class)->submitDecision($decision->id);
+        $firstOrder = app(TradeExecutionService::class)->submitDecision($decision->id);
+        $decision->update(['status' => TradingDecisionStatus::APPROVED->value]);
+        $retriedOrder = app(TradeExecutionService::class)->submitDecision($decision->id);
+
+        $this->assertSame($firstOrder?->id, $retriedOrder?->id);
 
         $this->assertDatabaseCount('broker_orders', 1);
         $this->assertDatabaseHas('broker_orders', [
@@ -103,7 +107,13 @@ class PaperExecutionTest extends TestCase
         ]);
         $this->assertDatabaseCount('paper_portfolio_snapshots', 1);
         $this->assertDatabaseCount('trade_attributions', 1);
-        $this->assertDatabaseCount('paper_ledger_entries', 3);
+        $this->assertDatabaseCount('paper_ledger_entries', 5);
+        $this->assertDatabaseCount('paper_order_reservations', 1);
+        $this->assertDatabaseHas('paper_order_reservations', [
+            'paper_session_id' => $decision->brokerAccount->paperSessions()->sole()->id,
+            'idempotency_key' => 'paper-test-idempotency-key',
+            'status' => 'filled',
+        ]);
         $this->assertTrue(
             BrokerOrder::query()->first()?->external_order_id !== null
         );

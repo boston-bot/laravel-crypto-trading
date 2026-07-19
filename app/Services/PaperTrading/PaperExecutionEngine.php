@@ -4,6 +4,7 @@ namespace App\Services\PaperTrading;
 
 use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
+use App\Enums\TradingDecisionStatus;
 use App\Models\Asset;
 use App\Models\BrokerAccount;
 use App\Models\BrokerOrder;
@@ -23,7 +24,7 @@ class PaperExecutionEngine
         private readonly SlippageModel $slippageModel,
         private readonly PaperPortfolioValuationService $valuationService,
         private readonly PaperAttributionService $attributionService,
-        private readonly PaperSessionService $sessions,
+        private readonly PaperReservationService $reservations,
     ) {}
 
     public function submit(BrokerAccount $account, Asset $asset, TradeDecision $decision): BrokerOrder
@@ -49,8 +50,29 @@ class PaperExecutionEngine
         $filledQuantity = round($filledNotional / $fillPrice, 12);
         $feeBps = (float) config('trading.paper.taker_fee_bps', 60.0);
         $fee = round($filledNotional * ($feeBps / 10000), 8);
+        $session = PaperSession::query()
+            ->where('broker_account_id', $account->id)
+            ->where('status', 'active')
+            ->latest('id')
+            ->first();
+        if ($session === null) {
+            throw new RuntimeException('No active paper session. Start a virtual or mirrored session before approving paper orders.');
+        }
+        $intentHash = $this->intentHash($session, $asset, $decision, $side, $requestedNotional, $requestedQuantity);
+        $reservation = $this->reservations->reserve(
+            $session,
+            $decision,
+            $asset,
+            $side,
+            $side === OrderSide::BUY ? $filledNotional + $fee : 0.0,
+            $filledQuantity,
+            $intentHash,
+        );
+        if ($reservation->status === 'filled' && $reservation->broker_order_id !== null) {
+            return BrokerOrder::query()->findOrFail($reservation->broker_order_id);
+        }
 
-        $order = DB::transaction(function () use ($account, $asset, $decision, $quote, $side, $referencePrice, $spreadBps, $slippageBps, $fillPrice, $filledNotional, $filledQuantity, $fee, $feeBps): BrokerOrder {
+        $order = DB::transaction(function () use ($account, $asset, $decision, $quote, $side, $referencePrice, $spreadBps, $slippageBps, $fillPrice, $filledNotional, $filledQuantity, $fee, $feeBps, $reservation, $intentHash): BrokerOrder {
             $lockedDecision = TradeDecision::query()->whereKey($decision->id)->lockForUpdate()->firstOrFail();
             $clientOrderId = 'paper_'.hash('sha256', (string) $lockedDecision->idempotency_key);
             $existing = BrokerOrder::query()->where('client_order_id', $clientOrderId)->first();
@@ -59,26 +81,15 @@ class PaperExecutionEngine
             }
 
             $session = PaperSession::query()
-                ->where('broker_account_id', $account->id)
-                ->where('status', 'active')
+                ->whereKey($reservation->paper_session_id)
                 ->lockForUpdate()
-                ->first();
-            if ($session === null) {
-                throw new RuntimeException('No active paper session. Start a virtual or mirrored session before approving paper orders.');
-            }
+                ->firstOrFail();
 
             $position = PaperPosition::query()
                 ->where('paper_session_id', $session->id)
                 ->where('asset_id', $asset->id)
                 ->lockForUpdate()
                 ->first();
-
-            if ($side === OrderSide::BUY && $this->sessions->availableCash($session) < ($filledNotional + $fee)) {
-                throw new RuntimeException(sprintf('Paper order requires $%.2f, but only $%.2f is available.', $filledNotional + $fee, $this->sessions->availableCash($session)));
-            }
-            if ($side === OrderSide::SELL && (float) ($position?->quantity ?? 0) + 0.000000000001 < $filledQuantity) {
-                throw new RuntimeException('Paper sell quantity exceeds the active session position.');
-            }
 
             $fillId = 'paper-fill-'.hash('sha256', $clientOrderId.'|'.$filledQuantity.'|'.$fillPrice);
             $order = BrokerOrder::query()->create([
@@ -101,12 +112,13 @@ class PaperExecutionEngine
                 'fee_amount' => $fee,
                 'submitted_at' => now(),
                 'filled_at' => now(),
-                'raw_request_json' => ['mode' => 'paper', 'session_id' => $session->id, 'decision_id' => $lockedDecision->id, 'reference_price' => $referencePrice, 'spread_bps' => $spreadBps],
+                'raw_request_json' => ['mode' => 'paper', 'session_id' => $session->id, 'decision_id' => $lockedDecision->id, 'reference_price' => $referencePrice, 'spread_bps' => $spreadBps, 'intent_hash' => $intentHash, 'reservation_id' => $reservation->id],
                 'raw_response_json' => ['mode' => 'paper', 'fill_id' => $fillId, 'fill_price' => $fillPrice, 'slippage_bps' => $slippageBps, 'fee_bps' => $feeBps, 'fee' => $fee],
             ]);
 
             [$position, $realizedPnl] = $this->applyFill($session, $account, $asset, $side, $filledQuantity, $fillPrice, $filledNotional, $fee, $position);
             $this->postLedger($session, $asset, $order, $side, $fillId, $filledQuantity, $fillPrice, $filledNotional, $fee);
+            $this->reservations->consume($reservation->id, $order, $fillId);
 
             PaperOrderEvent::query()->create([
                 'broker_order_id' => $order->id,
@@ -128,6 +140,7 @@ class PaperExecutionEngine
                 'payload_json' => ['mode' => 'paper', 'quote_snapshot_time' => $quote?->snapshot_time?->toIso8601String()],
             ]);
             $this->attributionService->record($lockedDecision, $order, $position, $realizedPnl);
+            $lockedDecision->update(['status' => TradingDecisionStatus::FILLED->value]);
 
             return $order;
         });
@@ -135,6 +148,24 @@ class PaperExecutionEngine
         $this->valuationService->snapshot($account);
 
         return $order->fresh();
+    }
+
+    private function intentHash(PaperSession $session, Asset $asset, TradeDecision $decision, OrderSide $side, float $notional, float $quantity): string
+    {
+        $payload = [
+            'schema_version' => '1.0',
+            'paper_session_id' => $session->id,
+            'strategy_version_id' => $session->strategy_version_id,
+            'universe_version_id' => $session->universe_version_id,
+            'asset_id' => $asset->id,
+            'side' => $side->value,
+            'requested_notional' => round($notional, 8),
+            'requested_quantity' => round($quantity, 12),
+            'idempotency_key' => $decision->idempotency_key,
+        ];
+        ksort($payload);
+
+        return hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
     }
 
     private function resolveReferencePrice(TradeDecision $decision, ?MarketQuote $quote): float

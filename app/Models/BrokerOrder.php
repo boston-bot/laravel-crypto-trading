@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class BrokerOrder extends Model
 {
@@ -84,5 +85,10 @@ class BrokerOrder extends Model
     public function tradeAttributions(): HasMany
     {
         return $this->hasMany(TradeAttribution::class);
+    }
+
+    public function paperReservation(): HasOne
+    {
+        return $this->hasOne(PaperOrderReservation::class);
     }
 }

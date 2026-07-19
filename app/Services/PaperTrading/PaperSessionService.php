@@ -89,6 +89,9 @@ class PaperSessionService
             if ($locked->orders()->whereIn('status', ['draft', 'submitted', 'partially_filled', 'reconciliation_required'])->exists()) {
                 throw new RuntimeException('This session still has a pending order. Reconcile or cancel it before ending the session.');
             }
+            if ($locked->reservations()->where('status', 'reserved')->exists()) {
+                throw new RuntimeException('This session still has reserved cash or quantity. Release it before ending the session.');
+            }
 
             $locked->update(['status' => 'ended', 'ended_at' => now()]);
 

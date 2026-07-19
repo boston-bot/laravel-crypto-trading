@@ -52,4 +52,9 @@ class PaperSession extends Model
     {
         return $this->hasMany(BrokerOrder::class);
     }
+
+    public function reservations(): HasMany
+    {
+        return $this->hasMany(PaperOrderReservation::class);
+    }
 }

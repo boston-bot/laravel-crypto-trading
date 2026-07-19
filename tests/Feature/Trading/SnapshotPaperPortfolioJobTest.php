@@ -4,6 +4,7 @@ namespace Tests\Feature\Trading;
 
 use App\Jobs\SnapshotPaperPortfolioJob;
 use App\Models\BrokerAccount;
+use App\Services\PaperTrading\PaperSessionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -36,6 +37,7 @@ class SnapshotPaperPortfolioJobTest extends TestCase
             'status' => 'active',
             'snapshot_at' => now(),
         ]);
+        app(PaperSessionService::class)->start($coinbaseAccount, 'virtual', 10_000);
 
         app()->call([new SnapshotPaperPortfolioJob('coinbase'), 'handle']);
 
