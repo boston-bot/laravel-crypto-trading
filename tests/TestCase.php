@@ -38,5 +38,6 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
         Http::preventStrayRequests();
+        $this->withoutVite(); // HTTP tests must not depend on a local frontend build
     }
 }

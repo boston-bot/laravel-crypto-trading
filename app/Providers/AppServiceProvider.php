@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
+use App\Models\McpConnection;
+use App\Models\Monitoring\Incident;
 use App\Services\Broker\Agentic\BrokerGateway;
 use App\Services\Broker\Agentic\RobinhoodGateway;
+use App\Services\Monitoring\AccountScope;
 use App\Services\Research\BrokerMarketData;
 use App\Services\Research\MarketDataProvider;
 use App\Services\Research\OpenAiResearchModel;
@@ -15,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -38,6 +42,16 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('mcp-renew', fn ($request) => Limit::perMinute(1)->by((string) $request->user()?->getAuthIdentifier()));
         Gate::define('operate-finances', fn ($user) => in_array($user->email, config('mcp.operator_emails'), true));
         Gate::define('approve-decisions', fn ($user) => in_array($user->email, config('mcp.operator_emails'), true) && in_array($user->email, config('mcp.approver_emails'), true));
+        // The console header shows the signed-in operator's own connection and open incidents when a page does not supply them.
+        View::composer('layouts.console', function ($view): void {
+            $data = $view->getData();
+            $connection = array_key_exists('connection', $data) ? $data['connection'] : (($id = auth()->id()) ? McpConnection::where('user_id', $id)->first() : null);
+            $view->with('connection', $connection);
+            if (! array_key_exists('openIncidents', $data)) {
+                $view->with('openIncidents', $connection?->bound_account_id ? Incident::where('mcp_connection_id', $connection->id)
+                    ->where('scope', AccountScope::key($connection))->where('state', 'open')->count() : 0);
+            }
+        });
         Event::listen(CommandStarting::class, function ($event): void {
             if (str_starts_with((string) $event->command, 'migrate')) {
                 $connection = $event->input->hasOption('database') ? $event->input->getOption('database') : null;

@@ -1,0 +1,36 @@
+@props(['name', 'size' => 18])
+@php
+$paths = [
+    'overview' => '<rect x="3.5" y="3.5" width="7" height="7" rx="1.75"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.75"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.75"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.75"/>',
+    'holdings' => '<path d="M12 3.5 3.5 7.75 12 12l8.5-4.25L12 3.5Z"/><path d="m3.5 12 8.5 4.25L20.5 12"/><path d="m3.5 16.25 8.5 4.25 8.5-4.25"/>',
+    'research' => '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.25-4.25"/><path d="M11 8v6M8 11h6"/>',
+    'orders' => '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.75" cy="6.5" r="1.1"/><circle cx="4.75" cy="12" r="1.1"/><circle cx="4.75" cy="17.5" r="1.1"/>',
+    'performance' => '<path d="M3.5 3.5v17h17"/><path d="m7.5 15 3.75-4.25 3 3 5-6"/>',
+    'health' => '<path d="M3 12h4.25l2.25-5.5 5 11 2.25-5.5H21"/>',
+    'connection' => '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 1 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 1 0 5.66 5.66l1-1"/>',
+    'refresh' => '<path d="M19.5 10.5A7.75 7.75 0 0 0 5.6 6.4L4 8"/><path d="M4 4v4h4"/><path d="M4.5 13.5a7.75 7.75 0 0 0 13.9 4.1L20 16"/><path d="M20 20v-4h-4"/>',
+    'logout' => '<path d="M14.5 4h3.5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3.5"/><path d="m10 16.5-4.5-4.5L10 7.5"/><path d="M5.5 12h10"/>',
+    'sun' => '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>',
+    'moon' => '<path d="M19.5 14.5A7.75 7.75 0 1 1 9.5 4.5a6.25 6.25 0 0 0 10 10Z"/>',
+    'lock' => '<rect x="4.5" y="10.5" width="15" height="10" rx="2.25"/><path d="M8 10.5V7.25a4 4 0 0 1 8 0v3.25"/>',
+    'alert' => '<path d="M10.3 4.4 2.9 17.5A2 2 0 0 0 4.6 20.5h14.8a2 2 0 0 0 1.7-3L13.7 4.4a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4.25"/><path d="M12 17h.01"/>',
+    'check' => '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+    'info' => '<circle cx="12" cy="12" r="8.75"/><path d="M12 11v5.25"/><path d="M12 7.75h.01"/>',
+    'menu' => '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    'copy' => '<rect x="8.5" y="8.5" width="12" height="12" rx="2.25"/><path d="M15.5 8.5V5.75a2.25 2.25 0 0 0-2.25-2.25h-7.5A2.25 2.25 0 0 0 3.5 5.75v7.5a2.25 2.25 0 0 0 2.25 2.25H8.5"/>',
+    'shield' => '<path d="M12 3 4.5 6v5.5c0 4.4 3.1 7.9 7.5 9.5 4.4-1.6 7.5-5.1 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-4"/>',
+    'clock' => '<circle cx="12" cy="12" r="8.75"/><path d="M12 7.5V12l3 2"/>',
+    'bell' => '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15L6 16.5Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+    'terminal' => '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="m7 9.5 3 2.5-3 2.5"/><path d="M12.5 15H17"/>',
+    'plus' => '<path d="M12 5v14M5 12h14"/>',
+    'x' => '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+    'external' => '<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/>',
+    'database' => '<ellipse cx="12" cy="5.75" rx="7.5" ry="2.75"/><path d="M4.5 5.75v12.5c0 1.5 3.4 2.75 7.5 2.75s7.5-1.25 7.5-2.75V5.75"/><path d="M4.5 12c0 1.5 3.4 2.75 7.5 2.75s7.5-1.25 7.5-2.75"/>',
+    'calendar' => '<rect x="3.5" y="5" width="17" height="15.5" rx="2.25"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    'pause' => '<circle cx="12" cy="12" r="8.75"/><path d="M10 9v6M14 9v6"/>',
+    'wallet' => '<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="4" y="8" width="16.5" height="11" rx="2.25"/><path d="M16 13.5h.01"/>',
+    'spark' => '<path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4"/><path d="m12 8.5 1.2 2.3 2.3 1.2-2.3 1.2L12 15.5l-1.2-2.3L8.5 12l2.3-1.2L12 8.5Z"/>',
+    'chevron' => '<path d="m9 6 6 6-6 6"/>',
+];
+@endphp
+<svg {{ $attributes->merge(['class' => 'icon']) }} width="{{ $size }}" height="{{ $size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">{!! $paths[$name] ?? $paths['info'] !!}</svg>

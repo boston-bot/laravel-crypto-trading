@@ -19,10 +19,12 @@ use Throwable;
 
 class MonitoringController extends Controller
 {
+    public const PAGES = ['overview' => 'Overview', 'holdings' => 'Holdings / Theses', 'research' => 'Research / Watchlist',
+        'orders' => 'Decisions / Orders', 'performance' => 'Performance', 'health' => 'System Health / Settings'];
+
     public function show(Request $request, string $page = 'overview')
     {
-        $pages = ['overview' => 'Overview', 'holdings' => 'Holdings / Theses', 'research' => 'Research / Watchlist',
-            'orders' => 'Decisions / Orders', 'performance' => 'Performance', 'health' => 'System Health / Settings'];
+        $pages = self::PAGES;
         abort_unless(isset($pages[$page]), 404);
         $connection = McpConnection::where('user_id', $request->user()->id)->first();
         $scope = $connection?->bound_account_id ? AccountScope::key($connection) : null;
@@ -43,7 +45,9 @@ class MonitoringController extends Controller
         $operations = $page === 'health' ? ['checks' => app(OperationsHealth::class)->evaluate(),
             'deliveries' => NotificationDelivery::whereIn('incident_id', $notificationIds)->orWhereNull('incident_id')->latest('id')->limit(15)->get()] : null;
 
-        return response()->view('mcp.dashboard', compact('pages', 'page', 'connection', 'snapshot', 'runs', 'incidents', 'observations', 'freshness', 'theses', 'pendingNotifications', 'research', 'operations'));
+        $openIncidents = $incidents->where('state', 'open')->count();
+
+        return response()->view('mcp.dashboard', compact('pages', 'page', 'connection', 'snapshot', 'runs', 'incidents', 'observations', 'freshness', 'theses', 'pendingNotifications', 'research', 'operations', 'openIncidents'));
     }
 
     public function sync(Request $request, Monitor $monitor)
