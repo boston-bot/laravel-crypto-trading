@@ -165,7 +165,7 @@ final class ResearchRunner
             $connection = McpConnection::whereKey($run->mcp_connection_id)->lockForUpdate()->firstOrFail();
             $owned = $this->owned($connection, $run);
             if ($this->budget->reserve($owned->budget_period, $amount, $routine)) {
-                $this->incidents->record($connection, 'research_budget_reduced');
+                $this->incidents->record($connection, 'research_budget_reduced', 'warning', 'research');
             }
             $owned->update(['reserved_cost' => (string) Decimal::from($owned->reserved_cost)->plus($amount), 'lease_until' => now()->addMinutes((int) config('research.lease_minutes'))]);
         });
@@ -193,7 +193,12 @@ final class ResearchRunner
     private function finish(Run $run, array $context, array $result, string $contextHash): void
     {
         DB::transaction(function () use ($run, $context, $result, $contextHash): void {
-            $owned = $this->owned(McpConnection::whereKey($run->mcp_connection_id)->lockForUpdate()->firstOrFail(), $run);
+            $connection = McpConnection::whereKey($run->mcp_connection_id)->lockForUpdate()->firstOrFail();
+            $owned = $this->owned($connection, $run);
+            // A successful call shows the provider credential and request configuration work again.
+            foreach (['research_authentication_failed', 'research_request_rejected'] as $key) {
+                $this->incidents->resolve($connection, $key);
+            }
             foreach ($result['material_facts'] as &$fact) {
                 $fact['source_record_ids'] = array_map(fn ($id) => $context['map'][$id], $fact['source_ids']);
             }
@@ -231,7 +236,7 @@ final class ResearchRunner
                 default => null,
             };
             if ($incident && $connection->bound_account_id && AccountScope::key($connection) === $run->scope) {
-                $this->incidents->record($connection, ...$incident);
+                $this->incidents->record($connection, $incident[0], $incident[1], 'research');
             }
         });
     }
@@ -242,7 +247,7 @@ final class ResearchRunner
         $active->update(['status' => 'abandoned', 'error_code' => 'worker_lease_expired', 'active_subject' => null, 'lease_until' => null, 'finished_at' => now()] + $this->release($active));
         Event::whereKey($active->event_id)->update(['status' => 'failed', 'status_reason' => 'worker_lease_expired']);
         if ($connection->bound_account_id && AccountScope::key($connection) === $active->scope) {
-            $this->incidents->record($connection, 'abandoned_research_run');
+            $this->incidents->record($connection, 'abandoned_research_run', 'warning', 'research');
         }
     }
 

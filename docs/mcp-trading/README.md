@@ -12,6 +12,7 @@ Prepared October 16, 2026. This documentation describes planned work, not an app
 | [M1 integration evidence](M1-INTEGRATION-EVIDENCE.md) | Developer and operator | Completed read-only integration, real OAuth/account evidence, coverage and limitations |
 | [M2 monitoring evidence](M2-MONITORING-EVIDENCE.md) | Developer and operator | Durable snapshots, dashboard, failure tests, archive contract and remaining data limitations |
 | [M3 research evidence](M3-RESEARCH-EVIDENCE.md) | Developer and operator | Research events, cache, budget ledger, validation, UI, summaries and what remains unverified |
+| [M4 operations evidence](M4-OPERATIONS-EVIDENCE.md) | Developer and operator | Health checks, heartbeat, ntfy alerts, incident lifecycle, encrypted backups, restore drill, Mac deployment tooling and remaining owner steps |
 | [Repository AGENTS.md](../../AGENTS.md) | Codex | Concise standing development instructions |
 
 Open the repository root in VS Code so the repository instructions are available to Codex. Begin with milestone M0 in the checklist. Do not ask Codex to implement the entire roadmap in one unreviewed change.

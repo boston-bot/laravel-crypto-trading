@@ -172,6 +172,8 @@ final class Monitor
             foreach ($observations['pause_reasons'] as $reason) {
                 $this->incidents->record($current, $reason);
             }
+            // A complete publication clears earlier failures and any pause reason it no longer asserts.
+            $this->incidents->resolveAbsent($current, 'monitoring', $observations['pause_reasons']);
             $owned->update(['status' => 'complete', 'finished_at' => now(), 'lease_until' => null, 'step' => 'published']);
         });
     }

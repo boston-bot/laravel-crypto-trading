@@ -314,3 +314,69 @@ M3 is implemented locally; see [M3 research evidence](M3-RESEARCH-EVIDENCE.md). 
 
 Research proposals are non-executable. Adopting research creates a thesis version under your signed-in identity; it never creates orders or changes policy. If the budget is exhausted, monitoring continues and optional research stops until the next UTC month or a deliberate configuration change.
 
+## M4 runtime layout and operations
+
+The runtime is installed at `~/Services/investing-ops/app` as a frozen, locally versioned release of the tested source (origin: the development repository), with `runtime/` (rendered nginx/PHP-FPM configs, socket, pid files) and `logs/` beside it. It serves `http://127.0.0.1:8080` through a dedicated nginx and PHP-FPM pair run as user LaunchAgents (`local.investing-ops.*`); Herd keeps port 80 and Valet stays untouched. See [M4 operations evidence](M4-OPERATIONS-EVIDENCE.md).
+
+```bash
+# First install (after cloning the app and creating its .env):
+deploy/macos/install.sh
+# Every later update, from a committed revision only:
+~/Services/investing-ops/app/deploy/macos/deploy.sh main            # add --migrate after reviewing pending migrations
+launchctl list | grep investing-ops                                  # agent status
+tail -f ~/Services/investing-ops/logs/*.err.log                      # problems
+deploy/macos/uninstall.sh                                            # stop and remove agents; data kept
+```
+
+Set `MCP_OPERATIONS_ENABLED=true` only in the runtime `.env`. After any `.env` change, run `php artisan optimize` and `php artisan queue:restart` in the runtime directory (or redeploy). Before using separate development and runtime checkouts, give development its own database; they must not share queues or business state. The IDE checkout now uses the separate `mcp_trading_development` / `mcp_trading` database, a development-only APP_KEY, disabled integrations and port 8081. Production uses the existing `postgres` / `mcp_trading` state and original APP_KEY, preserved in the runtime private `.env`. Six user LaunchAgents are installed; port 8080 belongs to runtime Nginx/PHP-FPM.
+
+Owner steps that cannot be automated:
+- Subscribe to the ntfy topic stored in the runtime `.env`, then run `php artisan mcp:notify --test` from the runtime directory.
+- Create the Healthchecks.io check (1-minute period, 10-minute grace) and set its ping URL.
+- Install Google Drive for desktop and set `MCP_BACKUP_OFFSITE_DIR`.
+- Store the backup key (`~/.config/investing-ops/backup.key`) and `APP_KEY` in a password manager.
+- Configure power settings, then test restart, sleep and outage recovery.
+
+
+
+M4 takeover verification: the `000009` additive migration is applied as batch 6. A private backup key exists at `~/.config/investing-ops/backup.key`; a local encrypted backup in `storage/app/backups/` passed a real isolated 54-table restore/decryption drill. Store the backup key and `APP_KEY` in a password manager separately from backups. An off-Mac folder is still unconfigured; a successful local copy alone cannot prove Google Drive has uploaded it. Operations and monitoring remain disabled. See the M4 evidence for final tests and remaining release gates.
+
+
+October 17 service setup: ntfy now has a random topic in the private `.env`. In System Health choose **Show phone subscription setup** to reveal the server/topic, then subscribe in the official ntfy phone app. No test message has been sent. The owner-approved encrypted backup destination is `~/Library/Mobile Documents/com~apple~CloudDocs/Investing Ops Backups`; a fresh encrypted backup and manifest were copied and hash-verified there. Both keys remain outside that folder. macOS confirms iCloud-managed files but does not supply upload completion, so verify cloud availability from another device before relying on off-Mac recovery. Scheduling remains disabled.
+
+
+October 17 activation: read-only monitoring and operations are enabled only in `~/Services/investing-ops/app/.env`; edit runtime settings there, then rebuild its cached config/restart workers as appropriate. The IDE `.env` is development-only and intentionally has no ntfy topic, heartbeat or broker enablement. `prepare-runtime.py` creates an isolated local release commit without staging/committing the developer worktree. Current deployed revision: `d92f0d6a102e06e06016e58729b2a5aacba9e04e`. The source branch still points at the earlier committed M3 revision: do not deploy `main` until the intended source changes have been committed/reviewed, since it would roll back the M4 snapshot. Later deployments should name a reviewed explicit revision.
+
+The production scheduler has eight tasks; daily encrypted backups run at 02:30 America/Chicago, monthly restore drills at 03:30 on day 1, and heartbeat/health ticks every minute. Background backup/iCloud copy and an explicit one-shot launchd restore passed; copied files still need remote upload/recovery confirmation. Owner ntfy phone receipt and recurring heartbeat acknowledgements are verified. After explicit owner approval, production now connects as `mcp_trading_runtime`, with table data and sequence permissions only in `postgres` / `mcp_trading`, matching default grants, no administrative privileges/memberships and no schema-create permission. `admin` retains ownership of the schema and all 54 tables. The random login password lives only in runtime private `.env`; cached config is private. The one-time applied grant plan is recorded in `deploy/macos/runtime-role-recovery.sql`. Reloaded services, health, transactional data access, DDL denial and a new encrypted backup/54-table restore all passed. User-session/logout/reboot/network recovery, external outage alert receipt, remote iCloud recovery and the seven-session proving period remain open. AC sleep was already 0; no global power setting was changed.
+
+The October 17 runtime snapshot deliberately cannot perform DDL, and its original deploy script has no separate migration identity. The development checkout now implements the separate-owner workflow below; it must be included in a reviewed release before use. Persistent services stay on the restricted role. Restore drills continue to use the separate local scratch-database administrator; neither the runtime role nor backup files gain owner credentials.
+
+### Separate owner connection for reviewed migrations
+
+`deploy/macos/migrate.php` is a one-off CLI process, not a web route or scheduled command. It reads the cached runtime connection, verifies the containing database and `"mcp_trading"` search path, then opens a temporary connection with the verified schema owner's username/password. It accepts no alternative host, database, schema or URL. Current owner: `admin`; runtime: `mcp_trading_runtime`. No new role or grant is required for this workflow. Owner credentials are never added to `.env`, Laravel configuration files or the config cache; the temporary connection is purged on success/failure.
+
+Prepare an operator-owned file outside both checkouts and cloud backup folders, for example `~/.config/investing-ops/migration.json`, using a local editor. Its directory should be `0700`, the file must be `0600`, and it must not be a symlink. Preserve an existing file rather than overwriting it. Use the existing owner's actual database password; do not paste it into chat or command arguments:
+
+```json
+{"username":"admin","password":"<existing owner database password>"}
+```
+
+Once the helper is present in the reviewed runtime release, review pending migrations and their SQL from that checkout:
+
+```bash
+cd "$HOME/Services/investing-ops/app"
+export MCP_MIGRATION_CREDENTIALS_FILE="$HOME/.config/investing-ops/migration.json"
+/opt/homebrew/opt/php@8.5/bin/php deploy/macos/migrate.php --check
+/opt/homebrew/opt/php@8.5/bin/php deploy/macos/migrate.php --pretend
+```
+
+`--check` uses only the runtime login and returns 0 for no pending files, 2 for pending files, or 1 for an error. `--pretend` requires owner credentials and runs Laravel's pretend mode; review the migration PHP too, since pretend mode cannot neutralize arbitrary PHP side effects. A missing/malformed/public credential file, wrong owner/target or competing migration process fails closed. A PostgreSQL advisory lock serializes this helper's migrations; use this helper consistently rather than running concurrent raw migration commands.
+
+After migration review and a fresh encrypted backup, run the updated deploy script with an explicit reviewed revision and `--migrate`:
+
+```bash
+bash deploy/macos/deploy.sh <reviewed-revision> --migrate
+unset MCP_MIGRATION_CREDENTIALS_FILE
+```
+
+The script checks pending status without owner access, invokes the one-off owner process only for explicitly requested pending migrations, and stops on status/migration errors before config optimization or worker/FPM restart. Successful deployment rebuilds runtime-only cached configuration with private permissions and restarts services on `mcp_trading_runtime`. The helper supports only forward migrations; it does not expose reset/fresh/rollback/seeding operations. PostgreSQL normally rolls back a failing transactional migration; earlier successful migrations or migrations explicitly opting out of transactions require reviewed recovery, not blind retries. Do not deploy the old `main` revision over the frozen M4 runtime. Production owner authentication and an actual schema-changing deployment through this new workflow remain unverified; no operator database migration was performed while developing it.

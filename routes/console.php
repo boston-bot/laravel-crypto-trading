@@ -126,6 +126,14 @@ if (config('research.enabled')) {
     Schedule::command('mcp:research --once')->everyFiveMinutes()->withoutOverlapping();
 }
 
+if (config('operations.enabled')) {
+    Schedule::command('mcp:health --scheduled')->everyMinute()->withoutOverlapping();
+    Schedule::command('mcp:notify --once')->everyMinute()->withoutOverlapping();
+    Schedule::command('mcp:notify --digest')->dailyAt('08:30')->timezone('America/New_York');
+    Schedule::command('mcp:backup')->dailyAt('02:30')->timezone('America/Chicago')->withoutOverlapping();
+    Schedule::command('mcp:restore-drill')->monthlyOn(1, '03:30')->timezone('America/Chicago')->withoutOverlapping();
+}
+
 if (! config('mcp.legacy_schedules_enabled')) {
     return;
 }

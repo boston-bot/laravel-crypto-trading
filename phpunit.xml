@@ -29,6 +29,10 @@
         <env name="MCP_RESEARCH_ENABLED" value="false" force="true"/>
         <env name="MCP_RESEARCH_API_KEY" value="" force="true"/>
         <env name="MCP_RESEARCH_MODEL" value="" force="true"/>
+        <env name="MCP_OPERATIONS_ENABLED" value="false" force="true"/>
+        <env name="MCP_NTFY_TOPIC" value="" force="true"/>
+        <env name="MCP_HEALTHCHECKS_PING_URL" value="" force="true"/>
+        <env name="MCP_BACKUP_OFFSITE_DIR" value="" force="true"/>
         <env name="MCP_OPERATOR_EMAILS" value="" force="true"/>
         <env name="TRADING_APPROVER_EMAILS" value="" force="true"/>
         <env name="APP_ENV" value="testing" force="true"/>

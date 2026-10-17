@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>local.investing-ops.nginx</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@@NGINX@@</string>
+        <string>-c</string>
+        <string>@@RUNTIME@@/nginx.conf</string>
+        <string>-p</string>
+        <string>@@RUNTIME@@</string>
+        <string>-e</string>
+        <string>@@LOGS@@/nginx-error.log</string>
+        <string>-g</string>
+        <string>daemon off;</string>
+    </array>
+    <key>WorkingDirectory</key><string>@@APP@@</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key><string>@@BREW@@/bin:@@BREW@@/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>ThrottleInterval</key><integer>10</integer>
+    <key>StandardOutPath</key><string>@@LOGS@@/nginx.out.log</string>
+    <key>StandardErrorPath</key><string>@@LOGS@@/nginx.err.log</string>
+</dict>
+</plist>

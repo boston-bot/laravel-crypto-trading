@@ -8,9 +8,11 @@ use App\Models\Monitoring\Outbox;
 use App\Models\Monitoring\Run;
 use App\Models\Monitoring\Snapshot;
 use App\Models\Monitoring\ThesisVersion;
+use App\Models\Operations\NotificationDelivery;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\Monitor;
 use App\Services\Monitoring\RiskObservations;
+use App\Services\Operations\OperationsHealth;
 use App\Services\Research\ResearchOverview;
 use Illuminate\Http\Request;
 use Throwable;
@@ -26,7 +28,8 @@ class MonitoringController extends Controller
         $scope = $connection?->bound_account_id ? AccountScope::key($connection) : null;
         $snapshot = $scope ? Snapshot::where('mcp_connection_id', $connection->id)->where('scope', $scope)->where('status', 'complete')->latest('publication_version')->first() : null;
         $runs = $scope ? Run::where('mcp_connection_id', $connection->id)->where('scope', $scope)->latest('created_at')->limit(20)->get() : collect();
-        $incidents = $scope ? Incident::where('mcp_connection_id', $connection->id)->where('scope', $scope)->latest('last_seen_at')->get() : collect();
+        $incidents = $scope ? Incident::where('mcp_connection_id', $connection->id)->where('scope', $scope)
+            ->orderByRaw('case when resolved_at is null then 0 else 1 end')->latest('last_seen_at')->get() : collect();
         $theses = $scope ? ThesisVersion::where('mcp_connection_id', $connection->id)->where('scope', $scope)->orderBy('id')->get()->groupBy(fn ($t) => $t->payload['thesis_key'])->map->last() : collect();
         $observations = $snapshot?->observations;
         $freshness = [];
@@ -37,8 +40,10 @@ class MonitoringController extends Controller
         $notificationIds = $incidents->pluck('id')->all();
         $pendingNotifications = Outbox::where('kind', 'notification')->whereNull('dispatched_at')->get()->filter(fn ($e) => in_array($e->payload['incident_id'], $notificationIds, true))->count();
         $research = $scope ? app(ResearchOverview::class)->for($connection, $scope) : null;
+        $operations = $page === 'health' ? ['checks' => app(OperationsHealth::class)->evaluate(),
+            'deliveries' => NotificationDelivery::whereIn('incident_id', $notificationIds)->orWhereNull('incident_id')->latest('id')->limit(15)->get()] : null;
 
-        return response()->view('mcp.dashboard', compact('pages', 'page', 'connection', 'snapshot', 'runs', 'incidents', 'observations', 'freshness', 'theses', 'pendingNotifications', 'research'));
+        return response()->view('mcp.dashboard', compact('pages', 'page', 'connection', 'snapshot', 'runs', 'incidents', 'observations', 'freshness', 'theses', 'pendingNotifications', 'research', 'operations'));
     }
 
     public function sync(Request $request, Monitor $monitor)

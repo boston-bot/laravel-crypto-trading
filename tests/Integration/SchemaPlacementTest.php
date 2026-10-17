@@ -24,7 +24,7 @@ class SchemaPlacementTest extends TestCase
         $this->assertSame('mcp_trading_test', $row->database);
         $this->assertSame('mcp_trading', $row->schema);
         $this->assertSame([], DB::select("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"));
-        foreach (['migrations', 'users', 'sessions', 'jobs', 'cache', 'broker_accounts', 'trade_decisions', 'mcp_connections', 'mcp_oauth_credentials', 'mcp_oauth_attempts', 'mcp_runs', 'mcp_snapshots', 'mcp_holdings', 'mcp_policy_versions', 'mcp_thesis_versions', 'mcp_sleeve_allocations', 'mcp_flow_events', 'mcp_incidents', 'mcp_outbox', 'mcp_market_sessions', 'mcp_archive_imports', 'mcp_archive_rows', 'mcp_research_sources', 'mcp_research_events', 'mcp_research_runs', 'mcp_research_budgets', 'mcp_summaries', 'mcp_watchlist_items'] as $table) {
+        foreach (['migrations', 'users', 'sessions', 'jobs', 'cache', 'broker_accounts', 'trade_decisions', 'mcp_connections', 'mcp_oauth_credentials', 'mcp_oauth_attempts', 'mcp_runs', 'mcp_snapshots', 'mcp_holdings', 'mcp_policy_versions', 'mcp_thesis_versions', 'mcp_sleeve_allocations', 'mcp_flow_events', 'mcp_incidents', 'mcp_outbox', 'mcp_market_sessions', 'mcp_archive_imports', 'mcp_archive_rows', 'mcp_research_sources', 'mcp_research_events', 'mcp_research_runs', 'mcp_research_budgets', 'mcp_summaries', 'mcp_watchlist_items', 'mcp_notification_deliveries', 'mcp_component_status'] as $table) {
             $this->assertNotNull(DB::selectOne("SELECT tablename FROM pg_tables WHERE schemaname = 'mcp_trading' AND tablename = ?", [$table]));
         }
         $this->getJson('/ready')->assertOk()->assertExactJson(['status' => 'ready']);

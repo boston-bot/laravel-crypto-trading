@@ -14,6 +14,7 @@ class Incident extends Model
 
     protected function casts(): array
     {
-        return ['first_seen_at' => 'immutable_datetime', 'last_seen_at' => 'immutable_datetime', 'acknowledged_at' => 'immutable_datetime'];
+        return ['first_seen_at' => 'immutable_datetime', 'last_seen_at' => 'immutable_datetime', 'acknowledged_at' => 'immutable_datetime',
+            'resolved_at' => 'immutable_datetime', 'last_notified_at' => 'immutable_datetime', 'reopen_count' => 'integer', 'notified_count' => 'integer'];
     }
 }

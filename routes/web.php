@@ -3,6 +3,7 @@
 use App\Http\Controllers\LocalSessionController;
 use App\Http\Controllers\McpConnectionController;
 use App\Http\Controllers\MonitoringController;
+use App\Http\Controllers\OperationsSetupController;
 use App\Http\Controllers\ReadinessController;
 use App\Http\Controllers\ResearchController;
 use App\Http\Middleware\FinancialAccess;
@@ -31,6 +32,7 @@ Route::prefix('mcp/robinhood')->middleware([McpResponsePrivacy::class, 'auth', F
 
 Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAccess::class.':operate-finances'])->group(function (): void {
     Route::get('/dashboard/{page?}', [MonitoringController::class, 'show'])->name('mcp.dashboard');
+    Route::post('/operations/phone-setup', [OperationsSetupController::class, 'phone'])->middleware('throttle:10,1')->name('mcp.operations.phone');
     Route::post('/dashboard/sync', [MonitoringController::class, 'sync'])->middleware('throttle:10,1')->name('mcp.dashboard.sync');
     Route::post('/incidents/{incident}/acknowledge', [MonitoringController::class, 'acknowledge'])->name('mcp.incident.ack');
     Route::post('/research/evidence', [ResearchController::class, 'evidence'])->middleware('throttle:20,1')->name('mcp.research.evidence');

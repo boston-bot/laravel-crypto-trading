@@ -102,6 +102,6 @@ Research, monitoring, legacy schedules, legacy trading and brokerage writes rema
 - **Evidence covers one thesis.** Symbol-level evidence reviews only the most recently revised open thesis; for any other thesis on the same symbol, request research targeted at it.
 - **No instrument screening.** Leveraged and inverse products cannot be identified without instrument metadata.
 - **Acknowledged incidents stay silent.** The M2 `IncidentRecorder` does not reopen acknowledged incidents, so a repeat `research_authentication_failed` or `research_budget_exhausted` after acknowledgement raises no new notification intent. Incident acknowledgement and escalation are M4 work.
-- **Not yet exercised:** no research worker, scheduler or proving period was run, and no PostgreSQL multi-process test covers a sweeper racing a late settlement (the logic is covered in-process). The M0 dependency advisories remain open.
+- **Not yet exercised:** no research worker, scheduler or proving period was run, and no PostgreSQL multi-process test covers a sweeper racing a late settlement (the logic is covered in-process). The M0 dependency advisories remained open at M3 completion; they were resolved afterwards by the pre-M4 dependency remediation recorded in the checklist.
 
 Next milestone: **M4 — unattended operations and Release 1**, not started.
