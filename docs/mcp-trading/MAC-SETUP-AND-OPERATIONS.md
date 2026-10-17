@@ -351,6 +351,10 @@ The production scheduler has eight tasks; daily encrypted backups run at 02:30 A
 
 The original snapshot had no separate migration identity. Deployed release `401d6a2` now includes the owner workflow below. Persistent services stay on the restricted role and cannot perform DDL. Restore drills continue to use the separate local scratch-database administrator; neither the runtime role nor backup files gain owner credentials.
 
+### Operator console
+
+Open `http://127.0.0.1:8080` and sign in with the provisioned operator account. Nothing extra starts the console: the runtime Nginx and PHP-FPM LaunchAgents serve it whenever this macOS user is logged in, including after logout/login, sleep/wake and reboot (verified in the M4 drills). It is not available before login. UI changes reach the runtime only through a committed revision and `deploy/macos/deploy.sh`. System Health shows the operating switches read-only and runs the safe operator actions (health checks without heartbeat, test alert, closed-period summary, database identity). Backups, restore drills and imports stay terminal-only.
+
 ### Separate owner connection for reviewed migrations
 
 `deploy/macos/migrate.php` is a one-off CLI process, not a web route or scheduled command. It reads the cached runtime connection, verifies the containing database and `"mcp_trading"` search path, then opens a temporary connection with the verified schema owner's username/password. It accepts no alternative host, database, schema or URL. Current owner: `admin`; runtime: `mcp_trading_runtime`. No new role or grant is required for this workflow. Owner credentials are never added to `.env`, Laravel configuration files or the config cache; the temporary connection is purged on success/failure.

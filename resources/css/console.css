@@ -447,6 +447,20 @@ table.data code { white-space: nowrap; overflow-wrap: normal; }
 .commands li > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .commands code { background: none; padding: 0; color: var(--text); font-size: 12.5px; }
 
+.action-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.action {
+    --tone: var(--accent);
+    display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border);
+}
+.action-head { display: flex; align-items: center; gap: 10px; }
+.action-head strong { font-size: 13.5px; }
+.action p { color: var(--muted); font-size: 12.5px; line-height: 1.45; flex: 1; }
+.action-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+.action-cmd { align-self: flex-start; font-size: 11px; background: transparent; padding: 0; color: var(--faint); }
+.action-result { margin-bottom: 16px; }
+.result-lines { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.terminal-head { margin: 18px 0 10px; }
+
 /* Incidents */
 .incidents { list-style: none; margin: 0; padding: 0; }
 .incident { position: relative; display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--border); }

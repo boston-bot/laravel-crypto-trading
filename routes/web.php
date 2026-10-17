@@ -4,6 +4,7 @@ use App\Http\Controllers\LocalSessionController;
 use App\Http\Controllers\McpConnectionController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\OperationsSetupController;
+use App\Http\Controllers\OperatorActionController;
 use App\Http\Controllers\ReadinessController;
 use App\Http\Controllers\ResearchController;
 use App\Http\Middleware\FinancialAccess;
@@ -33,6 +34,10 @@ Route::prefix('mcp/robinhood')->middleware([McpResponsePrivacy::class, 'auth', F
 Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAccess::class.':operate-finances'])->group(function (): void {
     Route::get('/dashboard/{page?}', [MonitoringController::class, 'show'])->name('mcp.dashboard');
     Route::post('/operations/phone-setup', [OperationsSetupController::class, 'phone'])->middleware('throttle:10,1')->name('mcp.operations.phone');
+    Route::post('/operations/health-check', [OperatorActionController::class, 'health'])->middleware('throttle:6,1')->name('mcp.operations.health');
+    Route::post('/operations/test-alert', [OperatorActionController::class, 'testAlert'])->middleware('throttle:3,1')->name('mcp.operations.test-alert');
+    Route::post('/operations/summary', [OperatorActionController::class, 'summary'])->middleware('throttle:6,1')->name('mcp.operations.summary');
+    Route::post('/operations/database-check', [OperatorActionController::class, 'database'])->middleware('throttle:6,1')->name('mcp.operations.database');
     Route::post('/dashboard/sync', [MonitoringController::class, 'sync'])->middleware('throttle:10,1')->name('mcp.dashboard.sync');
     Route::post('/incidents/{incident}/acknowledge', [MonitoringController::class, 'acknowledge'])->name('mcp.incident.ack');
     Route::post('/research/evidence', [ResearchController::class, 'evidence'])->middleware('throttle:20,1')->name('mcp.research.evidence');

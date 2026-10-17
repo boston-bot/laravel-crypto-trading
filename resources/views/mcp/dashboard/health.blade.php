@@ -8,15 +8,12 @@
         ['Research', 'MCP_RESEARCH_ENABLED', (bool) config('research.enabled'), 'spark', false],
         ['Operations', 'MCP_OPERATIONS_ENABLED', (bool) config('operations.enabled'), 'health', false],
     ];
-    $commands = [
-        ['php artisan mcp:doctor', 'Database identity and schema placement; read-only'],
-        ['php artisan mcp:health --no-ping', 'Run operational checks now without pinging the heartbeat'],
-        ['php artisan mcp:notify --test', 'Send a test alert to the configured ntfy topic'],
-        ['php artisan mcp:summary --kind=daily', 'Summarize the previous closed New York day'],
-        ['php artisan mcp:backup', 'Encrypted, verified schema backup with retention'],
-        ['php artisan mcp:restore-drill', 'Restore into a scratch database, verify, then drop it'],
-        ['php artisan mcp:import --file=<path> --dry-run', 'Preview and quarantine report for an archive import'],
+    $terminalOnly = [
+        ['php artisan mcp:backup', 'Encrypted, verified backup; long-running and scheduled nightly'],
+        ['php artisan mcp:restore-drill', 'Creates and drops a scratch database; needs elevated privileges'],
+        ['php artisan mcp:import --file=<path> --dry-run', 'Reads an archive file from disk'],
     ];
+    $result = session('operator_result');
 @endphp
 
 <div class="section-head"><div><h2>Operating switches</h2><p>Read from the private runtime configuration. They are deliberately not editable from the browser.</p></div></div>
@@ -40,6 +37,51 @@
         <code>MCP_HEALTHCHECKS_PING_URL</code>
     </section>
 </div>
+
+<x-panel title="Operator actions" subtitle="Each button runs the same code as its terminal command, as the signed-in operator. None calls the broker or an AI model." icon="terminal" id="operator-actions">
+    @if($result)
+        <x-callout :tone="$result['tone']" :title="$result['label']" role="status" dismissible class="action-result">
+            {{ $result['message'] }}
+            @if($result['lines'])<ul class="result-lines">@foreach($result['lines'] as $line)<li><code>{{ $line }}</code></li>@endforeach</ul>@endif
+        </x-callout>
+    @endif
+    <div class="action-grid">
+        <section class="action">
+            <div class="action-head"><span class="switch-icon"><x-icon name="health" :size="16" /></span><strong>Run health checks</strong></div>
+            <p>Evaluates scheduler, queues, data age, disk, backup and alert checks now, and opens or resolves health incidents. The external heartbeat is not pinged.</p>
+            <form method="post" action="{{ route('mcp.operations.health') }}">@csrf<button class="btn btn-secondary btn-sm" type="submit"><x-icon name="refresh" :size="14" />Run checks</button></form>
+            <code class="action-cmd">mcp:health --no-ping</code>
+        </section>
+        <section class="action">
+            <div class="action-head"><span class="switch-icon"><x-icon name="bell" :size="16" /></span><strong>Send test alert</strong></div>
+            <p>Queues a test notification and dispatches pending alerts to ntfy. Provider acceptance alone does not prove phone delivery.</p>
+            <form method="post" action="{{ route('mcp.operations.test-alert') }}">@csrf<button class="btn btn-secondary btn-sm" type="submit" @disabled(!$alertsConfigured)><x-icon name="bell" :size="14" />Send test</button></form>
+            <code class="action-cmd">{{ $alertsConfigured ? 'mcp:notify --test' : 'Alerts not configured' }}</code>
+        </section>
+        <section class="action">
+            <div class="action-head"><span class="switch-icon"><x-icon name="performance" :size="16" /></span><strong>Generate summary</strong></div>
+            <p>Deterministic summary of the previous closed New York day or ISO week for this account. Repeating it returns the same record.</p>
+            <div class="action-buttons">
+                @foreach(['daily' => 'Daily', 'weekly' => 'Weekly'] as $kind => $label)
+                    <form method="post" action="{{ route('mcp.operations.summary') }}">@csrf<input type="hidden" name="kind" value="{{ $kind }}"><button class="btn btn-secondary btn-sm" type="submit" @disabled(!$connection?->bound_account_id)>{{ $label }}</button></form>
+                @endforeach
+            </div>
+            <code class="action-cmd">mcp:summary --kind=daily|weekly</code>
+        </section>
+        <section class="action">
+            <div class="action-head"><span class="switch-icon"><x-icon name="database" :size="16" /></span><strong>Verify database</strong></div>
+            <p>Read-only check of the connected database, schema placement and migrations. No credentials are shown.</p>
+            <form method="post" action="{{ route('mcp.operations.database') }}">@csrf<button class="btn btn-secondary btn-sm" type="submit"><x-icon name="check" :size="14" />Verify</button></form>
+            <code class="action-cmd">mcp:doctor</code>
+        </section>
+    </div>
+    <h4 class="mini-head terminal-head">Terminal only</h4>
+    <ul class="commands">
+        @foreach($terminalOnly as [$command, $purpose])
+            <li><div><code>{{ $command }}</code><small class="muted">{{ $purpose }}</small></div><button type="button" class="icon-btn" data-copy="{{ $command }}" aria-label="Copy command"><x-icon name="copy" :size="15" /></button></li>
+        @endforeach
+    </ul>
+</x-panel>
 
 <div class="grid-2">
     <x-panel title="Research and queues" icon="spark">
@@ -68,28 +110,19 @@
     </table></div>
 </x-panel>
 
-<div class="grid-2">
-    <x-panel title="Alert deliveries" subtitle="Provider-acknowledged deliveries only count as delivered" icon="bell" flush>
-        <div class="table-wrap"><table class="data">
-            <thead><tr><th>Attempted</th><th>Kind</th><th>Status</th><th>Reference / error</th></tr></thead>
-            <tbody>
-            @forelse($operations['deliveries'] as $delivery)
-                <tr><td><x-time :at="$delivery->attempted_at" /></td><td>{{ $delivery->kind }}</td><td><x-pill :value="$delivery->status" /></td><td><code class="id">{{ $delivery->provider_message_id ?? $delivery->error_code ?? '—' }}</code></td></tr>
-            @empty
-                <tr><td colspan="4" class="empty-cell">No delivery attempts recorded.</td></tr>
-            @endforelse
-            </tbody>
-        </table></div>
-    </x-panel>
+<x-panel title="Alert deliveries" subtitle="Provider-acknowledged deliveries only count as delivered" icon="bell" flush>
+    <div class="table-wrap"><table class="data">
+        <thead><tr><th>Attempted</th><th>Kind</th><th>Status</th><th>Reference / error</th></tr></thead>
+        <tbody>
+        @forelse($operations['deliveries'] as $delivery)
+            <tr><td><x-time :at="$delivery->attempted_at" /></td><td>{{ $delivery->kind }}</td><td><x-pill :value="$delivery->status" /></td><td><code class="id">{{ $delivery->provider_message_id ?? $delivery->error_code ?? '—' }}</code></td></tr>
+        @empty
+            <tr><td colspan="4" class="empty-cell">No delivery attempts recorded.</td></tr>
+        @endforelse
+        </tbody>
+    </table></div>
+</x-panel>
 
-    <x-panel title="Operator commands" subtitle="Run from the runtime app directory; not available as browser actions" icon="terminal">
-        <ul class="commands">
-            @foreach($commands as [$command, $purpose])
-                <li><div><code>{{ $command }}</code><small class="muted">{{ $purpose }}</small></div><button type="button" class="icon-btn" data-copy="{{ $command }}" aria-label="Copy command"><x-icon name="copy" :size="15" /></button></li>
-            @endforeach
-        </ul>
-    </x-panel>
-</div>
 
 <x-panel title="Observation runs" subtitle="Most recent 20 runs for this account" icon="refresh" flush>
     <div class="table-wrap"><table class="data">
