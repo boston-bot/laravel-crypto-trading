@@ -44,6 +44,26 @@ return [
             'after_commit' => false,
         ],
 
+        // Read-only monitoring jobs have bounded multi-page reads and their own worker connection.
+        'mcp_monitoring' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'monitoring',
+            'retry_after' => 720,
+            'after_commit' => false,
+        ],
+
+        // Slow AI research cannot occupy monitoring workers. Jobs are never generically retried.
+        'mcp_research' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'research',
+            'retry_after' => 420,
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),

@@ -1,0 +1,116 @@
+{
+    "provenance": "App-owned authorized read; private identifiers pseudonymized, financial values replaced, guidance removed. Not performance evidence. Identifier aliases are sequential, not hashes of private identifiers. Symbol aliases and numeric values are synthetic.",
+    "operation": "instruments",
+    "tool": "search",
+    "response": {
+        "data": {
+            "results": [
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000007",
+                    "symbol": "TEST",
+                    "name": "[redacted]",
+                    "simple_name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000008",
+                    "symbol": "ALTB",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000009",
+                    "symbol": "ALTC",
+                    "name": "[redacted]",
+                    "simple_name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000010",
+                    "symbol": "ALTD",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000011",
+                    "symbol": "ALTE",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000012",
+                    "symbol": "ALTF",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000013",
+                    "symbol": "ALTG",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000014",
+                    "symbol": "ALTH",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000015",
+                    "symbol": "ALTI",
+                    "name": "[redacted]",
+                    "simple_name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000016",
+                    "symbol": "ALTJ",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000017",
+                    "symbol": "ALTK",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000018",
+                    "symbol": "ALTL",
+                    "name": "[redacted]",
+                    "simple_name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000019",
+                    "symbol": "ALTM",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000020",
+                    "symbol": "ALTN",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000021",
+                    "symbol": "ALTO",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000022",
+                    "symbol": "ALTP",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000023",
+                    "symbol": "ALTQ",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000024",
+                    "symbol": "ALTR",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000025",
+                    "symbol": "ALTS",
+                    "name": "[redacted]"
+                },
+                {
+                    "instrument_id": "00000000-0000-4000-8000-000000000026",
+                    "symbol": "ALTT",
+                    "name": "[redacted]"
+                }
+            ]
+        },
+        "guide": "Broker guidance omitted from sanitized fixture."
+    }
+}

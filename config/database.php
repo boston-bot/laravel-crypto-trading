@@ -95,8 +95,24 @@ return [
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
-            'search_path' => 'public',
+            'search_path' => env('DB_SCHEMA', 'mcp_trading'),
+            'timezone' => 'UTC',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
+
+        // Dedicated fixture identity; never inherits DB_URL or runtime credentials.
+        'pgsql_test' => [
+            'driver' => 'pgsql',
+            'host' => env('TEST_DB_HOST', '/tmp'),
+            'port' => env('TEST_DB_PORT', '5432'),
+            'database' => 'mcp_trading_test',
+            'username' => env('TEST_DB_USERNAME', get_current_user()),
+            'password' => env('TEST_DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'search_path' => 'mcp_trading',
+            'timezone' => 'UTC',
+            'sslmode' => 'prefer',
         ],
 
         'sqlsrv' => [

@@ -31,7 +31,7 @@ class TradeDecisionApprovalController extends Controller
             ], 422);
         }
 
-        $actor = (string) $request->input('actor', 'api');
+        $actor = (string) $request->user()->getAuthIdentifier();
         $tradeDecision->update([
             'status' => TradingDecisionStatus::APPROVED->value,
             'approved_by' => $actor,
@@ -57,7 +57,7 @@ class TradeDecisionApprovalController extends Controller
         $tradeDecision->update([
             'status' => TradingDecisionStatus::BLOCKED_BY_POLICY->value,
             'policy_result_json' => array_merge($tradeDecision->policy_result_json ?? [], [
-                'rejected_by' => (string) $request->input('actor', 'api'),
+                'rejected_by' => (string) $request->user()->getAuthIdentifier(),
                 'rejected_at' => now()->toIso8601String(),
                 'rejection_reason' => (string) $request->input('reason', 'manual rejection'),
             ]),
@@ -69,4 +69,3 @@ class TradeDecisionApprovalController extends Controller
         ]);
     }
 }
-

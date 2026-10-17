@@ -1,0 +1,60 @@
+{
+    "provenance": "App-owned authorized read; private identifiers pseudonymized, financial values replaced, guidance removed. Not performance evidence. Identifier aliases are sequential, not hashes of private identifiers. Symbol aliases and numeric values are synthetic.",
+    "operation": "accounts",
+    "tool": "get_accounts",
+    "response": {
+        "data": {
+            "accounts": [
+                {
+                    "account_number": "sanitized-account-1",
+                    "rhs_account_number": "sanitized-account-2",
+                    "rhc_account_number": "sanitized-account-3",
+                    "type": "margin",
+                    "unsettled_funds": "0.00000000",
+                    "brokerage_account_type": "individual",
+                    "is_default": true,
+                    "agentic_allowed": false,
+                    "option_level": "option_level_3",
+                    "management_type": "self_directed",
+                    "affiliate": "rhf",
+                    "state": "active",
+                    "deactivated": false,
+                    "permanently_deactivated": false
+                },
+                {
+                    "account_number": "sanitized-account-4",
+                    "rhs_account_number": "sanitized-account-4",
+                    "type": "limited_margin",
+                    "unsettled_funds": "0.00000000",
+                    "brokerage_account_type": "ira_traditional",
+                    "is_default": false,
+                    "agentic_allowed": false,
+                    "option_level": "",
+                    "management_type": "self_directed",
+                    "affiliate": "rhf",
+                    "state": "active",
+                    "deactivated": false,
+                    "permanently_deactivated": false
+                },
+                {
+                    "account_number": "sanitized-account-5",
+                    "rhs_account_number": "sanitized-account-5",
+                    "rhc_account_number": "sanitized-account-6",
+                    "type": "limited_margin",
+                    "unsettled_funds": "0.00000000",
+                    "brokerage_account_type": "individual",
+                    "nickname": "Sanitized Account",
+                    "is_default": false,
+                    "agentic_allowed": true,
+                    "option_level": "",
+                    "management_type": "self_directed",
+                    "affiliate": "rhf",
+                    "state": "active",
+                    "deactivated": false,
+                    "permanently_deactivated": false
+                }
+            ]
+        },
+        "guide": "Broker guidance omitted from sanitized fixture."
+    }
+}

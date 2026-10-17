@@ -1,0 +1,117 @@
+{
+    "provenance": "App-owned authorized read; private identifiers pseudonymized, financial values replaced, guidance removed. Not performance evidence. Identifier aliases are sequential, not hashes of private identifiers. Symbol aliases and numeric values are synthetic.",
+    "operation": "orders",
+    "tool": "get_equity_orders",
+    "response": {
+        "data": {
+            "orders": [
+                {
+                    "id": "00000000-0000-4000-8000-000000000027",
+                    "ref_id": "00000000-0000-4000-8000-000000000028",
+                    "instrument_id": "00000000-0000-4000-8000-000000000029",
+                    "symbol": "TESTA",
+                    "side": "buy",
+                    "type": "market",
+                    "state": "filled",
+                    "quantity": "0.00000000",
+                    "cumulative_quantity": "0.00000000",
+                    "price": "0.00000000",
+                    "stop_price": null,
+                    "average_price": "0.00000000",
+                    "fees": "0.00000000",
+                    "dollar_based_amount": {
+                        "amount": "0.00000000",
+                        "currency_code": "USD"
+                    },
+                    "time_in_force": "gfd",
+                    "market_hours": "regular_hours",
+                    "trigger": "immediate",
+                    "placed_agent": "[redacted]",
+                    "agent_initiated": true,
+                    "created_at": "2026-10-16T20:00:00Z",
+                    "last_transaction_at": "2026-10-16T20:00:00Z",
+                    "executions": [
+                        {
+                            "id": "00000000-0000-4000-8000-000000000030",
+                            "price": "0.00000000",
+                            "quantity": "0.00000000",
+                            "timestamp": "2026-10-16T20:00:00Z",
+                            "fees": "0.00000000"
+                        }
+                    ]
+                },
+                {
+                    "id": "00000000-0000-4000-8000-000000000031",
+                    "ref_id": "00000000-0000-4000-8000-000000000032",
+                    "instrument_id": "00000000-0000-4000-8000-000000000033",
+                    "symbol": "TESTB",
+                    "side": "buy",
+                    "type": "market",
+                    "state": "filled",
+                    "quantity": "0.00000000",
+                    "cumulative_quantity": "0.00000000",
+                    "price": "0.00000000",
+                    "stop_price": null,
+                    "average_price": "0.00000000",
+                    "fees": "0.00000000",
+                    "dollar_based_amount": {
+                        "amount": "0.00000000",
+                        "currency_code": "USD"
+                    },
+                    "time_in_force": "gfd",
+                    "market_hours": "regular_hours",
+                    "trigger": "immediate",
+                    "placed_agent": "[redacted]",
+                    "agent_initiated": true,
+                    "created_at": "2026-10-16T20:00:00Z",
+                    "last_transaction_at": "2026-10-16T20:00:00Z",
+                    "executions": [
+                        {
+                            "id": "00000000-0000-4000-8000-000000000034",
+                            "price": "0.00000000",
+                            "quantity": "0.00000000",
+                            "timestamp": "2026-10-16T20:00:00Z",
+                            "fees": "0.00000000"
+                        }
+                    ]
+                },
+                {
+                    "id": "00000000-0000-4000-8000-000000000035",
+                    "ref_id": "00000000-0000-4000-8000-000000000036",
+                    "instrument_id": "00000000-0000-4000-8000-000000000029",
+                    "symbol": "TESTA",
+                    "side": "buy",
+                    "type": "market",
+                    "state": "filled",
+                    "quantity": "0.00000000",
+                    "cumulative_quantity": "0.00000000",
+                    "price": "0.00000000",
+                    "stop_price": null,
+                    "average_price": "0.00000000",
+                    "fees": "0.00000000",
+                    "dollar_based_amount": {
+                        "amount": "0.00000000",
+                        "currency_code": "USD"
+                    },
+                    "time_in_force": "gfd",
+                    "market_hours": "regular_hours",
+                    "trigger": "immediate",
+                    "placed_agent": "[redacted]",
+                    "agent_initiated": true,
+                    "created_at": "2026-10-16T20:00:00Z",
+                    "last_transaction_at": "2026-10-16T20:00:00Z",
+                    "executions": [
+                        {
+                            "id": "00000000-0000-4000-8000-000000000037",
+                            "price": "0.00000000",
+                            "quantity": "0.00000000",
+                            "timestamp": "2026-10-16T20:00:00Z",
+                            "fees": "0.00000000"
+                        }
+                    ]
+                }
+            ]
+        },
+        "guide": "Broker guidance omitted from sanitized fixture."
+    }
+}

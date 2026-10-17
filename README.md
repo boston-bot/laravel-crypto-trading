@@ -1,5 +1,9 @@
 # Brevix Crypto Trading (Coinbase + Robinhood)
 
+## Agentic Investing Application Plan
+
+The October 2026 pivot to a local Robinhood agentic monitoring and research application is documented in [the MCP trading documentation index](docs/mcp-trading/README.md). Start there for the implementation plan, Codex development checklist, and Mac setup/operations guide. The crypto functionality described below is the existing foundation; the new plan is not yet implemented.
+
 Laravel service foundation for Coinbase Advanced Trade and Robinhood Crypto automation with strict risk guardrails, full decision journaling, paper mode, and approval-gated live mode.
 
 ## What Is Implemented

@@ -1,0 +1,38 @@
+{
+    "provenance": "App-owned authorized read; private identifiers pseudonymized, financial values replaced, guidance removed. Not performance evidence. Identifier aliases are sequential, not hashes of private identifiers. Symbol aliases and numeric values are synthetic.",
+    "operation": "positions",
+    "tool": "get_equity_positions",
+    "response": {
+        "data": {
+            "positions": [
+                {
+                    "symbol": "TESTA",
+                    "quantity": "0.00000000",
+                    "intraday_quantity": "0.00000000",
+                    "average_buy_price": "0.00000000",
+                    "shares_available_for_sells": "0.00000000",
+                    "shares_held_for_sells": "0.00000000",
+                    "shares_held_for_stock_grants": "0.00000000",
+                    "shares_held_for_options_events": "0.00000000",
+                    "shares_held_for_asset_transfer": "0.00000000",
+                    "shares_pending_from_options_events": "0.00000000",
+                    "type": "long"
+                },
+                {
+                    "symbol": "TESTB",
+                    "quantity": "0.00000000",
+                    "intraday_quantity": "0.00000000",
+                    "average_buy_price": "0.00000000",
+                    "shares_available_for_sells": "0.00000000",
+                    "shares_held_for_sells": "0.00000000",
+                    "shares_held_for_stock_grants": "0.00000000",
+                    "shares_held_for_options_events": "0.00000000",
+                    "shares_held_for_asset_transfer": "0.00000000",
+                    "shares_pending_from_options_events": "0.00000000",
+                    "type": "long"
+                }
+            ]
+        },
+        "guide": "Broker guidance omitted from sanitized fixture."
+    }
+}

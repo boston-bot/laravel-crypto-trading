@@ -163,7 +163,7 @@ class BrokerDataController extends Controller
     public function account(BrokerAccount $brokerAccount): JsonResponse
     {
         return response()->json([
-            'data' => $brokerAccount->load('brokerCredential'),
+            'data' => $brokerAccount,
         ]);
     }
 

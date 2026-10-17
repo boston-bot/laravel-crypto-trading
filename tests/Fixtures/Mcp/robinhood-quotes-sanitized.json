@@ -1,0 +1,37 @@
+{
+    "provenance": "App-owned authorized read; private identifiers pseudonymized, financial values replaced, guidance removed. Not performance evidence. Identifier aliases are sequential, not hashes of private identifiers. Symbol aliases and numeric values are synthetic.",
+    "operation": "quotes",
+    "tool": "get_equity_quotes",
+    "response": {
+        "data": {
+            "results": [
+                {
+                    "quote": {
+                        "symbol": "TEST",
+                        "last_trade_price": "100.15",
+                        "venue_last_trade_time": "2026-10-16T19:59:59.997319468Z",
+                        "last_non_reg_trade_price": "100.16",
+                        "venue_last_non_reg_trade_time": "2026-10-16T21:46:42.76949534Z",
+                        "adjusted_previous_close": "0.00000000",
+                        "previous_close": "0.00000000",
+                        "previous_close_date": "2026-10-15",
+                        "bid_price": "100.10",
+                        "venue_bid_time": "2026-10-16T21:46:44.4750182Z",
+                        "ask_price": "100.20",
+                        "venue_ask_time": "2026-10-16T21:46:44.4750182Z",
+                        "has_traded": true,
+                        "state": "active"
+                    },
+                    "close": {
+                        "symbol": "TEST",
+                        "date": "2026-10-15",
+                        "price": "0.00000000",
+                        "interpolated": false,
+                        "source": "[redacted]"
+                    }
+                }
+            ]
+        },
+        "guide": "Broker guidance omitted from sanitized fixture."
+    }
+}

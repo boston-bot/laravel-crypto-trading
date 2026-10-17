@@ -14,13 +14,24 @@ use App\Models\Position;
 use App\Models\RiskEvent;
 use App\Models\TradeAttribution;
 use App\Models\TradeDecision;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class BrokerDataEndpointsTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $user = User::factory()->create();
+        config(['mcp.operator_emails' => [$user->email]]);
+        $this->actingAs($user);
+        Bus::fake();
+    }
 
     public function test_broker_data_endpoints_return_account_and_related_details(): void
     {

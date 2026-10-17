@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="PostgreSQL">
+            <directory>tests/Integration</directory>
+        </testsuite>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="ROBINHOOD_MCP_ENABLED" value="false" force="true"/>
+        <env name="ROBINHOOD_MCP_CLIENT_ID" value="" force="true"/>
+        <env name="LEGACY_CRYPTO_SCHEDULES_ENABLED" value="false" force="true"/>
+        <env name="MCP_MONITORING_ENABLED" value="false" force="true"/>
+        <env name="BROKERAGE_WRITES_ENABLED" value="false" force="true"/>
+        <env name="MCP_RESEARCH_ENABLED" value="false" force="true"/>
+        <env name="MCP_RESEARCH_API_KEY" value="" force="true"/>
+        <env name="MCP_RESEARCH_MODEL" value="" force="true"/>
+        <env name="MCP_OPERATOR_EMAILS" value="" force="true"/>
+        <env name="TRADING_APPROVER_EMAILS" value="" force="true"/>
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_KEY" value="base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" force="true"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="DB_CONNECTION" value="pgsql_test" force="true"/>
+        <env name="DB_DATABASE" value="mcp_trading_test" force="true"/>
+        <env name="DB_URL" value="" force="true"/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="NIGHTWATCH_ENABLED" value="false"/>
+    </php>
+</phpunit>

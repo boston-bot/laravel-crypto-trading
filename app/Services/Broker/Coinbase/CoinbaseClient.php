@@ -15,8 +15,7 @@ class CoinbaseClient
     public function __construct(
         private readonly HttpFactory $http,
         private readonly CoinbaseJwtSigner $signer,
-    ) {
-    }
+    ) {}
 
     public function ping(BrokerCredential $credential): bool
     {
@@ -162,6 +161,10 @@ class CoinbaseClient
      */
     public function placeOrder(BrokerCredential $credential, array $payload): array
     {
+        if (! config('mcp.brokerage_writes_enabled')) {
+            throw new \RuntimeException('Brokerage writes are disabled.');
+        }
+
         return $this->request(
             $credential,
             'POST',

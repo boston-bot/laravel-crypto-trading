@@ -1,6 +1,25 @@
 <?php
 
 use App\Enums\BrokerType;
+use App\Jobs\EvaluateSignalsJob;
+use App\Jobs\ReconcileBrokerFillJob;
+use App\Jobs\SyncCoinbaseAccountJob;
+use App\Jobs\SyncCoinbaseAssetsJob;
+use App\Jobs\SyncCoinbaseMarketDataJob;
+use App\Jobs\SyncCoinbaseOrdersJob;
+use App\Jobs\SyncCoinbasePositionsJob;
+use App\Jobs\SyncRobinhoodAccountJob;
+use App\Jobs\SyncRobinhoodAssetsJob;
+use App\Jobs\SyncRobinhoodMarketDataJob;
+use App\Jobs\SyncRobinhoodOrdersJob;
+use App\Jobs\SyncRobinhoodPositionsJob;
+use App\Models\McpConnection;
+use App\Models\User;
+use App\Services\Monitoring\MonitoringScheduler;
+use App\Services\Research\ResearchScheduler;
+use App\Services\Research\ResearchSummaries;
+use App\Support\Mcp\DatabaseReadiness;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -9,23 +28,125 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+Artisan::command('mcp:doctor', function (): int {
+    try {
+        $state = app(DatabaseReadiness::class)->inspect();
+        $this->line(json_encode($state, JSON_THROW_ON_ERROR));
+
+        return $state['migrations_present'] ? 0 : 1;
+    } catch (Throwable) {
+        $this->error('Database unavailable or application schema invalid. Check private database configuration.');
+
+        return 1;
+    }
+})->purpose('Read-only database identity and schema placement check; no credentials are printed');
+
+Artisan::command('mcp:operator-create {email} {name}', function (): int {
+    $email = (string) $this->argument('email');
+    if (! filter_var($email, FILTER_VALIDATE_EMAIL) || ! in_array($email, config('mcp.operator_emails'), true)) {
+        $this->error('Set this email in MCP_OPERATOR_EMAILS before provisioning.');
+
+        return 1;
+    }
+    $password = $this->secret('New local password (at least 12 characters)');
+    if (! is_string($password) || strlen($password) < 12) {
+        $this->error('Password must contain at least 12 characters.');
+
+        return 1;
+    }
+    if (User::where('email', $email)->exists()) {
+        $this->error('User already exists; no credentials changed.');
+
+        return 1;
+    }
+    User::create(['email' => $email, 'name' => $this->argument('name'), 'password' => $password]);
+    $this->info('Local operator created.');
+
+    return 0;
+})->purpose('Provision a local operator with a hidden password prompt; no public registration');
+
+Artisan::command('mcp:monitor {--once}', function (): int {
+    if (! $this->option('once')) {
+        $this->error('Use --once; long-running work belongs to the scheduler.');
+
+        return 1;
+    }
+    $this->line('Queued observations: '.app(MonitoringScheduler::class)->tick());
+
+    return 0;
+})->purpose('One deduplicated monitoring dispatch; requires monitoring enabled');
+
+Artisan::command('mcp:research {--once} {--sync : Process in the foreground instead of queueing}', function (): int {
+    if (! $this->option('once')) {
+        $this->error('Use --once; long-running work belongs to the scheduler and research worker.');
+
+        return 1;
+    }
+    $count = app(ResearchScheduler::class)->tick((bool) $this->option('sync'));
+    $this->line(($this->option('sync') ? 'Processed' : 'Queued').' research events: '.$count);
+
+    return 0;
+})->purpose('One bounded research detection/dispatch cycle; requires research enabled and reviewed cost settings');
+
+Artisan::command('mcp:summary {--kind=daily} {--account= : Local connection ID; defaults to all operator accounts} {--date= : New York date in a closed period, YYYY-MM-DD; defaults to the previous day or week}', function (): int {
+    $kind = $this->option('kind');
+    $date = $this->option('date');
+    if (! in_array($kind, ['daily', 'weekly'], true) || ($date !== null && ! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date))) {
+        $this->error('Use --kind=daily|weekly and an optional --date=YYYY-MM-DD.');
+
+        return 1;
+    }
+    $now = CarbonImmutable::now('America/New_York');
+    $at = $date ? CarbonImmutable::parse($date.' 12:00:00', 'America/New_York') : ($kind === 'daily' ? $now->subDay() : $now->subWeek());
+    $operators = User::whereIn('email', config('mcp.operator_emails'))->pluck('id');
+    $connections = McpConnection::whereIn('user_id', $operators)->whereNotNull('bound_account_id')
+        ->when($this->option('account'), fn ($q, $id) => $q->whereKey($id))->get();
+    foreach ($connections as $connection) {
+        try {
+            $summary = app(ResearchSummaries::class)->generate($connection, $kind, $at);
+        } catch (InvalidArgumentException) {
+            $this->error('Only closed periods can be summarized; choose an earlier --date.');
+
+            return 1;
+        }
+        // Identifiers and counts only; balances and source text stay in the encrypted record.
+        $this->line(json_encode(['summary_id' => $summary->id, 'kind' => $summary->kind, 'period' => $summary->period], JSON_THROW_ON_ERROR));
+    }
+
+    return $connections->isEmpty() ? 1 : 0;
+})->purpose('Deterministic daily/weekly summary with explicit performance and benchmark limitations; no AI call');
+
+if (config('mcp.monitoring_enabled')) {
+    Schedule::command('mcp:monitor --once')->everyMinute()->withoutOverlapping();
+    Schedule::command('mcp:summary --kind=daily')->dailyAt('00:15')->timezone('America/New_York');
+    Schedule::command('mcp:summary --kind=weekly')->mondays()->at('00:30')->timezone('America/New_York');
+}
+
+if (config('research.enabled')) {
+    Schedule::command('mcp:research --once')->everyFiveMinutes()->withoutOverlapping();
+}
+
+if (! config('mcp.legacy_schedules_enabled')) {
+    return;
+}
+
 $defaultBroker = BrokerType::default();
 
 if ($defaultBroker === BrokerType::COINBASE) {
-    Schedule::job(new \App\Jobs\SyncCoinbaseAccountJob())->everyFiveMinutes();
-    Schedule::job(new \App\Jobs\SyncCoinbaseAssetsJob())->everyTenMinutes();
-    Schedule::job(new \App\Jobs\SyncCoinbaseMarketDataJob(timeframe: '1d'))->everyTenMinutes();
-    Schedule::job(new \App\Jobs\SyncCoinbaseMarketDataJob(timeframe: '4h'))->hourly();
-    Schedule::job(new \App\Jobs\SyncCoinbasePositionsJob())->everyFiveMinutes();
-    Schedule::job(new \App\Jobs\SyncCoinbaseOrdersJob())->everyFiveMinutes();
+    Schedule::job(new SyncCoinbaseAccountJob)->everyFiveMinutes();
+    Schedule::job(new SyncCoinbaseAssetsJob)->everyTenMinutes();
+    Schedule::job(new SyncCoinbaseMarketDataJob(timeframe: '1d'))->everyTenMinutes();
+    Schedule::job(new SyncCoinbaseMarketDataJob(timeframe: '4h'))->hourly();
+    Schedule::job(new SyncCoinbasePositionsJob)->everyFiveMinutes();
+    Schedule::job(new SyncCoinbaseOrdersJob)->everyFiveMinutes();
 } else {
-    Schedule::job(new \App\Jobs\SyncRobinhoodAccountJob())->everyFiveMinutes();
-    Schedule::job(new \App\Jobs\SyncRobinhoodAssetsJob())->everyTenMinutes();
-    Schedule::job(new \App\Jobs\SyncRobinhoodMarketDataJob(timeframe: '1d'))->everyTenMinutes();
-    Schedule::job(new \App\Jobs\SyncRobinhoodMarketDataJob(timeframe: '4h'))->hourly();
-    Schedule::job(new \App\Jobs\SyncRobinhoodPositionsJob())->everyFiveMinutes();
-    Schedule::job(new \App\Jobs\SyncRobinhoodOrdersJob())->everyFiveMinutes();
+    Schedule::job(new SyncRobinhoodAccountJob)->everyFiveMinutes();
+    Schedule::job(new SyncRobinhoodAssetsJob)->everyTenMinutes();
+    Schedule::job(new SyncRobinhoodMarketDataJob(timeframe: '1d'))->everyTenMinutes();
+    Schedule::job(new SyncRobinhoodMarketDataJob(timeframe: '4h'))->hourly();
+    Schedule::job(new SyncRobinhoodPositionsJob)->everyFiveMinutes();
+    Schedule::job(new SyncRobinhoodOrdersJob)->everyFiveMinutes();
 }
 
-Schedule::job(new \App\Jobs\EvaluateSignalsJob())->dailyAt('09:00');
-Schedule::job(new \App\Jobs\ReconcileBrokerFillJob())->everyMinute();
+Schedule::job(new EvaluateSignalsJob)->dailyAt('09:00');
+Schedule::job(new ReconcileBrokerFillJob)->everyMinute();

@@ -1,11 +1,12 @@
 <?php
 
+use App\Logging\SafeLogging;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
 
-return [
+$configuration = [
 
     /*
     |--------------------------------------------------------------------------
@@ -130,3 +131,10 @@ return [
     ],
 
 ];
+
+foreach ($configuration['channels'] as &$channel) {
+    $channel['tap'][] = SafeLogging::class;
+}
+unset($channel);
+
+return $configuration;

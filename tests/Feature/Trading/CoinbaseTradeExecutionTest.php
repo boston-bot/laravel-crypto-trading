@@ -100,6 +100,15 @@ class CoinbaseTradeExecutionTest extends TestCase
 
         $this->app->instance(CoinbaseClient::class, $client);
 
+        try {
+            app(TradeExecutionService::class)->submitDecision($decision->id);
+            $this->fail('Live submission accepted with writes disabled');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Brokerage writes are disabled.', $exception->getMessage());
+        }
+        $this->assertDatabaseCount('broker_orders', 0);
+        $this->assertSame(TradingDecisionStatus::APPROVED, $decision->fresh()->status);
+        config()->set('mcp.brokerage_writes_enabled', true);
         app(TradeExecutionService::class)->submitDecision($decision->id);
 
         $this->assertDatabaseHas('broker_orders', [

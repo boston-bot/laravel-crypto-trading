@@ -1,0 +1,893 @@
+{
+    "provenance": "App-authorized MCP tools/list; descriptions/defaults/examples removed; no account data or credentials",
+    "protocol": "2025-11-25",
+    "tools": {
+        "get_accounts": {
+            "name": "get_accounts",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "accounts": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": [
+                                        "null",
+                                        "object"
+                                    ],
+                                    "properties": {
+                                        "account_number": {
+                                            "type": "string"
+                                        },
+                                        "rhs_account_number": {
+                                            "type": "string"
+                                        },
+                                        "rhc_account_number": {
+                                            "type": "string"
+                                        },
+                                        "type": {
+                                            "type": "string"
+                                        },
+                                        "unsettled_funds": {
+                                            "type": "string"
+                                        },
+                                        "brokerage_account_type": {
+                                            "type": "string"
+                                        },
+                                        "nickname": {
+                                            "type": "string"
+                                        },
+                                        "is_default": {
+                                            "type": "boolean"
+                                        },
+                                        "agentic_allowed": {
+                                            "type": "boolean"
+                                        },
+                                        "option_level": {
+                                            "type": "string"
+                                        },
+                                        "user_option_level": {
+                                            "type": "string"
+                                        },
+                                        "management_type": {
+                                            "type": "string"
+                                        },
+                                        "affiliate": {
+                                            "type": "string"
+                                        },
+                                        "state": {
+                                            "type": "string"
+                                        },
+                                        "deactivated": {
+                                            "type": "boolean"
+                                        },
+                                        "permanently_deactivated": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "account_number",
+                                        "rhs_account_number",
+                                        "type",
+                                        "brokerage_account_type",
+                                        "is_default",
+                                        "agentic_allowed",
+                                        "option_level",
+                                        "state",
+                                        "deactivated",
+                                        "permanently_deactivated"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            }
+                        },
+                        "required": [
+                            "accounts"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            },
+            "fingerprint": "1a14050735efd776b035877a0c22cf197e1c7eac124dedd1e38e9d5f34ed7ed8"
+        },
+        "get_equity_orders": {
+            "name": "get_equity_orders",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "account_number": {
+                        "type": "string"
+                    },
+                    "order_id": {
+                        "type": "string"
+                    },
+                    "state": {
+                        "type": "string"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "created_at_gte": {
+                        "type": "string"
+                    },
+                    "placed_agent": {
+                        "type": "string"
+                    },
+                    "agent_initiated": {
+                        "type": [
+                            "null",
+                            "boolean"
+                        ]
+                    },
+                    "cursor": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "account_number"
+                ],
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "orders": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": [
+                                        "null",
+                                        "object"
+                                    ],
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "ref_id": {
+                                            "type": "string"
+                                        },
+                                        "instrument_id": {
+                                            "type": "string"
+                                        },
+                                        "symbol": {
+                                            "type": "string"
+                                        },
+                                        "side": {
+                                            "type": "string"
+                                        },
+                                        "type": {
+                                            "type": "string"
+                                        },
+                                        "state": {
+                                            "type": "string"
+                                        },
+                                        "quantity": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        },
+                                        "cumulative_quantity": {
+                                            "type": "string"
+                                        },
+                                        "price": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        },
+                                        "stop_price": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        },
+                                        "average_price": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        },
+                                        "fees": {
+                                            "type": "string"
+                                        },
+                                        "dollar_based_amount": {
+                                            "type": [
+                                                "null",
+                                                "object"
+                                            ],
+                                            "properties": {
+                                                "amount": {
+                                                    "type": "string"
+                                                },
+                                                "currency_code": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "amount",
+                                                "currency_code"
+                                            ],
+                                            "additionalProperties": false
+                                        },
+                                        "time_in_force": {
+                                            "type": "string"
+                                        },
+                                        "market_hours": {
+                                            "type": "string"
+                                        },
+                                        "trigger": {
+                                            "type": "string"
+                                        },
+                                        "placed_agent": {
+                                            "type": "string"
+                                        },
+                                        "agent_initiated": {
+                                            "type": "boolean"
+                                        },
+                                        "created_at": {
+                                            "type": "string"
+                                        },
+                                        "last_transaction_at": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        },
+                                        "executions": {
+                                            "type": [
+                                                "null",
+                                                "array"
+                                            ],
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "price": {
+                                                        "type": "string"
+                                                    },
+                                                    "quantity": {
+                                                        "type": "string"
+                                                    },
+                                                    "timestamp": {
+                                                        "type": "string"
+                                                    },
+                                                    "fees": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "id",
+                                                    "price",
+                                                    "quantity",
+                                                    "timestamp",
+                                                    "fees"
+                                                ],
+                                                "additionalProperties": false
+                                            }
+                                        },
+                                        "reject_reason": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "instrument_id",
+                                        "symbol",
+                                        "side",
+                                        "type",
+                                        "state",
+                                        "quantity",
+                                        "cumulative_quantity",
+                                        "price",
+                                        "stop_price",
+                                        "average_price",
+                                        "fees",
+                                        "dollar_based_amount",
+                                        "time_in_force",
+                                        "market_hours",
+                                        "trigger",
+                                        "placed_agent",
+                                        "agent_initiated",
+                                        "created_at",
+                                        "last_transaction_at",
+                                        "executions"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            },
+                            "next": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "orders"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            },
+            "fingerprint": "fec6180ea517e0f6003252c95d5a1903147e504299024b94b1ae307f3361a194"
+        },
+        "get_equity_positions": {
+            "name": "get_equity_positions",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "account_number": {
+                        "type": "string"
+                    },
+                    "cursor": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "account_number"
+                ],
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "positions": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": [
+                                        "null",
+                                        "object"
+                                    ],
+                                    "properties": {
+                                        "symbol": {
+                                            "type": "string"
+                                        },
+                                        "quantity": {
+                                            "type": "string"
+                                        },
+                                        "intraday_quantity": {
+                                            "type": "string"
+                                        },
+                                        "average_buy_price": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        },
+                                        "shares_available_for_sells": {
+                                            "type": "string"
+                                        },
+                                        "shares_held_for_sells": {
+                                            "type": "string"
+                                        },
+                                        "shares_held_for_stock_grants": {
+                                            "type": "string"
+                                        },
+                                        "shares_held_for_options_events": {
+                                            "type": "string"
+                                        },
+                                        "shares_held_for_asset_transfer": {
+                                            "type": "string"
+                                        },
+                                        "shares_pending_from_options_events": {
+                                            "type": "string"
+                                        },
+                                        "type": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "symbol",
+                                        "quantity",
+                                        "intraday_quantity",
+                                        "shares_available_for_sells",
+                                        "shares_held_for_sells",
+                                        "shares_held_for_stock_grants",
+                                        "shares_held_for_options_events",
+                                        "shares_held_for_asset_transfer",
+                                        "shares_pending_from_options_events",
+                                        "type"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            },
+                            "next": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "positions"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            },
+            "fingerprint": "a272ab4650e5ee04f76dc5fceb66ac922a39cb3c501a7ce6cb67b54780e81a94"
+        },
+        "get_equity_quotes": {
+            "name": "get_equity_quotes",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "symbols": {
+                        "type": [
+                            "null",
+                            "array"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "symbols"
+                ],
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "results": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": [
+                                        "null",
+                                        "object"
+                                    ],
+                                    "properties": {
+                                        "quote": {
+                                            "type": [
+                                                "null",
+                                                "object"
+                                            ],
+                                            "properties": {
+                                                "symbol": {
+                                                    "type": "string"
+                                                },
+                                                "last_trade_price": {
+                                                    "type": "string"
+                                                },
+                                                "venue_last_trade_time": {
+                                                    "type": "string"
+                                                },
+                                                "last_non_reg_trade_price": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "venue_last_non_reg_trade_time": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "adjusted_previous_close": {
+                                                    "type": "string"
+                                                },
+                                                "previous_close": {
+                                                    "type": "string"
+                                                },
+                                                "previous_close_date": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "bid_price": {
+                                                    "type": "string"
+                                                },
+                                                "venue_bid_time": {
+                                                    "type": "string"
+                                                },
+                                                "ask_price": {
+                                                    "type": "string"
+                                                },
+                                                "venue_ask_time": {
+                                                    "type": "string"
+                                                },
+                                                "has_traded": {
+                                                    "type": "boolean"
+                                                },
+                                                "state": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "symbol",
+                                                "last_trade_price",
+                                                "venue_last_trade_time",
+                                                "last_non_reg_trade_price",
+                                                "venue_last_non_reg_trade_time",
+                                                "adjusted_previous_close",
+                                                "previous_close",
+                                                "previous_close_date",
+                                                "bid_price",
+                                                "venue_bid_time",
+                                                "ask_price",
+                                                "venue_ask_time",
+                                                "has_traded",
+                                                "state"
+                                            ],
+                                            "additionalProperties": false
+                                        },
+                                        "close": {
+                                            "type": [
+                                                "null",
+                                                "object"
+                                            ],
+                                            "properties": {
+                                                "symbol": {
+                                                    "type": "string"
+                                                },
+                                                "date": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "price": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "interpolated": {
+                                                    "type": [
+                                                        "null",
+                                                        "boolean"
+                                                    ]
+                                                },
+                                                "source": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "symbol",
+                                                "date",
+                                                "price",
+                                                "interpolated",
+                                                "source"
+                                            ],
+                                            "additionalProperties": false
+                                        }
+                                    },
+                                    "required": [
+                                        "quote"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            },
+                            "closes_error": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "results"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            },
+            "fingerprint": "ae164ba8c6d2b1bfd9902cb292cd67f8f1ddbae6095daff4fedce7f5e1dc4bf1"
+        },
+        "get_portfolio": {
+            "name": "get_portfolio",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "account_number": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "account_number"
+                ],
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "total_value": {
+                                "type": "string"
+                            },
+                            "equity_value": {
+                                "type": "string"
+                            },
+                            "options_value": {
+                                "type": "string"
+                            },
+                            "futures_value": {
+                                "type": "string"
+                            },
+                            "event_contracts_value": {
+                                "type": "string"
+                            },
+                            "crypto_value": {
+                                "type": "string"
+                            },
+                            "cash": {
+                                "type": "string"
+                            },
+                            "pending_deposits": {
+                                "type": "string"
+                            },
+                            "mutual_funds_value": {
+                                "type": "string"
+                            },
+                            "fixed_income_value": {
+                                "type": "string"
+                            },
+                            "currency": {
+                                "type": "string"
+                            },
+                            "buying_power": {
+                                "type": [
+                                    "null",
+                                    "object"
+                                ],
+                                "properties": {
+                                    "buying_power": {
+                                        "type": "string"
+                                    },
+                                    "unleveraged_buying_power": {
+                                        "type": "string"
+                                    },
+                                    "intraday_buying_power": {
+                                        "type": [
+                                            "null",
+                                            "string"
+                                        ]
+                                    },
+                                    "off_intraday_buying_power": {
+                                        "type": [
+                                            "null",
+                                            "string"
+                                        ]
+                                    },
+                                    "display_currency": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "buying_power",
+                                    "unleveraged_buying_power",
+                                    "display_currency"
+                                ],
+                                "additionalProperties": false
+                            },
+                            "crypto_buying_power": {
+                                "type": [
+                                    "null",
+                                    "object"
+                                ],
+                                "properties": {
+                                    "buying_power": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "buying_power"
+                                ],
+                                "additionalProperties": false
+                            }
+                        },
+                        "required": [
+                            "total_value",
+                            "equity_value",
+                            "options_value",
+                            "futures_value",
+                            "event_contracts_value",
+                            "crypto_value",
+                            "cash",
+                            "pending_deposits",
+                            "mutual_funds_value",
+                            "fixed_income_value",
+                            "currency",
+                            "buying_power"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            },
+            "fingerprint": "46bd20cca280a145cea1687cb95b79ff9f7ea3820e1d78a7bba0464e0a69ebd7"
+        },
+        "search": {
+            "name": "search",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string"
+                    },
+                    "asset_type": {
+                        "type": "string"
+                    },
+                    "limit": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "query"
+                ],
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "results": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "instrument_id": {
+                                            "type": "string"
+                                        },
+                                        "symbol": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "simple_name": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "instrument_id",
+                                        "symbol",
+                                        "name"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            },
+                            "currency_pairs": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "symbol": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "symbol",
+                                        "name"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            },
+                            "market_indexes": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "symbol": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "description": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "symbol",
+                                        "name"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            }
+                        },
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            },
+            "fingerprint": "17a087a859150e2b20f8a9a00239ba7cdd0fe276c9a516025209bdf8728dc10d"
+        }
+    }
+}

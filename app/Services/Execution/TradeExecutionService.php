@@ -25,8 +25,7 @@ class TradeExecutionService
         private readonly RobinhoodMapper $robinhoodMapper,
         private readonly CoinbaseClient $coinbaseClient,
         private readonly CoinbaseMapper $coinbaseMapper,
-    ) {
-    }
+    ) {}
 
     public function submitDecision(int $decisionId): void
     {
@@ -51,6 +50,10 @@ class TradeExecutionService
             ]);
 
             return;
+        }
+
+        if (! config('mcp.brokerage_writes_enabled')) {
+            throw new RuntimeException('Brokerage writes are disabled.');
         }
 
         $broker = $decision->brokerAccount->broker instanceof BrokerType
@@ -164,7 +167,6 @@ class TradeExecutionService
     }
 
     /**
-     * @param  BrokerCredential  $credential
      * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: array<string, mixed>}
      */
     private function submitRobinhoodOrder(BrokerCredential $credential, TradeDecision $decision): array
@@ -187,7 +189,6 @@ class TradeExecutionService
     }
 
     /**
-     * @param  BrokerCredential  $credential
      * @return array{0: array<string, mixed>, 1: array<string, mixed>}
      */
     private function fetchRobinhoodOrder(BrokerCredential $credential, string $externalOrderId): array
@@ -200,7 +201,6 @@ class TradeExecutionService
     }
 
     /**
-     * @param  BrokerCredential  $credential
      * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: array<string, mixed>}
      */
     private function submitCoinbaseOrder(BrokerCredential $credential, TradeDecision $decision): array
@@ -245,7 +245,6 @@ class TradeExecutionService
     }
 
     /**
-     * @param  BrokerCredential  $credential
      * @return array{0: array<string, mixed>, 1: array<string, mixed>}
      */
     private function fetchCoinbaseOrder(BrokerCredential $credential, string $externalOrderId): array

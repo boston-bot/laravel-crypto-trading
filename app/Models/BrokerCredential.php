@@ -11,6 +11,8 @@ class BrokerCredential extends Model
 {
     use HasFactory;
 
+    protected $hidden = ['api_key_ref', 'secret_ref', 'metadata'];
+
     protected $fillable = [
         'broker',
         'label',
@@ -35,4 +37,3 @@ class BrokerCredential extends Model
         return $this->hasMany(BrokerAccount::class);
     }
 }
-
