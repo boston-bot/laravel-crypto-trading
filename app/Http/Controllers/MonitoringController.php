@@ -9,10 +9,14 @@ use App\Models\Monitoring\Run;
 use App\Models\Monitoring\Snapshot;
 use App\Models\Monitoring\ThesisVersion;
 use App\Models\Operations\NotificationDelivery;
+use App\Models\PaperTrading\MandateVersion;
+use App\Models\Research\Run as ResearchRun;
+use App\Models\Research\Source as ResearchSource;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\Monitor;
 use App\Services\Monitoring\RiskObservations;
 use App\Services\Operations\OperationsHealth;
+use App\Services\PaperTrading\PaperPolicies;
 use App\Services\Research\ResearchOverview;
 use Illuminate\Http\Request;
 use Throwable;
@@ -20,7 +24,7 @@ use Throwable;
 class MonitoringController extends Controller
 {
     public const PAGES = ['overview' => 'Overview', 'holdings' => 'Holdings / Theses', 'research' => 'Research / Watchlist',
-        'orders' => 'Decisions / Orders', 'performance' => 'Performance', 'health' => 'System Health / Settings'];
+        'orders' => 'Decisions / Orders', 'performance' => 'Performance', 'control' => 'Control Center', 'health' => 'System Health / Settings'];
 
     public function show(Request $request, string $page = 'overview')
     {
@@ -46,8 +50,17 @@ class MonitoringController extends Controller
             'deliveries' => NotificationDelivery::whereIn('incident_id', $notificationIds)->orWhereNull('incident_id')->latest('id')->limit(15)->get()] : null;
 
         $openIncidents = $incidents->where('state', 'open')->count();
+        $control = null;
+        if ($page === 'control') {
+            $versions = $scope ? MandateVersion::where('mcp_connection_id', $connection->id)->where('scope', $scope) : null;
+            $control = ['latest' => $versions ? (clone $versions)->latest('version')->first() : null,
+                'paper' => $scope ? app(PaperPolicies::class)->state($connection) : null,
+                'history' => $versions ? (clone $versions)->latest('version')->paginate(10, ['*'], 'versions_page')->withQueryString() : null,
+                'runs' => $scope ? ResearchRun::where('mcp_connection_id', $connection->id)->where('scope', $scope)->latest('created_at')->orderByDesc('id')->paginate(10, ['*'], 'runs_page')->withQueryString() : null,
+                'sources' => $scope ? ResearchSource::where('mcp_connection_id', $connection->id)->where('scope', $scope)->latest('id')->paginate(10, ['*'], 'sources_page')->withQueryString() : null];
+        }
 
-        return response()->view('mcp.dashboard', compact('pages', 'page', 'connection', 'snapshot', 'runs', 'incidents', 'observations', 'freshness', 'theses', 'pendingNotifications', 'research', 'operations', 'openIncidents'));
+        return response()->view('mcp.dashboard', compact('pages', 'page', 'connection', 'snapshot', 'runs', 'incidents', 'observations', 'freshness', 'theses', 'pendingNotifications', 'research', 'operations', 'openIncidents', 'control'));
     }
 
     public function sync(Request $request, Monitor $monitor)

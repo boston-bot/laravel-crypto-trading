@@ -1,8 +1,8 @@
 # M4 acceptance record
 
-Current drill date: October 17, 2026, America/Chicago. Release `401d6a233c54893cfa35529ffadd72a35d7c9e9c`. This record distinguishes observed passes from work that needs future time or owner participation. M4 is not complete; M5 has not started. Research and all brokerage-write/legacy-trading flags remain disabled.
+Current acceptance update: October 18, 2026, America/Chicago. **M4 is closed under the owner's explicit waiver of the seven-session requirement; M5 is active.** No proving session was completed or reviewed (0/7). The October 17 drill evidence below remains historical evidence for its recorded releases; it is not a fresh runtime check. No research, execution or brokerage-write activation is authorized by this waiver.
 
-Current remaining gate, after the owner's final key confirmation: **seven consecutive trading sessions of unattended monitoring**. The production APP_KEY source was corrected and both keys are owner-confirmed accessible from their phone. This is owner testimony, not an independent vault-export restore. Zero completed proving sessions are recorded; historical pending statements below describe earlier checkpoints.
+The previously remaining seven-session gate was **waived by the owner on October 18**: “I want to forgot the 7 monitoring sessions. things look good. let's proceed.” Preserve the prepared baseline and candidate table for historical context, but no scheduled session review or waiting period is now required to proceed. Calendar freshness, operational alerts, backups and disabled brokerage writes are unchanged requirements. The production APP_KEY source was corrected and both keys were owner-confirmed accessible from their phone; that remains testimony rather than an independently restored vault export. Historical pending statements and proving instructions below are superseded by this acceptance decision.
 
 ## Observed checks
 

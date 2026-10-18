@@ -1,5 +1,7 @@
 # M4 unattended operations evidence
 
+**October 18 acceptance amendment:** the owner waived the seven consecutive monitoring sessions and directed continued M5 work. M4 is accepted with that endurance period unverified (0/7 completed), not a passed test. Existing operational drill evidence is retained; the current [acceptance record](M4-ACCEPTANCE-LOG.md) supersedes the historical pending states below. No service, research, brokerage-write or live-mode activation follows from this waiver.
+
 Started October 16, 2026. M4 is **in progress**: application code, tests and deployment tooling are prepared and verified locally; the runtime installation, owner-provided alert/heartbeat accounts, Mac power/restart tests and the seven-session proving period are tracked below. Current status: production read-only monitoring and operations are running as of October 17 with an approved restricted database login; research, legacy schedules and brokerage writes remain disabled. Actual missing-heartbeat Down and recovery Up emails are verified. Remote cloud recovery, Mac recovery drills and the seven-session proving period remain open; see the [current acceptance log](M4-ACCEPTANCE-LOG.md). Historical setup observations below are dated. No brokerage mutation occurred.
 
 ## Delivered behavior

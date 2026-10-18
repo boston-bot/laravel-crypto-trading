@@ -173,6 +173,8 @@ Do not claim exactly-once delivery across the network. Enforce durable intent, s
 
 ## 9. Research, performance, and cost
 
+**M5 direction update, October 17, 2026:** the owner requested starting M5 design/development while M4's seven-session proving gate remains open. Target AI-selected **multi-day to multi-week** paper positions across a **broad US stock/ETF universe**, within the existing **$100 target / $150 maximum monthly AI-and-data envelope**. Follow [the M5 design](M5-DESIGN.md) for the proposed one-minute local scan, five-minute bounded AI reviews, event-driven reviews, separate decision freshness/cache, provider selection and paper evaluation. Those cadences are proposed targets, not implemented schedules or guaranteed throughput. This refines the earlier 30-minute ingestion proposal; it does not complete M4, authorize recurring activation or enable M6 brokerage writes.
+
 Use a broad but bounded liquid U.S. stock/ETF universe, with existing holdings first. Record the strongest candidate and alternative/WAIT condition. Cache unchanged research; trigger a new review on material events or expiry, not every quote poll. Initial research limit: at most one active run per instrument/thesis version and event fingerprint.
 
 Maintain return calculations separately from deposits/withdrawals. Unitize using verified flow timing and contemporaneous valuations. Unknown flows make affected returns/drawdown gates unavailable; show the last verified calculation and reason. Fees and distributions are classified, not mistaken for external deposits. Compare like-for-like timestamps and identify VTI price return versus total return. Do not annualize short samples or present self-reported model confidence as calibrated win probability.
@@ -180,6 +182,8 @@ Maintain return calculations separately from deposits/withdrawals. Unitize using
 Budget design: target $100/month, maximum envelope $150 including fixed subscriptions. Reserve expected API cost before dispatch, reconcile actual usage afterward, and track outstanding reservations atomically. Reject optional calls when reservations would exceed the remaining allocation. Fixed subscriptions can consume the envelope even with zero API usage; require a reviewed provider-cost configuration. At 80% of the envelope, notify and reduce optional research. Broker sync and local risk checks continue when AI spending stops. Provider-side limits supplement the application ledger; delayed billing means an absolute invoice guarantee is not possible.
 
 ## 10. Dashboard and alert behavior
+
+M5 adds a **Control Center** to inspect current AI instructions and account-scoped PostgreSQL research/evidence, edit versioned paper allocations/risk/guidance/cadence, review manually returned ChatGPT proposals and restore prior settings as a new version. Distinguish drafts, applied settings and the version actually used in each model request. The first source slice supports drafts/history/proposal preview/data browsing only; activation and runner consumption remain unfinished. See [design](M5-DESIGN.md#browser-control-center-and-rule-delivery) and [implementation evidence](M5-CONTROL-CENTER-EVIDENCE.md). No chat memory is an application settings source, and model output cannot approve its own rule changes.
 
 Provide six views: Overview, Holdings/Theses, Research/Watchlist, Decisions/Orders, Performance, and System Health/Settings. Show data age and source, operating mode, account scope, sleeve attribution, incident severity, and clear unknowns. Show simulation labels prominently. Authentication is required; account IDs are masked in views/logs. State-changing routes require authorization and CSRF protection. No open registration.
 
@@ -197,9 +201,11 @@ At cutover, have the operator verify legacy ChatGPT trading tasks are paused and
 
 ## 12. Delivery and release gates
 
-Follow M0–M6 in the checklist. Release 1 requires M0–M4, seven consecutive trading sessions of unattended monitoring, no missing/duplicate run identifiers, complete snapshot reconciliation, verified external alert delivery, and a successful backup restore and forced worker restart drill. Record all gaps; restart the proving window after a material reliability defect.
+Follow M0–M6 in the checklist. Release 1 requires M0–M4, no missing/duplicate run identifiers in verified observations, complete snapshot reconciliation, verified external alert delivery, and a successful backup restore and forced worker restart drill. **Owner amendment, October 18:** the original seven-consecutive-session proving requirement is waived; M4 is accepted with that endurance period explicitly unverified (0/7 completed). Retain historical evidence and ongoing health/recovery controls. Do not describe the waiver as a passed test.
 
 M5 validates simulated execution and strategy evaluation. M6 requires explicit owner live settings and broker approval support, clean order state, an emergency-disable drill, and fault-injection tests. A successful monitoring week is not permission to trade or proof of investment edge.
+
+The owner's October 17 instruction permitted beginning M5 design/development before the proving period; the October 18 waiver now closes M4 under that exception. Record deployments affecting the monitored runtime and continue verifying reliability after material changes. Neither acceptance nor M5 development enables live trading or proves investment performance.
 
 ## 13. Source references and verification date
 

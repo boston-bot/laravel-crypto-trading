@@ -2,6 +2,8 @@
 
 Prepared October 16, 2026. This documentation describes planned work, not an application already deployed or approved to trade.
 
+Current milestone update, October 18: M4 is accepted under the owner's explicit waiver of its seven-session proving requirement (0/7 completed; no passed endurance test claimed). M5 paper development is active. Live brokerage mutations remain unauthorized.
+
 ## Documents and audience
 
 | Document | Audience | Purpose |
@@ -14,6 +16,9 @@ Prepared October 16, 2026. This documentation describes planned work, not an app
 | [M3 research evidence](M3-RESEARCH-EVIDENCE.md) | Developer and operator | Research events, cache, budget ledger, validation, UI, summaries and what remains unverified |
 | [M4 operations evidence](M4-OPERATIONS-EVIDENCE.md) | Developer and operator | Health checks, heartbeat, ntfy alerts, incident lifecycle, encrypted backups, restore drill, Mac deployment tooling and remaining owner steps |
 | [M4 acceptance log](M4-ACCEPTANCE-LOG.md) | Developer and operator | Actual outage/recovery drill results, explicit calendar horizon, remaining Mac/cloud checks and seven-session proving record |
+| [M5 design](M5-DESIGN.md) | Owner and developer | Frequent discovery, AI-selected multi-day/week paper positions, proposed cadence, budget and unresolved mandate/provider inputs; not implemented functionality |
+| [M5 control-center evidence](M5-CONTROL-CENTER-EVIDENCE.md) | Owner and developer | Initial paper-draft editor, history/restore, proposal exchange and PostgreSQL research browsing; tests and remaining activation/deployment gaps |
+| [M5 applied paper policy evidence](M5-PAPER-POLICY-EVIDENCE.md) | Owner and developer | Explicit policy application, separate virtual opening cash, concurrent/idempotent initialization and remaining runner/fill gaps |
 | [Repository AGENTS.md](../../AGENTS.md) | Codex | Concise standing development instructions |
 
 Open the repository root in VS Code so the repository instructions are available to Codex. Begin with milestone M0 in the checklist. Do not ask Codex to implement the entire roadmap in one unreviewed change.

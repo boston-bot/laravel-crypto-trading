@@ -11,7 +11,7 @@
 </head>
 @php
     $active = trim($__env->yieldContent('nav'));
-    $nav = ['overview' => 'overview', 'holdings' => 'holdings', 'research' => 'research', 'orders' => 'orders', 'performance' => 'performance', 'health' => 'health'];
+    $nav = ['overview' => 'overview', 'holdings' => 'holdings', 'research' => 'research', 'orders' => 'orders', 'performance' => 'performance', 'control' => 'shield', 'health' => 'health'];
     $connection ??= null;
     $writesEnabled = (bool) config('mcp.brokerage_writes_enabled');
     $monitoringEnabled = (bool) config('mcp.monitoring_enabled');

@@ -115,13 +115,15 @@ Implemented October 17, 2026 at the owner's request; not an M4 acceptance item a
 
 ## M4 — Unattended operations and Release 1
 
+**Closed by owner acceptance with a waiver, October 18, 2026.** The owner explicitly waived the seven-session waiting requirement and directed continued M5 work. Existing drill evidence is retained; **zero of seven proving sessions were completed or reviewed**. This is acceptance of that unverified operational period, not a passed endurance test, investment-performance evidence or authorization for brokerage writes. Historical progress entries below describe earlier checkpoints.
+
 - [x] Configure Nginx/PHP-FPM and supervised workers/scheduler with verified absolute paths. (Six user LaunchAgents installed October 17; restricted runtime database login applied and verified.)
 - [x] Add process health, data-age, queue-age, dead-letter, and disk-space checks.
 - [x] Configure one external alert destination and independent heartbeat monitoring; verify delivery. (ntfy phone receipt owner-confirmed; actual scheduler outage produced Healthchecks Down email in the owner's inbox October 17. Scheduler and recurring heartbeat recovered; see the acceptance log.)
 - [x] Implement daily digest and incident deduplication/acknowledgement/escalation.
 - [x] Automate encrypted backups with retention; perform an isolated restore drill. (Daily backup/monthly drill schedules registered; deployed launchd backup and 54-table restore passed. Owner-returned iPhone download and manifest matched the original hash; direct isolated restore passed 54 tables / 105 rows October 17. Owner confirmed the corrected production APP_KEY and separate backup key are accessible from their phone.)
 - [x] Test logout/restart/sleep/network outage behavior on the actual MacBook. Record limitations and recovery steps. (October 17: actual logout, short sleep/wake and network recovery passed; first reboot exposed an FPM crash, and a second actual reboot with the scoped fix passed. Login/unlock remains required; see acceptance log.)
-- [ ] Perform seven consecutive trading sessions of unattended monitoring; record availability, stale periods, incidents, costs, and recovery outcomes.
+- [x] Record the owner's October 18 waiver of the seven-session monitoring requirement. **Waived, not tested: 0/7 completed.** Retain existing alerts, recovery and backup checks and ongoing operational monitoring.
 
 Acceptance: restarting a worker cannot duplicate a business event; scheduler downtime is visible; external monitoring notices a stopped Mac; no secrets appear in logs; restore produces a usable monitoring instance with execution disabled; no brokerage mutation occurred during the proving period.
 
@@ -187,7 +189,13 @@ Migration-helper deployment, October 17: the operator authorized the remaining s
 
 ## M5 — Paper evaluation and strategy specification
 
-- [ ] Have the owner define account/sleeve allocation, allowed universe, horizon, and explicit entry/exit/sizing rules. Record policy versions.
+- [x] Record owner direction and a concrete design for frequent AI paper evaluation. (October 17: multi-day/week positions, broad US stocks/ETFs, $100 target / $150 maximum monthly AI/data budget; proposed cadences and remaining inputs in [M5 design](M5-DESIGN.md). Design only.)
+- [x] Add a browser control-center foundation: editable/versioned paper drafts, allocation/risk/guidance/frequency fields, proposal preview, restore and scoped research/evidence browsing. (Source implementation only; **no active policy/cadence consumption or production deployment**. [Evidence](M5-CONTROL-CENTER-EVIDENCE.md).)
+- [x] Apply a complete saved mandate to a separate virtual portfolio, with immutable applied rules and one exact-decimal opening cash entry; preserve balances when rules change. (October 18 source/test increment, **not deployed or connected to automatic decisions/fills**. [Evidence](M5-PAPER-POLICY-EVIDENCE.md).)
+- [ ] Connect validated paper-policy activation to the scheduler/decision runner, attach applied policy/guidance versions to AI requests and show configured versus observed cadence. Recheck changed policy/ledger state before applying a paper decision.
+- [ ] Have the owner define paper starting capital/holdings, account/sleeve allocation, exact instrument eligibility, risk limits, AI entry/exit/sizing discretion and order assumptions. Record policy versions.
+- [ ] Add separate, short-lived structured AI paper decisions; reuse compatible research transport/budget components without changing M3's research-only contract. Record HOLD/WAIT, cache reuse, rejected, unavailable and no-call outcomes distinctly.
+- [ ] Integrate reviewed broad-universe market/news coverage, timestamped screening and rotating shortlist selection. Implement disabled-by-default frequent collection/review scheduling with cost, queue and latency evidence; do not claim local scans are fresh AI decisions.
 - [ ] Adapt existing paper components to equities and the planned order lifecycle.
 - [ ] Simulate orders with bid/ask, spread, session rules, fees, slippage, partial/unfilled behavior, and corporate actions where relevant.
 - [ ] Preserve point-in-time inputs and separate paper cash/positions from live holdings.
@@ -196,9 +204,13 @@ Migration-helper deployment, October 17: the operator authorized the remaining s
 
 Acceptance: no look-ahead data; limit orders can remain unfilled; impossible fractional/session combinations are rejected; paper and live ledgers cannot mix; cash/position conservation holds; both losing and winning decisions retain their original thesis evidence. A short profitable sample cannot automatically enable live mode.
 
-Evidence: pending.
+October 17 checkpoint (historical): **M5 started at the owner's request October 17, 2026**, before completion of M4's seven actual monitoring sessions. [M5 design](M5-DESIGN.md) records the confirmed direction and remaining mandate/provider inputs. The first [control-center slice](M5-CONTROL-CENTER-EVIDENCE.md) implements encrypted paper drafts, exact validation, history/restore, manually returned proposal preview and paginated scoped PostgreSQL research/evidence. Stale tabs, changed account bindings, duplicate requests, protected fields and concurrent saves are covered. Final SQLite **200 passed / 1405 assertions, 14 PostgreSQL-only skips**; PostgreSQL **214 / 1728 assertions**. Build/Composer/Pint/diff checks and synthetic 1440/500 px visual review passed. One additive table tested only in the guarded test database; no runtime migration/deployment, API call, schedule/policy change or activation. Saved draft settings are not yet supplied to a model or scheduler. Paper ledger/decision execution, model/provider compatibility and attainable cost/latency remain unverified. M4 remains open; M6 unstarted.
+
+Evidence update, October 18: M4 is accepted under the explicit seven-session waiver (0/7 completed). M5 now supports applying complete saved rules to an isolated virtual portfolio, immutable encrypted applied-policy snapshots and an exact-decimal opening cash ledger. Idempotent/concurrent initialization, stale versions/bindings, preservation of existing cash/reservations, capital-change refusal and full rollback on failure are verified. PostgreSQL **224 tests / 1812 assertions**; SQLite **208 passed / 1477 assertions, 16 PostgreSQL-only skips**. Build/Composer/Pint/diff checks and synthetic 1440/500 px visual review passed. Three additional tables tested only in the guarded test database. No runtime deployment/migration, AI request, schedule activation or brokerage mutation. [Current evidence and remaining runner/fill work](M5-PAPER-POLICY-EVIDENCE.md). M5 remains partial; M6 unstarted.
 
 ## M6 — Controlled execution, separately enabled
+
+October 18: the owner waived M4's seven-session period and continued M5. This does not authorize M6 brokerage mutations or live-mode activation.
 
 - [ ] Implement durable immutable intents and lifecycle transitions with database constraints.
 - [ ] Add atomic submission ownership, per-account serialization, persisted ambiguous states, and outbox dispatch.

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ControlCenterController;
 use App\Http\Controllers\LocalSessionController;
 use App\Http\Controllers\McpConnectionController;
 use App\Http\Controllers\MonitoringController;
@@ -33,6 +34,10 @@ Route::prefix('mcp/robinhood')->middleware([McpResponsePrivacy::class, 'auth', F
 
 Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAccess::class.':operate-finances'])->group(function (): void {
     Route::get('/dashboard/{page?}', [MonitoringController::class, 'show'])->name('mcp.dashboard');
+    Route::post('/control/mandate', [ControlCenterController::class, 'store'])->middleware('throttle:10,1')->name('mcp.control.store');
+    Route::post('/control/proposal', [ControlCenterController::class, 'proposal'])->middleware('throttle:10,1')->name('mcp.control.proposal');
+    Route::post('/control/versions/{version}/restore', [ControlCenterController::class, 'restore'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.restore');
+    Route::post('/control/versions/{version}/apply-paper', [ControlCenterController::class, 'apply'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.apply');
     Route::post('/operations/phone-setup', [OperationsSetupController::class, 'phone'])->middleware('throttle:10,1')->name('mcp.operations.phone');
     Route::post('/operations/health-check', [OperatorActionController::class, 'health'])->middleware('throttle:6,1')->name('mcp.operations.health');
     Route::post('/operations/test-alert', [OperatorActionController::class, 'testAlert'])->middleware('throttle:3,1')->name('mcp.operations.test-alert');

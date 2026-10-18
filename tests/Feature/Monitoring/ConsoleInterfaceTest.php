@@ -18,12 +18,12 @@ class ConsoleInterfaceTest extends TestCase
     use RefreshDatabase;
 
     private const PAGES = ['/mcp/dashboard/overview', '/mcp/dashboard/holdings', '/mcp/dashboard/research', '/mcp/dashboard/orders',
-        '/mcp/dashboard/performance', '/mcp/dashboard/health', '/mcp/robinhood'];
+        '/mcp/dashboard/performance', '/mcp/dashboard/control', '/mcp/dashboard/health', '/mcp/robinhood'];
 
     /** Existing operator actions only. A new browser mutation must be reviewed and added here deliberately. */
     private const ALLOWED_ACTIONS = ['POST' => ['logout', 'mcp.dashboard.sync', 'mcp.incident.ack', 'mcp.research.evidence', 'mcp.research.request', 'mcp.research.watch',
         'mcp.research.unwatch', 'mcp.research.adopt', 'mcp.thesis.store', 'mcp.operations.phone', 'mcp.operations.health',
-        'mcp.operations.test-alert', 'mcp.operations.summary', 'mcp.operations.database', 'mcp.connect', 'mcp.renew', 'mcp.discover', 'mcp.accounts', 'mcp.bind'],
+        'mcp.operations.test-alert', 'mcp.operations.summary', 'mcp.operations.database', 'mcp.control.store', 'mcp.control.proposal', 'mcp.control.restore', 'mcp.control.apply', 'mcp.connect', 'mcp.renew', 'mcp.discover', 'mcp.accounts', 'mcp.bind'],
         'GET' => ['mcp.read']];
 
     public function test_every_console_page_renders_without_a_connection_and_offers_no_account_actions(): void
