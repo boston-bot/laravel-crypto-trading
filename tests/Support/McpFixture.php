@@ -72,6 +72,8 @@ final class McpFixture
             Operation::Orders => ['id', 'account_id', 'instrument_id', 'status', 'side', 'quantity', 'filled_quantity'],
             Operation::Instruments => ['id', 'symbol'],
             Operation::Quotes => ['instrument_id', 'bid', 'ask', 'last'],
+            Operation::Watchlists => ['id', 'name', 'owner_type', 'item_count'],
+            Operation::WatchlistItems => ['id', 'object_type', 'symbol'],
             Operation::CashFlows => ['id', 'account_id', 'amount'],
             Operation::History => ['account_id', 'equity'],
             Operation::Calendar => ['date', 'session_status'],

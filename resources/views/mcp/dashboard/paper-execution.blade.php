@@ -1,6 +1,6 @@
 @php
     $executionLatest = $execution['latest'];
-    $executionPayload = $executionLatest?->payload ?? array_fill_keys(App\Services\PaperTrading\ExecutionPolicies::FIELDS, null);
+    $executionPayload = array_replace(array_fill_keys(App\Services\PaperTrading\ExecutionPolicies::FIELDS, null), $executionLatest?->payload ?? []);
     $executionChoices = [
         'decision_sleeve' => ['Paper sleeve for AI proposals', ['active' => 'Active', 'long_term' => 'Long term']],
         'order_type' => ['Paper order type', ['limit' => 'Limit orders']],
@@ -13,7 +13,7 @@
         'allow_fractional' => ['Fractional shares', ['1' => 'Allowed with verified instrument support', '0' => 'Whole shares only']],
         'allow_fractional_limit' => ['Fractional limit orders', ['1' => 'Allowed with verified instrument support', '0' => 'Disallowed']],
     ];
-    $executionNumbers = ['fee_per_share' => 'Simulated fee per share (USD)', 'slippage_bps' => 'Adverse slippage (basis points)',
+    $executionNumbers = ['fee_per_share' => 'Simulated fee per share (USD)', 'fee_bps' => 'Additional fee on fill value (basis points; 100 = 1%)', 'slippage_bps' => 'Adverse slippage (basis points)',
         'limit_offset_bps' => 'Limit offset from current ask / bid (basis points)', 'quote_max_age_seconds' => 'Maximum quote age (seconds, 1–300)'];
 @endphp
 <x-panel title="Paper execution settings" subtitle="Owner choices, versioned separately from allocations. No values are inferred from legacy crypto rules." icon="shield">
@@ -35,7 +35,7 @@
         @endforeach
         </div>
         <label class="field"><span>Allowed stock / ETF symbols · comma-separated or one per line</span><textarea name="execution_symbols" rows="3" maxlength="2000">{{ old('execution_symbols', implode(', ', $executionPayload['allowed_symbols'] ?? [])) }}</textarea></label>
-        <p class="note">An allowed symbol still needs verified classification and current data. Leave choices unspecified until reviewed. One basis point is 0.01%; the limit offset raises a buy limit above ask and lowers a sell limit below bid. Slippage is a separate adverse fill assumption. A zero fee must be chosen explicitly.</p>
+        <p class="note">An allowed symbol still needs verified classification and current data. Leave choices unspecified until reviewed. One basis point is 0.01%; the limit offset raises a buy limit above ask and lowers a sell limit below bid. Slippage is a separate adverse fill assumption. Per-share and percentage fees add together on each fill. Choose zero explicitly for any fee component you do not want.</p>
         <label class="field"><span>Reason</span><input name="reason" maxlength="500" required value="{{ old('reason') }}"></label>
         <button class="btn btn-secondary" type="submit">Save execution draft</button>
     </form>

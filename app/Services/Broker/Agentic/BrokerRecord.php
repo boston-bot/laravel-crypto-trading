@@ -20,6 +20,8 @@ final readonly class BrokerRecord implements JsonSerializable
             Operation::Orders => ['id', 'account_id', 'instrument_id', 'status', 'side'],
             Operation::Instruments => ['id', 'symbol'],
             Operation::Quotes => [],
+            Operation::Watchlists => ['id', 'name', 'owner_type', 'item_count'],
+            Operation::WatchlistItems => ['id', 'object_type'],
             Operation::CashFlows => ['id', 'account_id', 'amount'],
             Operation::History => ['account_id'],
             Operation::Calendar => ['date', 'session_status'],
@@ -35,7 +37,11 @@ final readonly class BrokerRecord implements JsonSerializable
         $decimals = ['quantity', 'filled_quantity', 'price', 'bid', 'ask', 'last', 'cash', 'equity', 'buying_power', 'market_value', 'amount', 'unleveraged_buying_power', 'average_buy_price', 'stop_price', 'average_price', 'fees', 'regular_last', 'extended_last', 'equity_value', 'options_value', 'crypto_value', 'futures_value', 'event_contracts_value', 'mutual_funds_value', 'fixed_income_value', 'pending_deposits'];
         $strings = ['id', 'account_id', 'instrument_id', 'account_kind', 'symbol', 'status', 'side', 'order_type', 'time_in_force', 'currency', 'date', 'session_status', 'nickname', 'account_type', 'brokerage_account_type', 'management_type', 'account_scope', 'asset_class', 'position_type', 'name', 'bid_as_of', 'ask_as_of', 'last_as_of', 'regular_last_as_of', 'extended_last_as_of', 'last_session'];
         foreach ($fields as $key => $value) {
-            if (in_array($key, $decimals, true)) {
+            if ($key === 'item_count') {
+                if (! is_int($value) || $value < 0) {
+                    throw new ReadFailure(ReadError::Malformed);
+                }
+            } elseif (in_array($key, $decimals, true)) {
                 try {
                     $fields[$key] = $value === null ? null : Decimal::from($value);
                 } catch (\InvalidArgumentException) {
@@ -45,7 +51,7 @@ final readonly class BrokerRecord implements JsonSerializable
                 if (! is_bool($value)) {
                     throw new ReadFailure(ReadError::Malformed);
                 }
-            } elseif (! in_array($key, $strings, true) || (! is_string($value) && $value !== null)) {
+            } elseif (! in_array($key, [...$strings, 'owner_type', 'object_type', 'list_id', 'watchlist_scope'], true) || (! is_string($value) && $value !== null)) {
                 throw new ReadFailure(ReadError::Malformed);
             }
         }

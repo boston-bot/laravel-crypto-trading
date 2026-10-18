@@ -31,6 +31,7 @@ Route::prefix('mcp/robinhood')->middleware([McpResponsePrivacy::class, 'auth', F
     Route::post('/accounts', [McpConnectionController::class, 'accounts'])->name('mcp.accounts');
     Route::post('/bind', [McpConnectionController::class, 'bind'])->name('mcp.bind');
     Route::get('/reads/{operation}', [McpConnectionController::class, 'read'])->name('mcp.read');
+    Route::get('/watchlists/read', [McpConnectionController::class, 'watchlist'])->middleware('throttle:5,1')->name('mcp.watchlist.read');
 });
 
 Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAccess::class.':operate-finances'])->group(function (): void {

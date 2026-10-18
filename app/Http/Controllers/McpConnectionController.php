@@ -9,6 +9,7 @@ use App\Services\Broker\Agentic\Operation;
 use App\Services\Broker\Agentic\ReadError;
 use App\Services\Broker\Agentic\ReadFailure;
 use App\Services\Broker\Agentic\RobinhoodGateway;
+use App\Services\Broker\Agentic\RobinhoodWatchlists;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -101,7 +102,7 @@ class McpConnectionController extends Controller
     {
         $operation = Operation::tryFrom($operation);
         abort_unless($operation && $operation !== Operation::Accounts, 404);
-        $filters = $request->validate(['symbol' => ['sometimes', 'string', 'max:64'], 'instrument_id' => ['sometimes', 'string', 'max:128'], 'order_id' => ['sometimes', 'string', 'max:128']]);
+        $filters = $request->validate(['symbol' => ['sometimes', 'string', 'max:64'], 'instrument_id' => ['sometimes', 'string', 'max:128'], 'order_id' => ['sometimes', 'string', 'max:128'], 'list_id' => ['sometimes', 'string', 'max:128']]);
         try {
             $result = $gateway->read($this->connection($request), $operation, $filters);
             $payload = $result->jsonSerialize();
@@ -117,6 +118,16 @@ class McpConnectionController extends Controller
             return response()->json($payload)->header('Cache-Control', 'no-store');
         } catch (ReadFailure $failure) {
             return response()->json(['error' => $failure->reason->value], 503)->header('Cache-Control', 'no-store');
+        }
+    }
+
+    public function watchlist(Request $request, RobinhoodWatchlists $watchlists)
+    {
+        $data = $request->validate(['name' => ['required', 'string', 'max:128']]);
+        try {
+            return response()->json($watchlists->named($this->connection($request), $data['name']));
+        } catch (ReadFailure $failure) {
+            return response()->json(['error' => $failure->reason->value], 503);
         }
     }
 

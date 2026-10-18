@@ -66,6 +66,22 @@ class PaperOrderHandoffTest extends TestCase
         return app(DecisionRunner::class)->process($run->id);
     }
 
+    public function test_applied_percentage_fee_reaches_order_reservation_and_later_fill(): void
+    {
+        $this->execution = E::apply($this->connection, ['fee_bps' => '100', 'fee_per_share' => '0']);
+        $run = $this->proposal();
+        $outcome = app(PaperOrderHandoff::class)->process($this->connection, $this->connection->user_id, $run->id)->sole();
+        $this->assertSame('order_created', $outcome->status);
+        $order = SimulationOrder::findOrFail($outcome->sim_order_id);
+        $this->assertSame('100', $order->assumptions['fee_bps']);
+        $this->assertSame('910.818000000000000000', $this->portfolio->fresh()->reserved_cash);
+        $this->travel(1)->seconds();
+        $order = app(OfflineSimulator::class)->observe($this->connection, $this->connection->user_id, $order->id, F::quote());
+        $this->assertSame('filled', $order->status);
+        $this->assertSame('9090.091000000000000000', $this->portfolio->fresh()->cash);
+        Http::assertNothingSent();
+    }
+
     public function test_stored_verified_fixture_inputs_reach_the_model_and_a_deduplicated_bounded_paper_order(): void
     {
         $run = $this->proposal();

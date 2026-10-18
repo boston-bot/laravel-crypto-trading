@@ -22,6 +22,8 @@ Current milestone update, October 18: M4 is accepted under the owner's explicit 
 | [M5 decision runner evidence](M5-DECISION-RUNNER-EVIDENCE.md) | Owner and developer | Disabled paper proposals, applied cadence/rules, request/result/cost audit, recovery/concurrency tests and remaining data/fill/setup gaps |
 | [M5 offline simulation evidence](M5-OFFLINE-SIMULATION-EVIDENCE.md) | Owner and developer | Synthetic decimal orders/fills, cash/share reservations, concurrency/recovery, accounting reports and remaining real-data/activation gaps |
 | [M5 execution and handoff evidence](M5-EXECUTION-HANDOFF-EVIDENCE.md) | Owner and developer | Versioned execution choices, recorded read-only input provenance, disabled proposal handoff, synthetic workflow tests and remaining owner/provider gaps |
+| [M5 watchlist and fee evidence](M5-WATCHLIST-EVIDENCE.md) | Owner and developer | Existing-gateway watchlist reads, actual On Watch retrieval, decimal percentage fees and validation |
+| [M5 owner mandate intake](M5-OWNER-MANDATE.md) | Owner and developer | Actual paper choices, delegated allocation/fee decisions, verified watchlist membership and application status |
 | [Repository AGENTS.md](../../AGENTS.md) | Codex | Concise standing development instructions |
 
 Open the repository root in VS Code so the repository instructions are available to Codex. Begin with milestone M0 in the checklist. Do not ask Codex to implement the entire roadmap in one unreviewed change.

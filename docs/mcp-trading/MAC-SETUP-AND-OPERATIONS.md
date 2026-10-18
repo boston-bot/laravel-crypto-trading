@@ -316,6 +316,8 @@ Research proposals are non-executable. Adopting research creates a thesis versio
 
 ## M4 runtime layout and operations
 
+M5 watchlist source follow-up (not deployed by this task): `ROBINHOOD_MCP_WATCHLISTS_ENABLED=false` independently gates the two reviewed read-only Robinhood watchlist tools. After deploying that source, an operator can explicitly enable manual reads and use `php artisan mcp:watchlist --account=<local-connection-id> --name='On Watch'` or the connection page. Reuse the app-owned OAuth connection; do not borrow browser/ChatGPT credentials. This neither edits brokerage lists nor changes paper allowlists or schedules. See [verification and limitations](M5-WATCHLIST-EVIDENCE.md).
+
 The runtime is installed at `~/Services/investing-ops/app` as a frozen, locally versioned release of the tested source (origin: the development repository), with `runtime/` (rendered nginx/PHP-FPM configs, socket, pid files) and `logs/` beside it. It serves `http://127.0.0.1:8080` through a dedicated nginx and PHP-FPM pair run as user LaunchAgents (`local.investing-ops.*`); Herd keeps port 80 and Valet stays untouched. See [M4 operations evidence](M4-OPERATIONS-EVIDENCE.md).
 
 ```bash

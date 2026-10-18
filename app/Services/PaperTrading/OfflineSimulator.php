@@ -53,6 +53,7 @@ final class OfflineSimulator
                 foreach (['fee_per_share', 'slippage_bps', 'quote_max_age_seconds', 'allow_fractional', 'allow_fractional_limit'] as $field) {
                     abort_unless($execution->payload[$field] === $assumptions->data[$field], 409, 'Fill assumptions differ from applied execution settings.');
                 }
+                abort_unless(($execution->payload['fee_bps'] ?? '0') === ($assumptions->data['fee_bps'] ?? '0'), 409, 'Percentage fee differs from applied execution settings.');
             }
             abort_unless($portfolio->ledger_version === $ledgerVersion, 409, 'Paper ledger changed.');
             $order = SimulationOrder::create(['paper_portfolio_id' => $portfolio->id, 'policy_application_id' => $policy->id,
@@ -367,7 +368,18 @@ final class OfflineSimulator
 
     private function commitment(SimulationOrder $order, Decimal $quantity): Decimal
     {
-        return $quantity->multipliedBy(Decimal::from($order->price_bound)->plus(Decimal::from($order->assumptions['fee_per_share'])));
+        $price = Decimal::from($order->price_bound);
+
+        return $quantity->multipliedBy($price)->plus($this->fee($order, $quantity, $price, RoundingMode::CEILING));
+    }
+
+    private function fee(SimulationOrder $order, Decimal $quantity, Decimal $price, RoundingMode $rounding = RoundingMode::DOWN): Decimal
+    {
+        $rate = Decimal::from($order->assumptions['fee_bps'] ?? '0')->dividedBy(Decimal::from('10000'), 12);
+
+        // Round fees down to ledger precision; reserve upward so partial fills cannot overdraw cash.
+        return $quantity->multipliedBy(Decimal::from($order->assumptions['fee_per_share']))
+            ->plus($quantity->multipliedBy($price)->multipliedBy($rate))->rounded(18, $rounding);
     }
 
     private function fill(Portfolio $portfolio, SimulationOrder $order, Decimal $quantity, Decimal $price, SimulationObservation $observation, string $eventKey, array $evaluation): void
@@ -375,11 +387,12 @@ final class OfflineSimulator
         $position = $this->position($portfolio, $order);
         $evaluation['position_before'] = $position->only(['quantity', 'reserved_quantity', 'cost_basis', 'realized_pnl']);
         $evaluation['cash_before'] = $portfolio->cash;
-        $fee = $quantity->multipliedBy(Decimal::from($order->assumptions['fee_per_share']));
+        $fee = $this->fee($order, $quantity, $price);
         $notional = $quantity->multipliedBy($price);
         if ($order->side === 'BUY') {
             $delta = $notional->plus($fee)->multipliedBy(Decimal::from('-1'));
-            $release = $this->commitment($order, $quantity);
+            $remaining = Decimal::from($order->quantity)->minus(Decimal::from($order->filled_quantity))->minus($quantity);
+            $release = Decimal::from($order->reserved_cash)->minus($this->commitment($order, $remaining));
             $order->reserved_cash = (string) Decimal::from($order->reserved_cash)->minus($release);
             $portfolio->reserved_cash = (string) Decimal::from($portfolio->reserved_cash)->minus($release);
             $position->quantity = (string) Decimal::from($position->quantity)->plus($quantity);

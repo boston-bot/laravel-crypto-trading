@@ -69,6 +69,11 @@
             <div class="read-links">
                 @foreach (['portfolio', 'positions', 'orders'] as $read)<a class="btn btn-secondary btn-sm" href="{{ route('mcp.read', $read) }}" data-read>{{ ucfirst($read) }}</a>@endforeach
             </div>
+            <form method="get" action="{{ route('mcp.watchlist.read') }}" class="inline-fields" data-read>
+                <label class="field">Robinhood watchlist name<input name="name" value="On Watch" required maxlength="128"></label>
+                <button class="btn btn-secondary btn-sm" type="submit" @disabled(!config('robinhood_mcp.watchlists_enabled'))>Read watchlist</button>
+            </form>
+            <p class="note">Watchlists belong to the authorized Robinhood user. Reading one does not grant trading eligibility or update paper permissions. @if(!config('robinhood_mcp.watchlists_enabled'))Watchlist reads are disabled in configuration.@endif</p>
             @foreach (['instruments', 'quotes'] as $read)
                 <form method="get" action="{{ route('mcp.read', $read) }}" class="inline-fields" data-read>
                     <label class="field">Equity symbol<input name="symbol" placeholder="Symbol" required pattern="[A-Z][A-Z0-9.\-]{0,14}" autocomplete="off" spellcheck="false"></label>

@@ -18,7 +18,7 @@ final class ExecutionPolicies
 {
     public const FIELDS = ['decision_sleeve', 'order_type', 'session', 'time_in_force', 'initial_holdings', 'allowed_symbols',
         'allow_entries', 'allow_exits', 'allow_ai_sizing', 'allow_fractional', 'allow_fractional_limit',
-        'fee_per_share', 'slippage_bps', 'limit_offset_bps', 'quote_max_age_seconds'];
+        'fee_per_share', 'fee_bps', 'slippage_bps', 'limit_offset_bps', 'quote_max_age_seconds'];
 
     public static function current(Portfolio $portfolio): ?ExecutionVersion
     {
@@ -38,7 +38,7 @@ final class ExecutionPolicies
             'session' => ['nullable', 'in:regular'], 'time_in_force' => ['nullable', 'in:day'],
             'initial_holdings' => ['nullable', 'in:cash_only'], 'allowed_symbols' => ['nullable', 'array', 'list', 'min:1', 'max:100'],
             'allowed_symbols.*' => ['required', 'string', 'distinct:strict', 'regex:/^[A-Z][A-Z0-9.-]{0,15}$/D'],
-            'fee_per_share' => $decimal, 'slippage_bps' => $decimal, 'limit_offset_bps' => $decimal,
+            'fee_per_share' => $decimal, 'fee_bps' => $decimal, 'slippage_bps' => $decimal, 'limit_offset_bps' => $decimal,
             'quote_max_age_seconds' => ['nullable', 'integer', 'min:1', 'max:300']];
         foreach (['allow_entries', 'allow_exits', 'allow_ai_sizing', 'allow_fractional', 'allow_fractional_limit'] as $field) {
             if (isset($input[$field]) && ! is_bool($input[$field])) {
@@ -47,6 +47,13 @@ final class ExecutionPolicies
             $rules[$field] = ['nullable', 'boolean'];
         }
         $payload = array_replace(array_fill_keys(self::FIELDS, null), Validator::make($input, $rules)->validate());
+        // Older drafts/clients contained only per-share fees. Preserve that fee contract.
+        if (! array_key_exists('fee_bps', $input)) {
+            $payload['fee_bps'] = '0';
+        }
+        if ($payload['fee_bps'] !== null && Decimal::from($payload['fee_bps'])->compareTo(Decimal::from('10000')) > 0) {
+            throw ValidationException::withMessages(['fee_bps' => 'Percentage fees cannot exceed 10000 basis points.']);
+        }
         foreach (['slippage_bps', 'limit_offset_bps'] as $field) {
             if ($payload[$field] !== null && Decimal::from($payload[$field])->compareTo(Decimal::from('9999')) > 0) {
                 throw ValidationException::withMessages([$field => 'Value must be below 10000 basis points.']);

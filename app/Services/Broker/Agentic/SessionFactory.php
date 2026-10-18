@@ -12,6 +12,9 @@ class SessionFactory
     {
         $allowed = [];
         foreach (Operation::cases() as $operation) {
+            if (in_array($operation, [Operation::Watchlists, Operation::WatchlistItems], true) && ! config('robinhood_mcp.watchlists_enabled')) {
+                continue;
+            }
             $profile = config('robinhood_mcp.operations.'.$operation->value);
             if (($profile['reviewed_read_only'] ?? false) === true && is_string($profile['tool'] ?? null)) {
                 $allowed[] = $profile['tool'];

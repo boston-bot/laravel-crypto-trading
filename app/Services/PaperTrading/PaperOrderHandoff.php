@@ -139,7 +139,7 @@ final class PaperOrderHandoff
                         continue;
                     }
                     $until = CarbonImmutable::parse($decision['expires_at'])->min($run->expires_at)->min(CarbonImmutable::parse($session['closes_at']));
-                    $assumptions = new SimulationAssumptions(array_intersect_key($rules, array_flip(['fee_per_share', 'slippage_bps', 'allow_fractional', 'allow_fractional_limit', 'quote_max_age_seconds'])) +
+                    $assumptions = new SimulationAssumptions(array_intersect_key($rules, array_flip(['fee_per_share', 'fee_bps', 'slippage_bps', 'allow_fractional', 'allow_fractional_limit', 'quote_max_age_seconds'])) +
                         ['session_open_equity' => $baseline['equity'], 'session_date' => $session['date']]);
                     $order = $this->simulator->submit($current, $actor, $policy->id, $portfolio->fresh()->ledger_version,
                         ['request_id' => (string) Uuid::uuid5($run->id, $symbol), 'symbol' => $symbol, 'side' => $decision['action'], 'sleeve' => $rules['decision_sleeve'],

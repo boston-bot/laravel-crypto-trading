@@ -2,6 +2,7 @@
 
 return [
     'enabled' => filter_var(env('ROBINHOOD_MCP_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'watchlists_enabled' => filter_var(env('ROBINHOOD_MCP_WATCHLISTS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'client_id' => env('ROBINHOOD_MCP_CLIENT_ID'),
     'redirect_uri' => env('ROBINHOOD_MCP_REDIRECT_URI'),
     'max_pages' => 20,
@@ -9,6 +10,21 @@ return [
     'max_age_seconds' => 300,
     // Reviewed application code/configuration only. Never populate from model or broker prose.
     'operations' => [
+        // Reviewed from the app-owned capability catalog, October 18, 2026.
+        // These lists belong to the authorized Robinhood user, not the bound agentic account.
+        'watchlists' => [
+            'tool' => 'get_watchlists', 'reviewed_read_only' => true,
+            'fingerprint' => 'b7238914b576828e632bdf7225bbc8c66b7ee1e391886405964d673ec9fa4fde',
+            'records' => 'data.watchlists', 'pagination' => ['kind' => 'single'],
+            'normalizer' => 'robinhood_v1', 'coverage' => 'authorized_user_watchlists',
+        ],
+        'watchlist_items' => [
+            'tool' => 'get_watchlist_items', 'reviewed_read_only' => true,
+            'fingerprint' => '08d364ccb828f8fcfd5eafc467e21bd62663ba04828504295cfd15ebbdfbaf6e',
+            'filters' => ['list_id' => 'list_id'], 'required_filter' => 'list_id',
+            'records' => 'data.items', 'pagination' => ['kind' => 'single'],
+            'normalizer' => 'robinhood_v1', 'coverage' => 'authorized_user_watchlist_items',
+        ],
         // Reviewed against the app-authorized catalog on October 16, 2026.
         'accounts' => [
             'tool' => 'get_accounts',

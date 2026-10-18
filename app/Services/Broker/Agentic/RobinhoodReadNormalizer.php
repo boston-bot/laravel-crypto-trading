@@ -28,6 +28,10 @@ final class RobinhoodReadNormalizer
             Operation::Instruments => ['id' => $row['instrument_id'] ?? null, 'symbol' => $row['symbol'] ?? null,
                 'name' => $row['name'] ?? null, 'asset_class' => 'equity'],
             Operation::Quotes => self::quote($row),
+            Operation::Watchlists => ['id' => $row['id'] ?? null, 'name' => $row['display_name'] ?? null,
+                'owner_type' => $row['owner_type'] ?? null, 'item_count' => $row['item_count'] ?? null],
+            Operation::WatchlistItems => ['id' => $row['object_id'] ?? null, 'object_type' => $row['object_type'] ?? null,
+                'symbol' => $row['symbol'] ?? null],
             default => throw new ReadFailure(ReadError::Unsupported),
         };
     }

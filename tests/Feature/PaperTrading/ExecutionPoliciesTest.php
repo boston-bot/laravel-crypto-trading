@@ -122,4 +122,18 @@ class ExecutionPoliciesTest extends TestCase
         $this->assertSame(['DEMO', 'SECOND'], $saved['allowed_symbols']);
         $this->get('/mcp/dashboard/control')->assertOk()->assertSee('AI may propose new buys')->assertSee('Allowed stock / ETF symbols');
     }
+
+    public function test_percentage_fee_is_explicit_decimal_bounded_and_legacy_per_share_contract_is_preserved(): void
+    {
+        $policies = app(ExecutionPolicies::class);
+        $this->assertSame('0', $policies->validate(E::payload(), true)['fee_bps']);
+        $this->assertSame('100', $policies->validate(E::payload(['fee_bps' => '100', 'fee_per_share' => '0']), true)['fee_bps']);
+        $this->actingAs($this->user);
+        foreach ([100, 0.1, '-1', '10000.00000001'] as $fee) {
+            $this->postJson('/mcp/paper/execution', $this->form(['execution_json' => json_encode(E::payload(['fee_bps' => $fee]))]))->assertUnprocessable();
+        }
+        $this->post('/mcp/paper/execution', $this->form(['execution_json' => json_encode(E::payload(['fee_bps' => '100', 'fee_per_share' => '0']))]))->assertRedirect();
+        $this->assertSame('100', ExecutionVersion::sole()->payload['fee_bps']);
+        $this->assertStringNotContainsString('fee_bps', DB::table('mcp_paper_execution_versions')->sole()->payload);
+    }
 }

@@ -1,0 +1,159 @@
+{
+    "provenance": "App-owned stored MCP tools/list schemas; descriptions/defaults/examples removed; no account data or credentials",
+    "tools": {
+        "get_watchlists": {
+            "name": "get_watchlists",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "watchlists": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": [
+                                        "null",
+                                        "object"
+                                    ],
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "display_name": {
+                                            "type": "string"
+                                        },
+                                        "display_description": {
+                                            "type": "string"
+                                        },
+                                        "icon_emoji": {
+                                            "type": "string"
+                                        },
+                                        "owner_type": {
+                                            "type": "string"
+                                        },
+                                        "item_count": {
+                                            "type": "integer"
+                                        },
+                                        "allowed_object_types": {
+                                            "type": [
+                                                "null",
+                                                "array"
+                                            ],
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "display_name",
+                                        "owner_type",
+                                        "item_count"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            }
+                        },
+                        "required": [
+                            "watchlists"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            },
+            "fingerprint": "b7238914b576828e632bdf7225bbc8c66b7ee1e391886405964d673ec9fa4fde"
+        },
+        "get_watchlist_items": {
+            "name": "get_watchlist_items",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "list_id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "list_id"
+                ],
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "items": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": [
+                                        "null",
+                                        "object"
+                                    ],
+                                    "properties": {
+                                        "object_id": {
+                                            "type": "string"
+                                        },
+                                        "object_type": {
+                                            "type": "string"
+                                        },
+                                        "symbol": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "object_id",
+                                        "object_type"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            },
+                            "has_futures_contracts": {
+                                "type": "boolean"
+                            },
+                            "display_name": {
+                                "type": "string"
+                            },
+                            "owner_type": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "items",
+                            "has_futures_contracts"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            },
+            "fingerprint": "08d364ccb828f8fcfd5eafc467e21bd62663ba04828504295cfd15ebbdfbaf6e"
+        }
+    }
+}

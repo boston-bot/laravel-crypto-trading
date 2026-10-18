@@ -25,7 +25,7 @@ class ConsoleInterfaceTest extends TestCase
         'mcp.research.unwatch', 'mcp.research.adopt', 'mcp.thesis.store', 'mcp.operations.phone', 'mcp.operations.health',
         'mcp.operations.test-alert', 'mcp.operations.summary', 'mcp.operations.database', 'mcp.control.store', 'mcp.control.proposal', 'mcp.control.restore', 'mcp.control.apply',
         'mcp.paper.execution.store', 'mcp.paper.execution.apply', 'mcp.paper.market.collect', 'mcp.paper.handoff', 'mcp.connect', 'mcp.renew', 'mcp.discover', 'mcp.accounts', 'mcp.bind'],
-        'GET' => ['mcp.read']];
+        'GET' => ['mcp.read', 'mcp.watchlist.read']];
 
     public function test_every_console_page_renders_without_a_connection_and_offers_no_account_actions(): void
     {

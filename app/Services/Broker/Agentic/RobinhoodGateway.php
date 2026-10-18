@@ -28,6 +28,9 @@ final class RobinhoodGateway implements BrokerGateway
         $connection->refresh();
         $generation = $connection->auth_generation;
         $boundAccount = $connection->bound_account_id;
+        if (in_array($operation, [Operation::Watchlists, Operation::WatchlistItems], true) && ! $boundAccount) {
+            throw new ReadFailure(ReadError::AccountMismatch);
+        }
         $scoped = in_array($operation, [Operation::Portfolio, Operation::Positions, Operation::Orders, Operation::CashFlows, Operation::History], true);
         if ($scoped && ! $connection->bound_account_id) {
             throw new ReadFailure(ReadError::AccountMismatch);
@@ -51,7 +54,7 @@ final class RobinhoodGateway implements BrokerGateway
                 throw new ReadFailure(ReadError::Malformed);
             }
             foreach ($filters as $key => $value) {
-                if (! in_array($key, ['symbol', 'instrument_id', 'order_id'], true) || ! isset($profile['filters'][$key]) || ! is_string($value) || $value === '') {
+                if (! in_array($key, ['symbol', 'instrument_id', 'order_id', 'list_id'], true) || ! isset($profile['filters'][$key]) || ! is_string($value) || $value === '' || strlen($value) > 128) {
                     throw new ReadFailure(ReadError::Malformed);
                 }
                 $arguments[$profile['filters'][$key]] = in_array($key, $profile['array_filters'] ?? [], true) ? [$value] : $value;
@@ -119,6 +122,9 @@ final class RobinhoodGateway implements BrokerGateway
                     }
                     if (($profile['normalizer'] ?? null) === 'robinhood_v1') {
                         $fields = RobinhoodReadNormalizer::fields($operation, $row, $boundAccount);
+                    }
+                    if ($operation === Operation::WatchlistItems) {
+                        $fields += ['list_id' => $filters['list_id'], 'watchlist_scope' => 'request_list_id'];
                     }
                     if (($profile['exact_symbol'] ?? false) && ($fields['symbol'] ?? null) !== ($filters['symbol'] ?? null)) {
                         continue;

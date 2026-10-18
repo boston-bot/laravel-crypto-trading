@@ -4,6 +4,8 @@ October 18, 2026. Source development following `d3c4a26`; **M5 remains partial**
 
 ## Owner settings and authorization
 
+Subsequent October 18 update: [actual owner intake](M5-OWNER-MANDATE.md) now records supplied/delegated choices and verified Robinhood “On Watch” membership. [Follow-up evidence](M5-WATCHLIST-EVIDENCE.md) adds percentage fees and watchlist reads through the existing gateway. Earlier pending-choice/per-share-only statements below describe this original increment; runtime application remains pending.
+
 The Control Center now has labeled execution controls with append-only draft/application history. No owner values are invented: unspecified fields stay null, and a complete draft requires a separate authenticated, CSRF-protected apply action. Applying settings does not enable any service, initialize another cash balance or rebalance holdings.
 
 Settings bind to the current immutable allocation-policy application and contain a selected sleeve, symbol allowlist, initial-holdings convention, order/session/duration choices, entry/exit/AI target-weight permissions, fractional permissions, per-share fees, adverse slippage, limit offset and quote-age tolerance. Protected fields, float decimal inputs, textual booleans in JSON, incomplete applications, stale revisions, changed bindings and stale allocation-policy references are rejected. Browser selects are normalized explicitly to booleans; false, zero and unspecified remain distinct. Request IDs are idempotent. Actor identity is derived from authenticated server context, not posted `actor_id`.

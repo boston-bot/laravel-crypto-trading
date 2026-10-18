@@ -443,4 +443,47 @@ class OfflineSimulatorTest extends TestCase
         $this->assertSame('cash_floor_exceeded', SimulationEvent::latest('id')->first()->reason);
         $this->decimal('0', $this->portfolio->fresh()->reserved_cash);
     }
+
+    public function test_percentage_fees_follow_fill_value_across_partial_buy_and_sell_and_duplicate_observations(): void
+    {
+        $assumptions = ['fee_per_share' => '0', 'fee_bps' => '100', 'slippage_bps' => '0'];
+        $buy = $this->submit(assumptions: $assumptions);
+        $this->decimal('1020.1', $this->portfolio->fresh()->reserved_cash);
+        $this->travel(1)->seconds();
+        $quote = F::quote(['ask_size' => '4']);
+        $engine = app(OfflineSimulator::class);
+        $buy = $engine->observe($this->connection, $this->connection->user_id, $buy->id, $quote);
+        $this->decimal('9596', $this->portfolio->fresh()->cash);
+        $this->decimal('612.06', $this->portfolio->fresh()->reserved_cash);
+        $engine->observe($this->connection, $this->connection->user_id, $buy->id, $quote);
+        $this->decimal('9596', $this->portfolio->fresh()->cash);
+        $this->travel(1)->seconds();
+        $buy = $this->observe($buy, ['ask_size' => '6']);
+        $this->assertSame('filled', $buy->status);
+        $this->decimal('8990', $this->portfolio->fresh()->cash);
+        $this->decimal('0', $this->portfolio->fresh()->reserved_cash);
+        $this->decimal('1010', SimulationPosition::sole()->cost_basis);
+        $sell = $this->submit(['side' => 'SELL', 'price_bound' => '99'], $assumptions);
+        $this->travel(1)->seconds();
+        $this->assertSame('filled', $this->observe($sell)->status);
+        $this->decimal('9970.1', $this->portfolio->fresh()->cash);
+        $this->decimal('-29.9', SimulationPosition::sole()->realized_pnl);
+        $this->decimal('19.9', app(SimulationOverview::class)->for($this->connection, app(PaperPolicies::class)->state($this->connection))['fees']);
+    }
+
+    public function test_fractional_partial_fills_release_percentage_reservation_without_rounding_dust(): void
+    {
+        $marks = ['DEMO' => F::quote(['ask' => '1', 'bid' => '1'])];
+        $buy = $this->submit(['quantity' => '0.00000003', 'price_bound' => '1'],
+            ['fee_per_share' => '0', 'fee_bps' => '0.00000001', 'slippage_bps' => '0', 'allow_fractional' => true, 'allow_fractional_limit' => true], $marks);
+        $this->decimal('0.000000030000000001', $this->portfolio->fresh()->reserved_cash);
+        for ($i = 0; $i < 3; $i++) {
+            $this->travel(1)->seconds();
+            $buy = $this->observe($buy, ['bid' => '1', 'ask' => '1', 'ask_size' => '0.00000001']);
+            $this->assertGreaterThanOrEqual(0, Decimal::from($this->portfolio->fresh()->reserved_cash)->compareTo(Decimal::from('0')));
+        }
+        $this->assertSame('filled', $buy->status);
+        $this->decimal('0', $this->portfolio->fresh()->reserved_cash);
+        $this->decimal('9999.99999997', $this->portfolio->fresh()->cash);
+    }
 }

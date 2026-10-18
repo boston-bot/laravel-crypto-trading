@@ -60,7 +60,10 @@ final class Capabilities
         }
         ksort($tools);
         $changed = false;
-        foreach (config('robinhood_mcp.operations') as $profile) {
+        foreach (config('robinhood_mcp.operations') as $operation => $profile) {
+            if (in_array($operation, ['watchlists', 'watchlist_items'], true) && ! config('robinhood_mcp.watchlists_enabled')) {
+                continue;
+            }
             if (($profile['reviewed_read_only'] ?? false) && ($tools[$profile['tool']]['fingerprint'] ?? null) !== ($profile['fingerprint'] ?? null)) {
                 $changed = true;
             }
@@ -74,6 +77,9 @@ final class Capabilities
 
     public function profile(Operation $operation, array $manifest): array
     {
+        if (in_array($operation, [Operation::Watchlists, Operation::WatchlistItems], true) && ! config('robinhood_mcp.watchlists_enabled')) {
+            throw new ReadFailure(ReadError::Disabled);
+        }
         $profile = config('robinhood_mcp.operations.'.$operation->value);
         if (! is_array($profile) || ($profile['reviewed_read_only'] ?? false) !== true) {
             throw new ReadFailure(ReadError::Unsupported);
