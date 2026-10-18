@@ -60,19 +60,22 @@ final class ResearchBudget
      * Call inside a transaction. The locked period row serializes reservations so concurrent calls cannot overspend.
      * Returns true when this reservation first crosses the reduction threshold.
      */
-    public function reserve(string $period, Decimal $amount, bool $routine): bool
+    public function reserve(string $period, Decimal $amount, bool $routine, ?Decimal $ceiling = null): bool
     {
         $config = self::config();
+        // A paper mandate can tighten admission without relabeling the shared application's historical budget.
+        $limit = $ceiling !== null && $ceiling->compareTo($config['envelope']) < 0 ? $ceiling : $config['envelope'];
         $row = $this->lockedRow($period, $config);
         $committed = $config['fixed']->plus(Decimal::from($row->actual))->plus(Decimal::from($row->reserved));
-        $threshold = $config['envelope']->multipliedBy($config['reduce_at']);
-        if ($committed->plus($amount)->compareTo($config['envelope']) > 0) {
+        $threshold = $limit->multipliedBy($config['reduce_at']);
+        if ($committed->plus($amount)->compareTo($limit) > 0) {
             throw new ResearchFailure(ResearchError::BudgetExhausted);
         }
         if ($routine && $committed->compareTo($threshold) >= 0) {
             throw new ResearchFailure(ResearchError::BudgetReduced);
         }
-        $crossed = $row->reduced_at === null && $committed->plus($amount)->compareTo($threshold) >= 0;
+        $globalThreshold = $config['envelope']->multipliedBy($config['reduce_at']);
+        $crossed = $row->reduced_at === null && $committed->plus($amount)->compareTo($globalThreshold) >= 0;
         $row->update(['reserved' => (string) Decimal::from($row->reserved)->plus($amount), 'envelope' => (string) $config['envelope'],
             'fixed_costs' => (string) $config['fixed'], 'reduced_at' => $crossed ? now() : $row->reduced_at]);
 

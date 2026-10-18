@@ -15,7 +15,7 @@
     $pretty = fn ($value) => json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 @endphp
 
-<x-callout tone="warn" :title="$paper ? 'Paper policy selected; automatic execution is unavailable' : 'Paper settings are drafts only'">Saving or restoring creates a draft. Applying a saved draft selects rules for a separate virtual portfolio and initializes virtual cash once. Neither action starts a scheduler, an AI request or a trading engine. Effective research still uses application configuration and the reviewed prompt below. There is no live-mode switch.</x-callout>
+<x-callout tone="warn" :title="$paper ? 'Paper policy selected; automatic execution is unavailable' : 'Paper settings are drafts only'">Saving or restoring creates a draft. Applying it selects rules for a separate virtual portfolio and initializes virtual cash once. Neither action enables AI requests or scheduling. Paper decisions require a separate configured opt-in; their proposals cannot create orders or fills. There is no live-mode switch.</x-callout>
 
 <div class="grid-2">
     <x-panel title="Currently used by this application" icon="shield">
@@ -23,15 +23,15 @@
             <dt>Research</dt><dd>{{ config('research.enabled') ? 'Enabled' : 'Disabled' }} · {{ $research ? ($research['readiness'] ?? 'Ready') : 'Account unbound' }}</dd>
             <dt>Configured model</dt><dd>{{ config('research.model') ?: 'Not configured' }}</dd>
             <dt>Research dispatch</dt><dd>Every five minutes when research is enabled; this detects pending events, not a guaranteed model call every five minutes.</dd>
-            <dt>Research cache</dt><dd>{{ config('research.cache_hours') }} hours on material thesis/evidence inputs; separate M5 decision cadence is not implemented.</dd>
+            <dt>Research cache</dt><dd>{{ config('research.cache_hours') }} hours on material thesis/evidence inputs. Paper decisions use separate short-lived windows, not this cache.</dd>
             <dt>Prompt version</dt><dd>{{ App\Services\Research\ResearchPrompt::VERSION }}</dd>
             <dt>Scope</dt><dd>Read-only research. Model output cannot change limits or submit orders.</dd>
         </dl>
         <p class="note">Configuration shown belongs to this running checkout. Production and development settings can differ.</p>
     </x-panel>
     <x-panel title="How rules reach the AI" icon="spark">
-        <p>The planned M5 decision runner will attach the applicable saved-and-activated paper policy and guidance version to each bounded request. Laravel will enforce numeric limits independently.</p>
-        <p>Today, saved paper drafts are <strong>not sent</strong>. ChatGPT conversations do not automatically update this application. You can paste a settings proposal below, review the editor and save a new draft yourself.</p>
+        <p>The paper decision runner attaches the applied policy/guidance snapshot and virtual ledger version to each bounded request when separately enabled and configured. Its proposals do not submit orders. The offline simulator accepts explicit synthetic scenarios only; automatic proposal-to-order checks remain unfinished.</p>
+        <p>Unapplied paper drafts are <strong>not sent</strong>. ChatGPT conversations do not automatically update this application. You can paste a settings proposal below, review the editor and save a new draft yourself.</p>
         <p class="note">Strategy guidance can describe what to look for. It cannot grant brokerage access, change credentials or bypass enforced limits. Changing an allocation target does not rebalance any holdings.</p>
     </x-panel>
 </div>
@@ -43,7 +43,7 @@
 @if(!$connection?->bound_account_id)
     <x-callout tone="info">Bind an account before saving account-scoped paper planning versions. No defaults have been saved.</x-callout>
 @else
-<x-panel title="Applied paper plan and virtual cash" subtitle="Simulation only. These balances are not brokerage funds. There is no simulated order/fill engine yet." icon="wallet">
+<x-panel title="Applied paper plan and virtual cash" subtitle="Simulation only. These balances are not brokerage funds. Offline synthetic fills are separate from AI proposals and broker activity." icon="wallet">
     @if($paper)
         <dl class="kv kv-grid">
             <dt>Applied rules</dt><dd>Draft v{{ $paper['application']->snapshot['mandate_version'] }} · paper policy revision {{ $paper['application']->revision }} · <x-time :at="$paper['application']->applied_at" /></dd>
@@ -52,7 +52,7 @@
             <dt>Reserved virtual cash</dt><dd><x-money :value="$paper['portfolio']->reserved_cash" /></dd>
             <dt>Available virtual cash</dt><dd><x-money :value="$paper['available_cash']" /></dd>
             <dt>Cash ledger version</dt><dd>{{ $paper['portfolio']->ledger_version }}</dd>
-            <dt>AI / automatic cadence</dt><dd>Not connected to this paper plan. No paper AI review or execution has been started.</dd>
+            <dt>AI / automatic cadence</dt><dd>Separate opt-in: {{ config('paper.decisions_enabled') ? 'enabled in configuration' : 'disabled in configuration' }}. See recorded decision windows below; automatic order execution is unavailable.</dd>
         </dl>
         <details><summary>Inspect the applied paper rules and guidance</summary><pre class="code-block">{{ $pretty($paper['application']->snapshot) }}</pre></details>
         <details><summary>Inspect virtual cash entries</summary><div class="table-wrap"><table class="data"><thead><tr><th>Ledger version</th><th>Entry</th><th>Amount</th><th>Balance</th><th>Recorded</th></tr></thead><tbody>
@@ -122,6 +122,13 @@
     </tbody></table></div>
     {{ $control['history']->links('mcp.pagination') }}
 </x-panel>
+@endif
+
+@if($control['decisions'])
+    @include('mcp.dashboard.paper-decisions', ['decisions' => $control['decisions']])
+@endif
+@if($control['simulation'])
+    @include('mcp.dashboard.paper-simulation', ['simulation' => $control['simulation']])
 @endif
 
 <x-panel title="Current research instructions" subtitle="Current code-defined instructions, not a historical request transcript. Paper guidance above is not included." icon="terminal">

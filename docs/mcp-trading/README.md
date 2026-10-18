@@ -19,6 +19,8 @@ Current milestone update, October 18: M4 is accepted under the owner's explicit 
 | [M5 design](M5-DESIGN.md) | Owner and developer | Frequent discovery, AI-selected multi-day/week paper positions, proposed cadence, budget and unresolved mandate/provider inputs; not implemented functionality |
 | [M5 control-center evidence](M5-CONTROL-CENTER-EVIDENCE.md) | Owner and developer | Initial paper-draft editor, history/restore, proposal exchange and PostgreSQL research browsing; tests and remaining activation/deployment gaps |
 | [M5 applied paper policy evidence](M5-PAPER-POLICY-EVIDENCE.md) | Owner and developer | Explicit policy application, separate virtual opening cash, concurrent/idempotent initialization and remaining runner/fill gaps |
+| [M5 decision runner evidence](M5-DECISION-RUNNER-EVIDENCE.md) | Owner and developer | Disabled paper proposals, applied cadence/rules, request/result/cost audit, recovery/concurrency tests and remaining data/fill/setup gaps |
+| [M5 offline simulation evidence](M5-OFFLINE-SIMULATION-EVIDENCE.md) | Owner and developer | Synthetic decimal orders/fills, cash/share reservations, concurrency/recovery, accounting reports and remaining real-data/activation gaps |
 | [Repository AGENTS.md](../../AGENTS.md) | Codex | Concise standing development instructions |
 
 Open the repository root in VS Code so the repository instructions are available to Codex. Begin with milestone M0 in the checklist. Do not ask Codex to implement the entire roadmap in one unreviewed change.

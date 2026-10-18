@@ -7,6 +7,8 @@ use App\Models\Monitoring\Incident;
 use App\Services\Broker\Agentic\BrokerGateway;
 use App\Services\Broker\Agentic\RobinhoodGateway;
 use App\Services\Monitoring\AccountScope;
+use App\Services\PaperTrading\DecisionInputs;
+use App\Services\PaperTrading\StoredDecisionInputs;
 use App\Services\Research\BrokerMarketData;
 use App\Services\Research\MarketDataProvider;
 use App\Services\Research\OpenAiResearchModel;
@@ -31,6 +33,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(BrokerGateway::class, RobinhoodGateway::class);
         $this->app->bind(MarketDataProvider::class, BrokerMarketData::class);
         $this->app->bind(ResearchModel::class, OpenAiResearchModel::class);
+        $this->app->bind(DecisionInputs::class, StoredDecisionInputs::class);
     }
 
     /**

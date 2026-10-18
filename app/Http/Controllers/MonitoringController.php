@@ -16,7 +16,9 @@ use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\Monitor;
 use App\Services\Monitoring\RiskObservations;
 use App\Services\Operations\OperationsHealth;
+use App\Services\PaperTrading\DecisionOverview;
 use App\Services\PaperTrading\PaperPolicies;
+use App\Services\PaperTrading\SimulationOverview;
 use App\Services\Research\ResearchOverview;
 use Illuminate\Http\Request;
 use Throwable;
@@ -58,6 +60,8 @@ class MonitoringController extends Controller
                 'history' => $versions ? (clone $versions)->latest('version')->paginate(10, ['*'], 'versions_page')->withQueryString() : null,
                 'runs' => $scope ? ResearchRun::where('mcp_connection_id', $connection->id)->where('scope', $scope)->latest('created_at')->orderByDesc('id')->paginate(10, ['*'], 'runs_page')->withQueryString() : null,
                 'sources' => $scope ? ResearchSource::where('mcp_connection_id', $connection->id)->where('scope', $scope)->latest('id')->paginate(10, ['*'], 'sources_page')->withQueryString() : null];
+            $control['decisions'] = $scope ? app(DecisionOverview::class)->for($connection, $control['paper']) : null;
+            $control['simulation'] = $scope ? app(SimulationOverview::class)->for($connection, $control['paper']) : null;
         }
 
         return response()->view('mcp.dashboard', compact('pages', 'page', 'connection', 'snapshot', 'runs', 'incidents', 'observations', 'freshness', 'theses', 'pendingNotifications', 'research', 'operations', 'openIncidents', 'control'));

@@ -16,6 +16,7 @@ use App\Jobs\SyncRobinhoodPositionsJob;
 use App\Models\McpConnection;
 use App\Models\User;
 use App\Services\Monitoring\MonitoringScheduler;
+use App\Services\PaperTrading\DecisionScheduler;
 use App\Services\Research\ResearchScheduler;
 use App\Services\Research\ResearchSummaries;
 use App\Support\Mcp\DatabaseReadiness;
@@ -124,6 +125,22 @@ if (config('mcp.monitoring_enabled')) {
 
 if (config('research.enabled')) {
     Schedule::command('mcp:research --once')->everyFiveMinutes()->withoutOverlapping();
+}
+
+Artisan::command('mcp:paper-decisions {--once} {--sync : Process the current window in the foreground}', function (): int {
+    if (! $this->option('once')) {
+        $this->error('Use --once; recurring work belongs to the existing scheduler.');
+
+        return 1;
+    }
+    $count = app(DecisionScheduler::class)->tick((bool) $this->option('sync'));
+    $this->line('Paper decision windows dispatched: '.$count);
+
+    return 0;
+})->purpose('Bounded non-executable paper proposals; requires explicit enablement, applied policy and reviewed AI configuration');
+
+if (config('paper.decisions_enabled')) {
+    Schedule::command('mcp:paper-decisions --once')->everyMinute()->withoutOverlapping();
 }
 
 if (config('operations.enabled')) {

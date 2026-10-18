@@ -27,8 +27,13 @@
         <env name="MCP_MONITORING_ENABLED" value="false" force="true"/>
         <env name="BROKERAGE_WRITES_ENABLED" value="false" force="true"/>
         <env name="MCP_RESEARCH_ENABLED" value="false" force="true"/>
+        <env name="MCP_PAPER_DECISIONS_ENABLED" value="false" force="true"/>
+        <env name="MCP_PAPER_OFFLINE_SIMULATION_ENABLED" value="false" force="true"/>
         <env name="MCP_RESEARCH_API_KEY" value="" force="true"/>
         <env name="MCP_RESEARCH_MODEL" value="" force="true"/>
+        <env name="MCP_RESEARCH_INPUT_COST_PER_MTOK" value="" force="true"/>
+        <env name="MCP_RESEARCH_OUTPUT_COST_PER_MTOK" value="" force="true"/>
+        <env name="MCP_RESEARCH_FIXED_MONTHLY_COSTS" value="" force="true"/>
         <env name="MCP_OPERATIONS_ENABLED" value="false" force="true"/>
         <env name="MCP_NTFY_TOPIC" value="" force="true"/>
         <env name="MCP_HEALTHCHECKS_PING_URL" value="" force="true"/>

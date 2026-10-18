@@ -1,5 +1,9 @@
 # M5 applied paper policy and opening cash ledger
 
+Later October 18: [offline simulation evidence](M5-OFFLINE-SIMULATION-EVIDENCE.md) adds synthetic orders/fills and accounting on this separate ledger. The opening-cash checkpoint below is historical; automatic proposal execution and deployment remain unfinished.
+
+Historical checkpoint below. The later [decision-runner increment](M5-DECISION-RUNNER-EVIDENCE.md) connects applied rules/cadence to disabled proposals and request auditing; simulated fills and runtime deployment remain unfinished.
+
 October 18, 2026. The owner explicitly waived the seven-session M4 acceptance period and directed continued work. M4 is accepted with that period **unverified (0/7 completed)**. This M5 increment preserves existing control-center work and historical M4 evidence. It does not change the installed runtime, run AI requests or enable trading.
 
 ## Delivered behavior
