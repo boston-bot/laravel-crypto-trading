@@ -74,7 +74,7 @@
                 <button class="btn btn-secondary btn-sm" type="submit" @disabled(!config('robinhood_mcp.watchlists_enabled'))>Read watchlist</button>
             </form>
             <p class="note">Watchlists belong to the authorized Robinhood user. Reading one does not grant trading eligibility or update paper permissions. @if(!config('robinhood_mcp.watchlists_enabled'))Watchlist reads are disabled in configuration.@endif</p>
-            @foreach (['instruments', 'quotes'] as $read)
+            @foreach (array_merge(['instruments', 'quotes'], config('robinhood_mcp.execution_inputs_enabled') ? ['tradability', 'price_book'] : []) as $read)
                 <form method="get" action="{{ route('mcp.read', $read) }}" class="inline-fields" data-read>
                     <label class="field">Equity symbol<input name="symbol" placeholder="Symbol" required pattern="[A-Z][A-Z0-9.\-]{0,14}" autocomplete="off" spellcheck="false"></label>
                     <button class="btn btn-secondary btn-sm" type="submit">Read {{ $read }}</button>

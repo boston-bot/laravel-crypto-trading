@@ -1,0 +1,292 @@
+{
+    "provenance": "App-owned stored MCP tools/list; public functional schemas only, no account data or credentials",
+    "tools": {
+        "get_equity_price_book": {
+            "name": "get_equity_price_book",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "symbols": {
+                        "type": [
+                            "null",
+                            "array"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "symbols"
+                ],
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "books": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": [
+                                        "null",
+                                        "object"
+                                    ],
+                                    "properties": {
+                                        "symbol": {
+                                            "type": "string"
+                                        },
+                                        "updated_at": {
+                                            "type": "string"
+                                        },
+                                        "asks": {
+                                            "type": [
+                                                "null",
+                                                "array"
+                                            ],
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "price": {
+                                                        "type": "string"
+                                                    },
+                                                    "quantity": {
+                                                        "type": "integer"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "price",
+                                                    "quantity"
+                                                ],
+                                                "additionalProperties": false
+                                            }
+                                        },
+                                        "bids": {
+                                            "type": [
+                                                "null",
+                                                "array"
+                                            ],
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "price": {
+                                                        "type": "string"
+                                                    },
+                                                    "quantity": {
+                                                        "type": "integer"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "price",
+                                                    "quantity"
+                                                ],
+                                                "additionalProperties": false
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "symbol",
+                                        "updated_at",
+                                        "asks",
+                                        "bids"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            },
+                            "errors": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "symbol": {
+                                            "type": "string"
+                                        },
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "symbol",
+                                        "error"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            }
+                        },
+                        "required": [
+                            "books"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            },
+            "fingerprint": "87c85f4d4e7b8bf62bbcc20d48e2706ce3f0ec145ea99ce010846405bc5268e4"
+        },
+        "get_equity_tradability": {
+            "name": "get_equity_tradability",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "account_number": {
+                        "type": "string"
+                    },
+                    "symbols": {
+                        "type": [
+                            "null",
+                            "array"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "account_number",
+                    "symbols"
+                ],
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "results": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "symbol": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "simple_name": {
+                                            "type": "string"
+                                        },
+                                        "state": {
+                                            "type": "string"
+                                        },
+                                        "country": {
+                                            "type": "string"
+                                        },
+                                        "tradeable": {
+                                            "type": "boolean"
+                                        },
+                                        "fractional_tradability": {
+                                            "type": "string"
+                                        },
+                                        "extended_hours_fractional_tradability": {
+                                            "type": "boolean"
+                                        },
+                                        "all_day_tradability": {
+                                            "type": "string"
+                                        },
+                                        "twenty_four_seven_tradability": {
+                                            "type": "string"
+                                        },
+                                        "short_selling_tradability": {
+                                            "type": "string"
+                                        },
+                                        "internal_halt_reason": {
+                                            "type": "string"
+                                        },
+                                        "internal_halt_details": {
+                                            "type": "string"
+                                        },
+                                        "internal_halt_sessions": {
+                                            "type": [
+                                                "null",
+                                                "array"
+                                            ],
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "internal_halt_start_time": {
+                                            "type": "string"
+                                        },
+                                        "internal_halt_end_time": {
+                                            "type": "string"
+                                        },
+                                        "account_type_tradabilities": {
+                                            "type": [
+                                                "null",
+                                                "array"
+                                            ],
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "account_type": {
+                                                        "type": "string"
+                                                    },
+                                                    "account_type_tradability": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "account_type",
+                                                    "account_type_tradability"
+                                                ],
+                                                "additionalProperties": false
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "symbol",
+                                        "tradeable",
+                                        "extended_hours_fractional_tradability"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            },
+                            "not_found": {
+                                "type": [
+                                    "null",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "required": [
+                            "results"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            },
+            "fingerprint": "ed19983123824023cb2476f6b344dc234f9d8da6f20c2cc391b40fd31dee8fa7"
+        }
+    }
+}

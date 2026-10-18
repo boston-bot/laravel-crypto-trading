@@ -61,6 +61,9 @@ final class Capabilities
         ksort($tools);
         $changed = false;
         foreach (config('robinhood_mcp.operations') as $operation => $profile) {
+            if (in_array($operation, ['tradability', 'price_book'], true) && ! config('robinhood_mcp.execution_inputs_enabled')) {
+                continue;
+            }
             if (in_array($operation, ['watchlists', 'watchlist_items'], true) && ! config('robinhood_mcp.watchlists_enabled')) {
                 continue;
             }
@@ -77,6 +80,9 @@ final class Capabilities
 
     public function profile(Operation $operation, array $manifest): array
     {
+        if (in_array($operation, [Operation::Tradability, Operation::PriceBook], true) && ! config('robinhood_mcp.execution_inputs_enabled')) {
+            throw new ReadFailure(ReadError::Disabled);
+        }
         if (in_array($operation, [Operation::Watchlists, Operation::WatchlistItems], true) && ! config('robinhood_mcp.watchlists_enabled')) {
             throw new ReadFailure(ReadError::Disabled);
         }

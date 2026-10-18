@@ -1,6 +1,10 @@
 # M5 owner mandate intake
 
+**Applied October 18:** the normal authenticated Control Center forms saved mandate v1, applied paper policy revision 1 and applied execution v2. Read-only PostgreSQL verification confirmed exact prepared values, 44 symbols, one $500 opening cash entry, $0 reserved and no orders/positions. AI/execution gates remain disabled. This supersedes the intake-only/unapplied statements below; see [current application evidence](M5-DEPLOYMENT-EVIDENCE.md#applied-owner-settings-verification). Populated-record backup/restore subsequently passed: 66 tables / 434 rows, all 12 paper tables and 6 paper rows matched, encrypted settings readable and the $500 ledger intact. Scratch cleanup and disabled execution were verified; see the same evidence document.
+
 October 18, 2026. Owner answers and subsequent delegation of remaining choices recorded from this development conversation. This is an intake record, not an applied PostgreSQL policy version. No runtime settings, balances, schedules or execution gates were changed. M5 remains partial.
+
+Deployment follow-up: the completed source and five additive migrations are now deployed as **`b9b5146`**. The review bundle passes the deployed validators, but settings remain **unapplied**: a saved browser permission/managed policy denied Control Center access despite owner approval/reset. Prepared private form values were handed off for normal authenticated application. [Deployment evidence and next step](M5-DEPLOYMENT-EVIDENCE.md). Historical intake details below remain unchanged.
 
 ## Supplied choices
 

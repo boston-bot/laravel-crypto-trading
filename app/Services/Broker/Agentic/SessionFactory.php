@@ -12,6 +12,9 @@ class SessionFactory
     {
         $allowed = [];
         foreach (Operation::cases() as $operation) {
+            if (in_array($operation, [Operation::Tradability, Operation::PriceBook], true) && ! config('robinhood_mcp.execution_inputs_enabled')) {
+                continue;
+            }
             if (in_array($operation, [Operation::Watchlists, Operation::WatchlistItems], true) && ! config('robinhood_mcp.watchlists_enabled')) {
                 continue;
             }

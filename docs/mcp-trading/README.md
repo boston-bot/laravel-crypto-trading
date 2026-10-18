@@ -1,5 +1,7 @@
 # MCP trading application: start here
 
+M5 is deployed as `b9b5146`. The owner settings are now applied through the authenticated Control Center: mandate v1 / policy revision 1 / execution v2, $500 virtual cash, 44 allowed symbols and no execution activity. AI/paper/live gates remain off. A fresh encrypted backup passed an isolated 66-table / 434-row restore, including exact M5 settings and the $500 ledger; scratch cleanup and disabled execution were verified. Runtime read-only watchlist access is now enabled and verified: all 44 On Watch symbols match the applied allowlist. AI, paper execution and live writes remain off. Next is verified real-data coverage and paper fills. [Current application evidence](M5-DEPLOYMENT-EVIDENCE.md#applied-owner-settings-verification).
+
 Prepared October 16, 2026. This documentation describes planned work, not an application already deployed or approved to trade.
 
 Current milestone update, October 18: M4 is accepted under the owner's explicit waiver of its seven-session proving requirement (0/7 completed; no passed endurance test claimed). M5 paper development is active. Live brokerage mutations remain unauthorized.
@@ -24,6 +26,8 @@ Current milestone update, October 18: M4 is accepted under the owner's explicit 
 | [M5 execution and handoff evidence](M5-EXECUTION-HANDOFF-EVIDENCE.md) | Owner and developer | Versioned execution choices, recorded read-only input provenance, disabled proposal handoff, synthetic workflow tests and remaining owner/provider gaps |
 | [M5 watchlist and fee evidence](M5-WATCHLIST-EVIDENCE.md) | Owner and developer | Existing-gateway watchlist reads, actual On Watch retrieval, decimal percentage fees and validation |
 | [M5 owner mandate intake](M5-OWNER-MANDATE.md) | Owner and developer | Actual paper choices, delegated allocation/fee decisions, verified watchlist membership and application status |
+| [M5 broker execution-input evidence](M5-MARKET-INPUT-EVIDENCE.md) | Owner and developer | Gated account-tradability and price-book reads, real contract checks and precise remaining fill blockers |
+| [M5 deployment evidence](M5-DEPLOYMENT-EVIDENCE.md) | Owner and operator | Deployed partial release/migrations, runtime safety and restore checks, prepared settings and blocked authenticated application |
 | [Repository AGENTS.md](../../AGENTS.md) | Codex | Concise standing development instructions |
 
 Open the repository root in VS Code so the repository instructions are available to Codex. Begin with milestone M0 in the checklist. Do not ask Codex to implement the entire roadmap in one unreviewed change.

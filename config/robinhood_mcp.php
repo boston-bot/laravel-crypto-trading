@@ -2,6 +2,7 @@
 
 return [
     'enabled' => filter_var(env('ROBINHOOD_MCP_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'execution_inputs_enabled' => filter_var(env('ROBINHOOD_MCP_EXECUTION_INPUTS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'watchlists_enabled' => filter_var(env('ROBINHOOD_MCP_WATCHLISTS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'client_id' => env('ROBINHOOD_MCP_CLIENT_ID'),
     'redirect_uri' => env('ROBINHOOD_MCP_REDIRECT_URI'),
@@ -10,6 +11,21 @@ return [
     'max_age_seconds' => 300,
     // Reviewed application code/configuration only. Never populate from model or broker prose.
     'operations' => [
+        // Reviewed app-owned functional schemas, October 18. No broker mutation.
+        'tradability' => [
+            'tool' => 'get_equity_tradability', 'reviewed_read_only' => true,
+            'fingerprint' => 'ed19983123824023cb2476f6b344dc234f9d8da6f20c2cc391b40fd31dee8fa7',
+            'account_argument' => 'account_number', 'filters' => ['symbol' => 'symbols'], 'array_filters' => ['symbol'], 'required_filter' => 'symbol',
+            'records' => 'data.results', 'pagination' => ['kind' => 'single'], 'normalizer' => 'robinhood_v1',
+            'exact_symbol' => true, 'coverage' => 'account_equity_tradability_only',
+        ],
+        'price_book' => [
+            'tool' => 'get_equity_price_book', 'reviewed_read_only' => true,
+            'fingerprint' => '87c85f4d4e7b8bf62bbcc20d48e2706ce3f0ec145ea99ce010846405bc5268e4',
+            'filters' => ['symbol' => 'symbols'], 'array_filters' => ['symbol'], 'required_filter' => 'symbol',
+            'records' => 'data.books', 'pagination' => ['kind' => 'single'], 'normalizer' => 'robinhood_v1',
+            'record_source_as_of' => 'updated_at', 'exact_symbol' => true, 'coverage' => 'displayed_book_quantity_units_unverified',
+        ],
         // Reviewed from the app-owned capability catalog, October 18, 2026.
         // These lists belong to the authorized Robinhood user, not the bound agentic account.
         'watchlists' => [

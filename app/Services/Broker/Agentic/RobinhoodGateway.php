@@ -31,7 +31,7 @@ final class RobinhoodGateway implements BrokerGateway
         if (in_array($operation, [Operation::Watchlists, Operation::WatchlistItems], true) && ! $boundAccount) {
             throw new ReadFailure(ReadError::AccountMismatch);
         }
-        $scoped = in_array($operation, [Operation::Portfolio, Operation::Positions, Operation::Orders, Operation::CashFlows, Operation::History], true);
+        $scoped = in_array($operation, [Operation::Portfolio, Operation::Positions, Operation::Orders, Operation::CashFlows, Operation::History, Operation::Tradability], true);
         if ($scoped && ! $connection->bound_account_id) {
             throw new ReadFailure(ReadError::AccountMismatch);
         }

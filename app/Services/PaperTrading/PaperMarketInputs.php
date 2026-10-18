@@ -68,7 +68,51 @@ final class PaperMarketInputs
             $reason = 'broker_timestamp_malformed';
         }
 
+        if (config('robinhood_mcp.execution_inputs_enabled')) {
+            $payload['execution_reads'] = $this->executionReads($connection, $symbol);
+            foreach ($payload['execution_reads'] as $evidence) {
+                if (isset($evidence['retrieved_at'])) {
+                    $retrieved = $retrieved->max(CarbonImmutable::parse($evidence['retrieved_at']));
+                }
+            }
+            $payload['coverage'] = 'prices_identity_and_separate_execution_read_evidence';
+        }
+
         return $this->record($connection, $actor, $symbol, $requestId, 'broker_read', $payload, $source, $retrieved, $reason);
+    }
+
+    /** Optional, separately gated evidence. Never promote broker tradability to strategy eligibility. */
+    private function executionReads(McpConnection $connection, string $symbol): array
+    {
+        $evidence = [];
+        foreach ([Operation::Tradability, Operation::PriceBook] as $operation) {
+            $entry = ['provider' => TrustedHttp::RESOURCE, 'complete' => false, 'source_as_of' => null,
+                'retrieved_at' => null, 'fields' => null, 'error' => null];
+            try {
+                $read = $this->broker->read($connection, $operation, ['symbol' => $symbol]);
+                $entry['retrieved_at'] = CarbonImmutable::instance($read->retrievedAt)->toIso8601String();
+                if ($read->source !== TrustedHttp::RESOURCE || ! $read->complete || $read->continuation !== null || count($read->records) !== 1 ||
+                    $read->records[0]->operation !== $operation || ($read->records[0]->fields['symbol'] ?? null) !== $symbol) {
+                    throw new ReadFailure(ReadError::Incomplete);
+                }
+                $record = $read->records[0];
+                if ($operation === Operation::Tradability && ($record->fields['account_id'] ?? null) !== $connection->bound_account_id) {
+                    throw new ReadFailure(ReadError::AccountMismatch);
+                }
+                $entry['source_as_of'] = $record->sourceAsOf?->format(DATE_ATOM);
+                $fields = $operation === Operation::Tradability
+                    ? ['symbol', 'account_scope', 'broker_tradeable', 'fractional_tradability', 'extended_hours_fractional_tradability', 'internal_halt_reason']
+                    : ['symbol', 'book_bid', 'book_ask', 'book_bid_quantity', 'book_ask_quantity', 'book_quantity_unit'];
+                // Decimal implements JSON serialization as a quoted string; no floats or account IDs escape.
+                $entry['fields'] = json_decode(json_encode(array_intersect_key($record->fields, array_flip($fields)), JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+                $entry['complete'] = true;
+            } catch (ReadFailure $failure) {
+                $entry['error'] = $failure->reason->value;
+            }
+            $evidence[$operation->value] = $entry;
+        }
+
+        return $evidence;
     }
 
     /** Test-only normalized provider stand-in. Never exposed as an operator evidence import. */

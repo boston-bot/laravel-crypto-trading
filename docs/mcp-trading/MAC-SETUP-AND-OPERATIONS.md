@@ -1,5 +1,7 @@
 # MacBook setup and operations guide
 
+Current M5 application update, October 18: normal authenticated browser access now works. Owner-approved mandate v1 / policy revision 1 / execution v2 are applied, with exactly one $500 virtual opening balance and the reviewed 44-symbol snapshot. Read-only verification confirms $0 reserved, zero positions/orders and all AI/paper/live gates off. This supersedes earlier empty-M5/browser-blocker checkpoints below. The subsequent fresh encrypted backup passed an isolated 66-table / 434-row restore, including exact restored/decrypted M5 values, the $500 ledger and scratch/plaintext cleanup. The new encrypted iCloud copy and manifest match locally; independent-device retrieval of this pair remains unverified. The added M5 assertions were one-off, not a recurring helper change. [Evidence](M5-DEPLOYMENT-EVIDENCE.md#applied-owner-settings-verification).
+
 Audience: the owner running the application. Codex should consult this document for deployment work. This is a runbook for the planned application, not evidence that installation or deployment has happened.
 
 ## 1. Separate development from unattended operation
@@ -354,6 +356,10 @@ The production scheduler has eight tasks; daily encrypted backups run at 02:30 A
 The original snapshot had no separate migration identity. Deployed release `401d6a2` now includes the owner workflow below. Persistent services stay on the restricted role and cannot perform DDL. Restore drills continue to use the separate local scratch-database administrator; neither the runtime role nor backup files gain owner credentials.
 
 ### Operator console
+
+Current watchlist update, October 18: runtime `ROBINHOOD_MCP_WATCHLISTS_ENABLED=true` now permits the two reviewed manual read tools. A deployed CLI check at 18:08:14 Chicago returned all 44 On Watch instrument symbols and exactly matched execution v2's allowlist, without changing it. Cached config/services were refreshed; readiness recovered after a transient restart 502. All AI/paper/live/legacy gates remain off. This supersedes earlier watchlist-disabled checkpoints. [Evidence](M5-DEPLOYMENT-EVIDENCE.md#runtime-read-only-watchlist-activation).
+
+October 18 current deployment: **`b9b514641c6d573bec1713142f92a26c9cb2d540`** supersedes the older release named above. M5 migrations `000010`–`000014` are applied as batch 7 with the verified owner connection. Twelve new tables remain empty; actual owner paper settings are not applied. Runtime research/new paper gates, legacy crypto and brokerage writes remain disabled; monitoring/operations remain enabled. Post-migration encrypted backup passed a 66-table isolated restore. See [deployment evidence](M5-DEPLOYMENT-EVIDENCE.md) for checks and the saved-browser-permission blocker to authenticated settings application.
 
 Open `http://127.0.0.1:8080` and sign in with the provisioned operator account. Nothing extra starts the console: the runtime Nginx and PHP-FPM LaunchAgents serve it whenever this macOS user is logged in, including after logout/login, sleep/wake and reboot (verified in the M4 drills). It is not available before login. UI changes reach the runtime only through a committed revision and `deploy/macos/deploy.sh`. System Health shows the operating switches read-only and runs the safe operator actions (health checks without heartbeat, test alert, closed-period summary, database identity). Backups, restore drills and imports stay terminal-only.
 

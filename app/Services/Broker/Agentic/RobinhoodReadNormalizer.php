@@ -2,6 +2,8 @@
 
 namespace App\Services\Broker\Agentic;
 
+use App\Support\Mcp\Decimal;
+
 final class RobinhoodReadNormalizer
 {
     public static function fields(Operation $operation, array $row, ?string $accountId): array
@@ -28,12 +30,62 @@ final class RobinhoodReadNormalizer
             Operation::Instruments => ['id' => $row['instrument_id'] ?? null, 'symbol' => $row['symbol'] ?? null,
                 'name' => $row['name'] ?? null, 'asset_class' => 'equity'],
             Operation::Quotes => self::quote($row),
+            Operation::PriceBook => self::book($row),
+            Operation::Tradability => $scope + ['symbol' => $row['symbol'] ?? null, 'broker_tradeable' => $row['tradeable'] ?? null,
+                'fractional_tradability' => $row['fractional_tradability'] ?? null,
+                'extended_hours_fractional_tradability' => $row['extended_hours_fractional_tradability'] ?? null,
+                'internal_halt_reason' => $row['internal_halt_reason'] ?? null],
             Operation::Watchlists => ['id' => $row['id'] ?? null, 'name' => $row['display_name'] ?? null,
                 'owner_type' => $row['owner_type'] ?? null, 'item_count' => $row['item_count'] ?? null],
             Operation::WatchlistItems => ['id' => $row['object_id'] ?? null, 'object_type' => $row['object_type'] ?? null,
                 'symbol' => $row['symbol'] ?? null],
             default => throw new ReadFailure(ReadError::Unsupported),
         };
+    }
+
+    private static function book(array $row): array
+    {
+        $best = [];
+        foreach (['bids' => 'bid', 'asks' => 'ask'] as $side => $key) {
+            $best[$key] = null;
+            $best[$key.'_quantity'] = null;
+            $levels = $row[$side] ?? null;
+            if ($levels === null) {
+                continue;
+            }
+            if (! is_array($levels) || ! array_is_list($levels) || count($levels) > 10000) {
+                throw new ReadFailure(ReadError::Malformed);
+            }
+            $seenPrices = [];
+            foreach ($levels as $level) {
+                if (! is_array($level) || ! is_string($level['price'] ?? null) || ! preg_match('/^\d{1,12}(?:\.\d{1,8})?$/D', $level['price']) ||
+                    ! is_int($level['quantity'] ?? null) || $level['quantity'] < 0) {
+                    throw new ReadFailure(ReadError::Malformed);
+                }
+                $price = Decimal::from($level['price']);
+                if ($price->compareTo(Decimal::from('0')) <= 0) {
+                    throw new ReadFailure(ReadError::Malformed);
+                }
+                $priceKey = str_contains((string) $price, '.') ? rtrim(rtrim((string) $price, '0'), '.') : (string) $price;
+                if (isset($seenPrices[$priceKey])) {
+                    // No venue/order IDs establish whether repeated levels are distinct liquidity.
+                    throw new ReadFailure(ReadError::Incomplete);
+                }
+                $seenPrices[$priceKey] = true;
+                $comparison = $best[$key] === null ? null : $price->compareTo(Decimal::from($best[$key]));
+                if ($comparison === null || ($side === 'bids' ? $comparison > 0 : $comparison < 0)) {
+                    $best[$key] = (string) $price;
+                    $best[$key.'_quantity'] = (string) $level['quantity'];
+                }
+            }
+        }
+        if ($best['bid'] !== null && $best['ask'] !== null && Decimal::from($best['bid'])->compareTo(Decimal::from($best['ask'])) > 0) {
+            throw new ReadFailure(ReadError::Malformed);
+        }
+
+        return ['symbol' => $row['symbol'] ?? null, 'book_bid' => $best['bid'], 'book_ask' => $best['ask'],
+            'book_bid_quantity' => $best['bid_quantity'], 'book_ask_quantity' => $best['ask_quantity'],
+            'book_quantity_unit' => 'broker_quantity_unverified'];
     }
 
     private static function quote(array $row): array

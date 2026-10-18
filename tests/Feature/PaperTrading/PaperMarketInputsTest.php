@@ -5,12 +5,15 @@ namespace Tests\Feature\PaperTrading;
 use App\Services\Broker\Agentic\BrokerGateway;
 use App\Services\Broker\Agentic\BrokerRecord;
 use App\Services\Broker\Agentic\Operation;
+use App\Services\Broker\Agentic\ReadError;
+use App\Services\Broker\Agentic\ReadFailure;
 use App\Services\Broker\Agentic\ReadResult;
 use App\Services\Broker\Agentic\TrustedHttp;
 use App\Services\PaperTrading\PaperMarketInputs;
 use App\Services\PaperTrading\StoredDecisionInputs;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -98,6 +101,59 @@ class PaperMarketInputsTest extends TestCase
         $this->connection->update(['bound_account_id' => 'changed-fixture-binding']);
         $this->expectException(HttpException::class);
         app(PaperMarketInputs::class)->collect($stale, $stale->user_id, 'DEMO', (string) Str::uuid());
+    }
+
+    public function test_additional_execution_reads_preserve_provenance_without_granting_eligibility_or_size(): void
+    {
+        config(['robinhood_mcp.execution_inputs_enabled' => true]);
+        $this->gateway->respond = function ($connection, $operation, $filters) {
+            $fields = match ($operation) {
+                Operation::Quotes => ['symbol' => 'DEMO', 'bid' => '99', 'ask' => '100', 'bid_as_of' => now()->toIso8601String(), 'ask_as_of' => now()->toIso8601String()],
+                Operation::Instruments => ['symbol' => 'DEMO', 'id' => 'synthetic-instrument'],
+                Operation::Tradability => ['symbol' => 'DEMO', 'account_id' => $connection->bound_account_id, 'account_scope' => 'request_binding',
+                    'broker_tradeable' => true, 'fractional_tradability' => 'tradable'],
+                Operation::PriceBook => ['symbol' => 'DEMO', 'book_bid' => '99', 'book_ask' => '100', 'book_bid_quantity' => '5',
+                    'book_ask_quantity' => '6', 'book_quantity_unit' => 'broker_quantity_unverified'],
+                default => throw new \RuntimeException('Unexpected operation.'),
+            };
+
+            return new ReadResult(TrustedHttp::RESOURCE, now()->toDateTimeImmutable(), [BrokerRecord::from($operation, $fields,
+                $operation === Operation::PriceBook ? now()->subSecond()->toDateTimeImmutable() : null)], true);
+        };
+        $record = app(PaperMarketInputs::class)->collect($this->connection, $this->connection->user_id, 'DEMO', (string) Str::uuid());
+        $reads = $record->payload['execution_reads'];
+        $this->assertCount(4, $this->gateway->calls);
+        $this->assertTrue($reads['tradability']['complete']);
+        $this->assertTrue($reads['tradability']['fields']['broker_tradeable']);
+        $this->assertArrayNotHasKey('account_id', $reads['tradability']['fields']);
+        $this->assertNull($reads['tradability']['source_as_of']);
+        $this->assertNotNull($reads['price_book']['source_as_of']);
+        $this->assertSame('5', $reads['price_book']['fields']['book_bid_quantity']);
+        $this->assertNull($record->payload['quote']['eligible']);
+        $this->assertNull($record->payload['quote']['fractional']);
+        $this->assertNull($record->payload['quote']['bid_size']);
+        $this->assertNull($record->payload['quote']['corporate_actions_clear']);
+        $this->assertSame('instrument_eligibility_unverified', app(PaperMarketInputs::class)->executionReason($record, CarbonImmutable::now(), 20));
+        $this->assertStringNotContainsString('broker_tradeable', DB::table('mcp_paper_market_inputs')->where('id', $record->id)->value('payload'));
+    }
+
+    public function test_supplemental_read_failures_are_independent_unknown_evidence_and_not_a_successful_fallback(): void
+    {
+        config(['robinhood_mcp.execution_inputs_enabled' => true]);
+        $this->gateway->respond = function ($connection, $operation) {
+            if ($operation === Operation::PriceBook) {
+                throw new ReadFailure(ReadError::RateLimited);
+            }
+
+            return new ReadResult(TrustedHttp::RESOURCE, now()->toDateTimeImmutable(), [], false);
+        };
+        $record = app(PaperMarketInputs::class)->collect($this->connection, $this->connection->user_id, 'DEMO', (string) Str::uuid());
+        $this->assertFalse($record->payload['complete']);
+        $this->assertFalse($record->payload['execution_reads']['tradability']['complete']);
+        $this->assertFalse($record->payload['execution_reads']['price_book']['complete']);
+        $this->assertSame('rate_limited', $record->payload['execution_reads']['price_book']['error']);
+        $this->assertNull($record->payload['execution_reads']['price_book']['fields']);
+        $this->assertSame('market_input_incomplete', app(PaperMarketInputs::class)->executionReason($record, CarbonImmutable::now(), 20));
     }
 
     public function test_late_arrival_within_the_same_second_cannot_enter_an_earlier_decision(): void
