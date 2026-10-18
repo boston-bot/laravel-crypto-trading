@@ -33,6 +33,13 @@ class FoundationTest extends TestCase
         }
     }
 
+    public function test_quantity_division_can_round_down_before_order_sizing_without_changing_default_rounding(): void
+    {
+        $value = Decimal::from('0.999999999999999999');
+        $this->assertSame('0', (string) $value->dividedBy(Decimal::from('1'), 0, RoundingMode::DOWN));
+        $this->assertSame('1', (string) $value->dividedBy(Decimal::from('1'), 0));
+    }
+
     public function test_test_database_guard_refuses_runtime_or_undesignated_targets(): void
     {
         TestDatabaseGuard::check('sqlite', ':memory:', null);

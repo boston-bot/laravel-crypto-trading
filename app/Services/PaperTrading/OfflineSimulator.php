@@ -21,7 +21,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
-/** Local synthetic scenarios only. No AI/broker dependencies, route, job or scheduler integration. */
+/** Synthetic orders/fills only. A separately gated application handoff may supply recorded proposals; no AI/broker dependencies. */
 final class OfflineSimulator
 {
     private const OPEN = ['open', 'partial'];
@@ -29,12 +29,16 @@ final class OfflineSimulator
     public function __construct(private MarketCalendar $calendar) {}
 
     /** $marks contains a synthetic quote for the candidate and every positive held position. */
-    public function submit(McpConnection $connection, int $actor, int $policyId, int $ledgerVersion, array $intent, SimulationAssumptions $assumptions, array $marks): SimulationOrder
+    public function submit(McpConnection $connection, int $actor, int $policyId, int $ledgerVersion, array $intent, SimulationAssumptions $assumptions, array $marks, ?int $executionVersionId = null): SimulationOrder
     {
         $intent = $this->intent($intent);
-        $hash = hash('sha256', json_encode([$policyId, $ledgerVersion, $intent, $assumptions->data], JSON_THROW_ON_ERROR));
+        $identity = [$policyId, $ledgerVersion, $intent, $assumptions->data];
+        if ($executionVersionId !== null) {
+            $identity[] = $executionVersionId;
+        }
+        $hash = hash('sha256', json_encode($identity, JSON_THROW_ON_ERROR));
 
-        return DB::transaction(function () use ($connection, $actor, $policyId, $ledgerVersion, $intent, $assumptions, $marks, $hash) {
+        return DB::transaction(function () use ($connection, $actor, $policyId, $ledgerVersion, $intent, $assumptions, $marks, $hash, $executionVersionId) {
             [$current, $portfolio] = $this->lock($connection, $actor);
             $repeat = SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('request_id', $intent['request_id'])->first();
             if ($repeat) {
@@ -43,9 +47,17 @@ final class OfflineSimulator
                 return $repeat;
             }
             $policy = PolicyApplication::whereKey($policyId)->where('paper_portfolio_id', $portfolio->id)->where('revision', $portfolio->policy_revision)->firstOrFail();
+            if ($executionVersionId !== null) {
+                $execution = ExecutionPolicies::current($portfolio);
+                abort_unless($execution?->id === $executionVersionId && $intent['sleeve'] === $execution->payload['decision_sleeve'], 409, 'Execution settings changed.');
+                foreach (['fee_per_share', 'slippage_bps', 'quote_max_age_seconds', 'allow_fractional', 'allow_fractional_limit'] as $field) {
+                    abort_unless($execution->payload[$field] === $assumptions->data[$field], 409, 'Fill assumptions differ from applied execution settings.');
+                }
+            }
             abort_unless($portfolio->ledger_version === $ledgerVersion, 409, 'Paper ledger changed.');
             $order = SimulationOrder::create(['paper_portfolio_id' => $portfolio->id, 'policy_application_id' => $policy->id,
                 'actor_id' => $actor, 'request_id' => $intent['request_id'], 'intent_hash' => $hash,
+                'execution_version_id' => $executionVersionId,
                 'intent' => $intent + ['origin' => 'offline_synthetic_scenario', 'policy_revision' => $policy->revision, 'ledger_version' => $ledgerVersion],
                 'assumptions' => $assumptions->data, 'auth_generation' => $current->auth_generation,
                 'symbol' => $intent['symbol'], 'sleeve' => $intent['sleeve'], 'side' => $intent['side'], 'type' => $intent['type'],
@@ -337,6 +349,9 @@ final class OfflineSimulator
             return 'authorization_changed';
         }
         $policy = PolicyApplication::findOrFail($order->policy_application_id);
+        if ($order->execution_version_id !== null && ExecutionPolicies::current($portfolio)?->id !== $order->execution_version_id) {
+            return 'execution_settings_changed';
+        }
 
         return $policy->revision !== $portfolio->policy_revision ? 'policy_changed' : null;
     }

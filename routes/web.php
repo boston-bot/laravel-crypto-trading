@@ -6,6 +6,7 @@ use App\Http\Controllers\McpConnectionController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\OperationsSetupController;
 use App\Http\Controllers\OperatorActionController;
+use App\Http\Controllers\PaperExecutionController;
 use App\Http\Controllers\ReadinessController;
 use App\Http\Controllers\ResearchController;
 use App\Http\Middleware\FinancialAccess;
@@ -38,6 +39,10 @@ Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAc
     Route::post('/control/proposal', [ControlCenterController::class, 'proposal'])->middleware('throttle:10,1')->name('mcp.control.proposal');
     Route::post('/control/versions/{version}/restore', [ControlCenterController::class, 'restore'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.restore');
     Route::post('/control/versions/{version}/apply-paper', [ControlCenterController::class, 'apply'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.apply');
+    Route::post('/paper/execution', [PaperExecutionController::class, 'store'])->middleware('throttle:10,1')->name('mcp.paper.execution.store');
+    Route::post('/paper/execution/{version}/apply', [PaperExecutionController::class, 'apply'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.paper.execution.apply');
+    Route::post('/paper/market-input', [PaperExecutionController::class, 'collect'])->middleware('throttle:5,1')->name('mcp.paper.market.collect');
+    Route::post('/paper/decisions/{run}/orders', [PaperExecutionController::class, 'handoff'])->whereUuid('run')->middleware('throttle:5,1')->name('mcp.paper.handoff');
     Route::post('/operations/phone-setup', [OperationsSetupController::class, 'phone'])->middleware('throttle:10,1')->name('mcp.operations.phone');
     Route::post('/operations/health-check', [OperatorActionController::class, 'health'])->middleware('throttle:6,1')->name('mcp.operations.health');
     Route::post('/operations/test-alert', [OperatorActionController::class, 'testAlert'])->middleware('throttle:3,1')->name('mcp.operations.test-alert');

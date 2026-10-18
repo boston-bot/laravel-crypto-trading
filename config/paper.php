@@ -1,7 +1,9 @@
 <?php
 
 return [
-    // Synthetic scenarios only; no route, scheduled consumer or automatic model-to-order handoff.
+    'market_inputs_enabled' => filter_var(env('MCP_PAPER_MARKET_INPUTS_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'handoff_enabled' => filter_var(env('MCP_PAPER_HANDOFF_ENABLED', false), FILTER_VALIDATE_BOOL),
+    // Synthetic fills only. Proposal handoff requires its own independent gate and applied settings.
     'offline_simulation_enabled' => filter_var(env('MCP_PAPER_OFFLINE_SIMULATION_ENABLED', false), FILTER_VALIDATE_BOOL),
     // Independent opt-in. Existing research provider/model/credential/pricing must also be ready.
     'decisions_enabled' => filter_var(env('MCP_PAPER_DECISIONS_ENABLED', false), FILTER_VALIDATE_BOOL),

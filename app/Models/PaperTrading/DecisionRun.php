@@ -18,7 +18,7 @@ class DecisionRun extends Model
 
     protected function casts(): array
     {
-        return ['request_snapshot' => 'encrypted:array', 'result' => 'encrypted:array', 'price_basis' => 'encrypted:array',
+        return ['execution_version_id' => 'integer', 'request_snapshot' => 'encrypted:array', 'result' => 'encrypted:array', 'price_basis' => 'encrypted:array',
             'ledger_version' => 'integer', 'auth_generation' => 'integer', 'reserved_cost' => 'decimal:18', 'actual_cost' => 'decimal:18',
             'input_tokens' => 'integer', 'output_tokens' => 'integer', 'scheduled_at' => 'immutable_datetime',
             'expires_at' => 'immutable_datetime', 'dispatched_at' => 'immutable_datetime', 'started_at' => 'immutable_datetime',

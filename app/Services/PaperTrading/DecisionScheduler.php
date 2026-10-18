@@ -70,6 +70,7 @@ final class DecisionScheduler
                     $reason = self::readiness();
                     $run = new DecisionRun;
                     $run->forceFill(['id' => (string) Str::uuid(), 'mcp_connection_id' => $current->id, 'scope' => AccountScope::key($current),
+                        'execution_version_id' => ExecutionPolicies::current($portfolio)?->id,
                         'paper_portfolio_id' => $portfolio->id, 'policy_application_id' => $application->id, 'ledger_version' => $portfolio->ledger_version,
                         'auth_generation' => $current->auth_generation, 'dedup_key' => $key, 'status' => $reason ? 'unavailable' : 'queued', 'reason' => $reason,
                         'scheduled_at' => $window['start'], 'expires_at' => $window['end'], 'finished_at' => $reason ? now() : null, 'created_at' => now()])->save();
@@ -86,7 +87,10 @@ final class DecisionScheduler
             });
             if ($id) {
                 if ($foreground) {
-                    $this->runner->process($id);
+                    $result = $this->runner->process($id);
+                    if (config('paper.handoff_enabled') && in_array($result?->status, ['proposed', 'wait'], true)) {
+                        app(PaperOrderHandoff::class)->process($connection, $connection->user_id, $id);
+                    }
                 }
                 $count++;
             }

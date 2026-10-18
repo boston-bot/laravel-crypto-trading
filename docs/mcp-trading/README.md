@@ -21,6 +21,7 @@ Current milestone update, October 18: M4 is accepted under the owner's explicit 
 | [M5 applied paper policy evidence](M5-PAPER-POLICY-EVIDENCE.md) | Owner and developer | Explicit policy application, separate virtual opening cash, concurrent/idempotent initialization and remaining runner/fill gaps |
 | [M5 decision runner evidence](M5-DECISION-RUNNER-EVIDENCE.md) | Owner and developer | Disabled paper proposals, applied cadence/rules, request/result/cost audit, recovery/concurrency tests and remaining data/fill/setup gaps |
 | [M5 offline simulation evidence](M5-OFFLINE-SIMULATION-EVIDENCE.md) | Owner and developer | Synthetic decimal orders/fills, cash/share reservations, concurrency/recovery, accounting reports and remaining real-data/activation gaps |
+| [M5 execution and handoff evidence](M5-EXECUTION-HANDOFF-EVIDENCE.md) | Owner and developer | Versioned execution choices, recorded read-only input provenance, disabled proposal handoff, synthetic workflow tests and remaining owner/provider gaps |
 | [Repository AGENTS.md](../../AGENTS.md) | Codex | Concise standing development instructions |
 
 Open the repository root in VS Code so the repository instructions are available to Codex. Begin with milestone M0 in the checklist. Do not ask Codex to implement the entire roadmap in one unreviewed change.
@@ -60,5 +61,6 @@ Fill these in during the relevant milestone, not all before starting development
 | Market/news provider and licensed coverage | M3 | Broker data and manual research only |
 | Sleeve mapping and capital allocation | M2/M6 | Unclassified holdings visible; no automatic trading |
 | Approved strategy, sizing, order preferences, live limits | M6 | Shadow/paper only |
+| Paper capital/holdings, sleeve permissions, allowed symbols and fee/slippage assumptions | M5 | Unspecified execution drafts; handoff disabled |
 
 No secrets belong in these documents, Git, chat prompts, or screenshots.

@@ -6,7 +6,7 @@
         <dt>Simulated fees included in P&amp;L / basis</dt><dd><x-money :value="$simulation['fees']" /></dd>
         <dt>Current valuation / unrealized P&amp;L / total return</dt><dd>Unavailable — no current validated marks or benchmark series</dd>
     </dl>
-    <p class="note">Session-open equity, instrument classification, displayed sizes, per-share fees and slippage are explicit synthetic assumptions. They do not verify real liquidity, eligibility, corporate actions or risk readiness. No model output automatically creates an order.</p>
+    <p class="note">Instrument classification and displayed size remain synthetic assumptions. They do not verify real liquidity, eligibility or corporate actions. Proposal-linked orders use explicitly applied execution settings; the application rechecks and sizes each order behind a separate handoff gate.</p>
     <div class="table-wrap"><table class="data"><thead><tr><th>Synthetic instrument / sleeve</th><th>Quantity / reserved shares</th><th>Historical basis / realized P&amp;L</th></tr></thead><tbody>
     @forelse($simulation['positions'] as $position)
         <tr><td>{{ $position->symbol }} · {{ $position->sleeve }}<small class="block">{{ $position->blocked_reason }}</small></td><td><x-quantity :value="$position->quantity" /><small class="block">Reserved <x-quantity :value="$position->reserved_quantity" /></small></td><td><x-money :value="$position->cost_basis" /><small class="block"><x-money :value="$position->realized_pnl" /></small></td></tr>

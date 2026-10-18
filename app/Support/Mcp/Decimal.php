@@ -38,9 +38,9 @@ final readonly class Decimal implements JsonSerializable
         return new self($this->value->multipliedBy($other->value));
     }
 
-    public function dividedBy(self $other, int $scale): self
+    public function dividedBy(self $other, int $scale, RoundingMode $mode = RoundingMode::HALF_EVEN): self
     {
-        return new self($this->value->dividedBy($other->value, $scale, RoundingMode::HALF_EVEN));
+        return new self($this->value->dividedBy($other->value, $scale, $mode));
     }
 
     public function compareTo(self $other): int

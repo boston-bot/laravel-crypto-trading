@@ -7,7 +7,7 @@ namespace App\Services\PaperTrading;
 use App\Support\Mcp\Decimal;
 use Illuminate\Support\Facades\Validator;
 
-/** Scenario assumptions are required explicitly; these are not owner-approved production settings. */
+/** Explicit paper fill assumptions. Proposal-linked orders must match the applied execution version. */
 final readonly class SimulationAssumptions
 {
     public array $data;
@@ -18,7 +18,7 @@ final readonly class SimulationAssumptions
         $rules = ['fee_per_share' => $decimal, 'slippage_bps' => $decimal,
             'quote_max_age_seconds' => ['required', 'integer', 'min:1', 'max:300'],
             'allow_fractional' => ['required'], 'allow_fractional_limit' => ['required'],
-            'session_open_equity' => $decimal, 'session_date' => ['required', 'date_format:Y-m-d']];
+            'session_open_equity' => ['required', 'string', 'regex:/^\d{1,20}(?:\.\d{1,18})?$/D'], 'session_date' => ['required', 'date_format:Y-m-d']];
         abort_if(array_diff(array_keys($data), array_keys($rules)), 422, 'Unsupported simulation assumption.');
         $normalized = Validator::make($data, $rules)->validate();
         $normalized['quote_max_age_seconds'] = (int) $normalized['quote_max_age_seconds'];

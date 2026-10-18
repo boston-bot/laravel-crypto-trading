@@ -4,6 +4,7 @@ namespace App\Services\PaperTrading;
 
 use App\Models\McpConnection;
 use App\Models\PaperTrading\DecisionRun;
+use App\Models\PaperTrading\ExecutionVersion;
 use App\Models\PaperTrading\PolicyApplication;
 use App\Models\PaperTrading\Portfolio;
 use App\Models\User;
@@ -74,13 +75,15 @@ final class DecisionRunner
             $application = PolicyApplication::findOrFail($run->policy_application_id);
             $portfolio = Portfolio::findOrFail($run->paper_portfolio_id);
             $requested = CarbonImmutable::now();
-            $quoteMaxAge = (int) config('paper.quote_max_age_seconds');
+            $execution = $run->execution_version_id ? ExecutionVersion::findOrFail($run->execution_version_id) : null;
+            $quoteMaxAge = (int) ($execution?->payload['quote_max_age_seconds'] ?? config('paper.quote_max_age_seconds'));
             $inputs = $this->inputs->load($connection, $requested);
             if (! is_array($inputs['subjects'] ?? null) || count($inputs['subjects']) < 1 || count($inputs['subjects']) > (int) config('paper.max_symbols') ||
                 count($inputs['sources'] ?? []) > (int) config('paper.max_sources')) {
                 throw new DecisionFailure('input_bounds_exceeded', 'unavailable');
             }
-            $payload = ['requested_at' => $requested->utc()->format(DATE_ATOM), 'expires_at' => $run->expires_at->utc()->format(DATE_ATOM),
+            $payload = ['requested_at' => $requested->utc()->format('Y-m-d\TH:i:s.uP'), 'expires_at' => $run->expires_at->utc()->format(DATE_ATOM),
+                'paper_execution' => $execution?->payload,
                 'proposal_guards' => ['quote_max_age_seconds' => $quoteMaxAge, 'executable' => false],
                 'paper_policy' => $application->snapshot + ['policy_revision' => $application->revision],
                 'paper_portfolio' => ['ledger_version' => $run->ledger_version, 'cash' => $portfolio->cash, 'reserved_cash' => $portfolio->reserved_cash,
@@ -107,7 +110,7 @@ final class DecisionRunner
                 if ($this->budget->reserve($period, $estimate, true, Decimal::from($application->snapshot['rules']['monthly_budget']))) {
                     $this->incidents->record($connection, 'paper_ai_budget_reduced', 'warning', 'paper');
                 }
-                $owned->update(['model' => $request->model, 'prompt_version' => DecisionSchema::VERSION, 'context_hash' => hash('sha256', $request->input),
+                $owned->update(['model' => $request->model, 'prompt_version' => DecisionSchema::INSTRUCTIONS_VERSION, 'context_hash' => hash('sha256', $request->input),
                     'request_snapshot' => ['model' => $request->model, 'max_output_tokens' => $request->maxOutputTokens, 'schema_name' => $request->schemaName,
                         'instructions' => $request->instructions, 'input' => $payload, 'schema' => $request->schema, 'source_map' => $inputs['source_map']],
                     'price_basis' => ['input_rate' => (string) $prices['input_rate'], 'output_rate' => (string) $prices['output_rate']],
@@ -147,6 +150,9 @@ final class DecisionRunner
         }
         if ($portfolio->policy_revision !== $application->revision || $portfolio->ledger_version !== $run->ledger_version) {
             return 'policy_or_ledger_changed';
+        }
+        if (ExecutionPolicies::current($portfolio)?->id !== $run->execution_version_id) {
+            return 'execution_settings_changed';
         }
 
         return null;

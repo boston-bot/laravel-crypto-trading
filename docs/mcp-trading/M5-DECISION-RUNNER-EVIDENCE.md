@@ -4,6 +4,8 @@ October 18, 2026. Source implementation and isolated tests only; M5 remains part
 
 Later October 18: the separate [offline simulator](M5-OFFLINE-SIMULATION-EVIDENCE.md) now verifies synthetic order/fill accounting. The runner still cannot create orders and its default real evidence adapter still lacks instrument eligibility/positions; remaining-work statements below describe this runner's checkpoint.
 
+Subsequent [execution/handoff increment](M5-EXECUTION-HANDOFF-EVIDENCE.md): applied execution settings and selected-sleeve local paper positions can now reach requests; the worker/foreground wrapper has a separate disabled handoff boundary. The runner itself remains proposal-only, and the actual broker contract still lacks execution eligibility/size/action evidence. Historical implementation/setup statements below retain their checkpoint dates.
+
 ## Delivered behavior
 
 - A separate `paper-decision-v1` proposal contract reuses M3's PHP OpenAI Responses transport and shared decimal budget ledger. M3 research keeps its existing contract and cache. No new SDK, service or strategy engine was introduced.

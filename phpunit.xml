@@ -29,6 +29,8 @@
         <env name="MCP_RESEARCH_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_DECISIONS_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_OFFLINE_SIMULATION_ENABLED" value="false" force="true"/>
+        <env name="MCP_PAPER_MARKET_INPUTS_ENABLED" value="false" force="true"/>
+        <env name="MCP_PAPER_HANDOFF_ENABLED" value="false" force="true"/>
         <env name="MCP_RESEARCH_API_KEY" value="" force="true"/>
         <env name="MCP_RESEARCH_MODEL" value="" force="true"/>
         <env name="MCP_RESEARCH_INPUT_COST_PER_MTOK" value="" force="true"/>

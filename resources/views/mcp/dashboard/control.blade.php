@@ -15,7 +15,7 @@
     $pretty = fn ($value) => json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 @endphp
 
-<x-callout tone="warn" :title="$paper ? 'Paper policy selected; automatic execution is unavailable' : 'Paper settings are drafts only'">Saving or restoring creates a draft. Applying it selects rules for a separate virtual portfolio and initializes virtual cash once. Neither action enables AI requests or scheduling. Paper decisions require a separate configured opt-in; their proposals cannot create orders or fills. There is no live-mode switch.</x-callout>
+<x-callout tone="warn" :title="$paper ? 'Paper policy selected; automatic execution is unavailable' : 'Paper settings are drafts only'">Saving or restoring creates a draft. Applying it selects rules for a separate virtual portfolio and initializes virtual cash once. Neither action enables AI requests or scheduling. Paper proposals require separate handoff permission, applied execution rules and complete inputs before an order can be created. Real-provider fill coverage remains incomplete. There is no live-mode switch.</x-callout>
 
 <div class="grid-2">
     <x-panel title="Currently used by this application" icon="shield">
@@ -30,7 +30,7 @@
         <p class="note">Configuration shown belongs to this running checkout. Production and development settings can differ.</p>
     </x-panel>
     <x-panel title="How rules reach the AI" icon="spark">
-        <p>The paper decision runner attaches the applied policy/guidance snapshot and virtual ledger version to each bounded request when separately enabled and configured. Its proposals do not submit orders. The offline simulator accepts explicit synthetic scenarios only; automatic proposal-to-order checks remain unfinished.</p>
+        <p>The decision runner attaches applied policy/guidance, execution settings and virtual ledger versions to each bounded request. A separately gated paper handoff rechecks these versions and current inputs, then sizes orders locally. The current fill engine accepts synthetic data only; real broker eligibility, size and corporate-action coverage remain unavailable.</p>
         <p>Unapplied paper drafts are <strong>not sent</strong>. ChatGPT conversations do not automatically update this application. You can paste a settings proposal below, review the editor and save a new draft yourself.</p>
         <p class="note">Strategy guidance can describe what to look for. It cannot grant brokerage access, change credentials or bypass enforced limits. Changing an allocation target does not rebalance any holdings.</p>
     </x-panel>
@@ -125,6 +125,7 @@
 @endif
 
 @if($control['decisions'])
+    @include('mcp.dashboard.paper-execution', ['execution' => $control['execution']])
     @include('mcp.dashboard.paper-decisions', ['decisions' => $control['decisions']])
 @endif
 @if($control['simulation'])

@@ -2,6 +2,8 @@
 
 October 18, 2026. Source implementation with synthetic inputs and isolated database tests. **M5 remains partial.** No model, market-data or brokerage request, runtime migration, deployment, service activation, credential change or Git commit was performed.
 
+Later October 18: [execution/handoff evidence](M5-EXECUTION-HANDOFF-EVIDENCE.md) adds versioned owner execution controls, normalized input provenance and a separately gated proposal-to-synthetic-order path. Earlier statements below about no handoff describe this simulator increment; real-provider execution remains unavailable.
+
 ## Delivered behavior
 
 `OfflineSimulator` extends M5's virtual portfolio and cash ledger with separate orders, positions, immutable observations and immutable lifecycle/fill events. It does not use the legacy float-based `PaperExecutionEngine`, broker-confirmed orders or legacy crypto ledgers.
