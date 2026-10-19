@@ -63,7 +63,7 @@ This replaces the fixed `allowed_symbols` list, with the 75-symbol cap applying 
 ## Market data
 
 - **Quotes every 5 minutes.** Read quotes for all watchlist symbols plus holdings in batches, within one MCP session per cycle. `get_equity_quotes` already accepts a list of symbols; the gateway needs to send more than one, and the batch limit must be checked. Cache the tool catalog per session and store it only when it changes. Respect `Retry-After`.
-- **Daily history.** Profiles need at least one year (252 sessions) of split-adjusted daily bars per symbol and for SPY, refreshed after each close and backfilled when a symbol joins. The app has no reviewed daily-bar source today. Alpaca's market-data API is the leading candidate, since the owner's keys already work for corporate actions. Verify the feed, history depth, adjustments, rate limits and terms first. No subscription is authorized by this document.
+- **Daily history.** Profiles need at least one year (252 sessions) of split-adjusted daily bars per symbol and for SPY, refreshed after each close and backfilled when a symbol joins. Done in source October 19: split-adjusted SIP daily bars and US-listing evidence from Alpaca ([evidence](M5-MARKET-REFERENCE-EVIDENCE.md)). Originally: the app had no reviewed daily-bar source. Alpaca's market-data API is the leading candidate, since the owner's keys already work for corporate actions. Verify the feed, history depth, adjustments, rate limits and terms first. No subscription is authorized by this document.
 - **Earnings dates.** The Robinhood catalog advertises earnings data without a reviewed mapping. Review it or select another source. An unknown earnings date blocks new entries.
 - **Order-time freshness.** The handoff reads a fresh quote immediately before creating an order. The 20-second quote-age limit applies to that read.
 - **Calendar.** Session data is loaded by hand and expires after seven days. Automate loading from a reviewed source, or alert well before expiry.
@@ -193,7 +193,7 @@ No paid LLM API runs in this application. The earlier $100 target / $150 maximum
 |---|---|
 | Name of the dedicated Robinhood watchlist | No intake |
 | ChatGPT tasks set up so they cannot place trades, if Robinhood allows it | External-order detection still pauses entries |
-| Daily-history source and any cost | No profiles, so no entries |
+| Daily-history source and any cost | Resolved in source October 19: Alpaca, existing keys, no subscription; awaits deployment |
 | Earnings-date source | No new entries |
 | Fractional and fractional limit-order support verified | Whole shares; zero-size trades skipped |
 | Current commission and regulatory fee rates verified | Costs labeled unverified in reports |

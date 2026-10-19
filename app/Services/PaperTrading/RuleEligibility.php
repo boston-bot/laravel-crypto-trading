@@ -36,7 +36,18 @@ final class RuleEligibility
         $evidence = ['policy_id' => $policy?->id, 'execution_version_id' => $execution?->id, 'watchlist_revision_id' => $membership['revision']?->id,
             'account_scope' => AccountScope::key($connection), 'auth_generation' => $connection->auth_generation,
             'market_input_id' => $input?->id, 'classification_id' => null, 'cutoff' => $cutoff->toISOString(),
-            'history_source' => 'unconfigured', 'quote_max_age_seconds' => $execution?->payload['quote_max_age_seconds']];
+            'history_source' => 'unconfigured', 'listing_read_id' => null, 'history_read_id' => null,
+            'quote_max_age_seconds' => $execution?->payload['quote_max_age_seconds']];
+        // Reviewed listing and daily-history reads. Only stored, complete, recent records count; nothing else can supply them.
+        $references = app(PaperMarketReferences::class);
+        $listing = $references->listing($connection, $symbol, $cutoff);
+        $checks['listing'] = array_intersect_key($listing, array_flip(['status', 'reason', 'exchange']));
+        $evidence['listing_read_id'] = $listing['read_id'] ?? null;
+        $history = $references->history($connection, $symbol, $cutoff);
+        $evidence['history_read_id'] = $history['read_id'] ?? null;
+        if ($history['verified']) {
+            $evidence['history_source'] = $history['contract'];
+        }
         $maxAge = $execution?->payload['quote_max_age_seconds'] ?? 20;
         if ($input && $input->origin === 'broker_read' && ($input->payload['provider'] ?? null) === TrustedHttp::RESOURCE &&
             ($input->payload['auth_generation'] ?? null) === $connection->auth_generation &&
@@ -65,8 +76,11 @@ final class RuleEligibility
                 $quote = $q;
             }
         }
-        // No reviewed daily-bar adapter exists yet. Extra market/model fields cannot supply history or volume.
-        $checks += app(EligibilityRules::class)->thresholds($quote, null, $policy?->payload['parameters'] ?? RuleEligibilityPolicies::DEFAULTS);
+        // Extra market/model fields cannot supply history or volume; only the verified stored read can.
+        $checks += app(EligibilityRules::class)->thresholds($quote, $history['verified'] ? $history : null, $policy?->payload['parameters'] ?? RuleEligibilityPolicies::DEFAULTS);
+        if (! $history['verified'] && config('alpaca_data.reference_enabled')) {
+            $checks['history'] = $checks['liquidity'] = ['status' => 'unavailable', 'reason' => $history['reason']];
+        }
         $statuses = array_column($checks, 'status');
         $status = in_array('ineligible', $statuses, true) ? 'ineligible' : (in_array('unavailable', $statuses, true) ? 'unavailable' : 'eligible');
         $fingerprint = hash('sha256', json_encode(['rule' => EligibilityRules::VERSION, 'evidence' => $evidence, 'checks' => $checks,

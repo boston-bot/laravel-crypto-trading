@@ -9,4 +9,16 @@ return [
     'max_events' => 2000,
     'lookback_days' => 30,
     'lookahead_days' => 30,
+
+    // Listing and daily-history reference reads for rule eligibility. Separately default-off.
+    'reference_enabled' => filter_var(env('ALPACA_REFERENCE_ENABLED', false), FILTER_VALIDATE_BOOL),
+    // Which Alpaca account host serves the read-only asset (listing) endpoint: "PK…" keys are paper, "AK…" keys live.
+    'account_environment' => env('ALPACA_ACCOUNT_ENVIRONMENT', 'paper'),
+    // 400 calendar days hold more than the 252 sessions eligibility requires.
+    'history_lookback_days' => 400,
+    'history_symbols_per_request' => 25,
+    'history_max_pages' => 20,
+    // A daily refresh keeps history current; older reads are unknown, not reused.
+    'history_max_age_hours' => 30,
+    'listing_max_age_days' => 7,
 ];

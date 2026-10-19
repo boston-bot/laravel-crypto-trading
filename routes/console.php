@@ -171,6 +171,11 @@ if (config('sec_edgar.enabled') && config('paper.market_collection_enabled')) {
     Schedule::command('mcp:instrument-classification --scheduled')->dailyAt('06:20')->timezone('America/New_York')->withoutOverlapping(60);
 }
 
+// Listing and split-adjusted daily history refresh once a day, after overnight provider updates and before the open.
+if (config('alpaca_data.enabled') && config('alpaca_data.reference_enabled') && config('paper.market_collection_enabled')) {
+    Schedule::command('mcp:market-reference --scheduled')->dailyAt('06:40')->timezone('America/New_York')->withoutOverlapping(60);
+}
+
 if (config('paper.decisions_enabled')) {
     Schedule::command('mcp:paper-decisions --once')->everyMinute()->withoutOverlapping();
 }

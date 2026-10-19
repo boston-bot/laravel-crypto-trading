@@ -55,6 +55,8 @@
         <env name="ALPACA_DATA_ENABLED" value="false" force="true"/>
         <env name="ALPACA_KEY" value="" force="true"/>
         <env name="ALPACA_SECRET" value="" force="true"/>
+        <env name="ALPACA_REFERENCE_ENABLED" value="false" force="true"/>
+        <env name="ALPACA_ACCOUNT_ENVIRONMENT" value="paper" force="true"/>
         <env name="SEC_EDGAR_ENABLED" value="false" force="true"/>
         <env name="SEC_EDGAR_USER_AGENT" value="" force="true"/>
         <env name="APP_ENV" value="testing" force="true"/>

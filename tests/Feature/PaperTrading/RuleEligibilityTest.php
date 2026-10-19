@@ -11,13 +11,16 @@ use App\Models\User;
 use App\Services\Broker\Agentic\BrokerGateway;
 use App\Services\Broker\Agentic\RobinhoodWatchlists;
 use App\Services\Broker\Agentic\TrustedHttp;
+use App\Services\MarketData\Alpaca\DailyBars;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\IncidentRecorder;
+use App\Services\Monitoring\Monitor;
 use App\Services\PaperTrading\BrokerSimulationQuote;
 use App\Services\PaperTrading\ExecutionDataReadiness;
 use App\Services\PaperTrading\OfflineSimulator;
 use App\Services\PaperTrading\PaperInstrumentClassifications;
 use App\Services\PaperTrading\PaperMarketInputs;
+use App\Services\PaperTrading\PaperMarketReferences;
 use App\Services\PaperTrading\PaperOrderHandoff;
 use App\Services\PaperTrading\RealDataPaperFills;
 use App\Services\PaperTrading\RuleEligibility;
@@ -31,8 +34,10 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Tests\Support\AlpacaReferenceFixture as R;
 use Tests\Support\EdgarFixture as X;
 use Tests\Support\ExecutionFixture as E;
+use Tests\Support\ExternalOrderGateway;
 use Tests\Support\PaperActionFixture as A;
 use Tests\Support\PaperMarketGateway;
 use Tests\Support\SimulationFixture as F;
@@ -147,6 +152,60 @@ class RuleEligibilityTest extends TestCase
         $readiness = app(ExecutionDataReadiness::class)->for($this->connection, CarbonImmutable::now());
         $this->assertSame(0, $readiness['ready_count']);
         $this->assertSame('unavailable', $readiness['symbols']['DEMO']['checks']['rule_eligibility']);
+    }
+
+    /** Fresh complete order history with no outside orders, recorded through the existing monitor path. */
+    private function clearOrderHistory(): void
+    {
+        config(['mcp.external_order_detection_enabled' => true]);
+        $this->app->instance(BrokerGateway::class, new ExternalOrderGateway);
+        $this->assertSame('complete', app(Monitor::class)->sync($this->connection->id, 'eligibility:'.Str::uuid())->status);
+    }
+
+    private function references(array $bars, array $asset): void
+    {
+        R::enable();
+        R::fake(fn () => R::body(['DEMO' => $bars]), ['DEMO' => $asset]);
+        app(PaperMarketReferences::class)->collect($this->connection, $this->connection->user_id, ['DEMO'], (string) Str::uuid());
+    }
+
+    public function test_reviewed_listing_and_daily_history_let_a_fully_verified_symbol_become_eligible(): void
+    {
+        $this->apply();
+        $this->classify();
+        $this->clearOrderHistory();
+        $this->references(R::bars(260, '99.05', '120000'), R::asset('DEMO', 'ARCA'));
+        $this->input();
+        $report = $this->report();
+        $this->assertSame('eligible', $report['status'], json_encode(array_map(fn ($c) => $c['reason'], $report['checks'])));
+        $this->assertSame(['pass', 'us_exchange_listed', 'ARCA'], [$report['checks']['listing']['status'], $report['checks']['listing']['reason'], $report['checks']['listing']['exchange']]);
+        $this->assertSame(['pass', 260], [$report['checks']['history']['status'], $report['checks']['history']['sessions']]);
+        $this->assertSame(['pass', '11886000.00'], [$report['checks']['liquidity']['status'], $report['checks']['liquidity']['average_dollar_volume_20']]);
+        $this->assertSame(DailyBars::CONTRACT, $report['evidence']['history_source']);
+        $this->assertNotNull($report['evidence']['history_read_id']);
+        $this->assertNotNull($report['evidence']['listing_read_id']);
+        $recorded = app(RuleEligibility::class)->record($this->connection, $this->connection->user_id, 'DEMO', (string) Str::uuid(), CarbonImmutable::now());
+        $this->assertSame('eligible', $recorded->status);
+    }
+
+    public function test_known_listing_history_and_liquidity_failures_are_ineligible_and_stale_history_is_unknown(): void
+    {
+        $this->apply();
+        $this->classify();
+        $this->clearOrderHistory();
+        // A young, thinly traded OTC symbol: each fact fails on its own recorded reason.
+        $this->references(R::bars(120, '6.10', '1000'), R::asset('DEMO', 'OTC'));
+        $this->input();
+        $report = $this->report();
+        $this->assertSame('ineligible', $report['status']);
+        $this->assertSame(['ineligible', 'not_us_exchange_listed'], [$report['checks']['listing']['status'], $report['checks']['listing']['reason']]);
+        $this->assertSame(['ineligible', 'minimum_history_failed'], [$report['checks']['history']['status'], $report['checks']['history']['reason']]);
+        $this->assertSame(['ineligible', 'minimum_dollar_volume_failed'], [$report['checks']['liquidity']['status'], $report['checks']['liquidity']['reason']]);
+
+        $this->travel(config('alpaca_data.history_max_age_hours') + 1)->hours();
+        $later = $this->report();
+        $this->assertSame(['unavailable', 'daily_history_stale'], [$later['checks']['history']['status'], $later['checks']['history']['reason']]);
+        $this->assertSame('daily_history_stale', $later['checks']['liquidity']['reason']);
     }
 
     public function test_known_price_spread_and_tradability_failures_are_recorded_alongside_unknown_sources(): void
