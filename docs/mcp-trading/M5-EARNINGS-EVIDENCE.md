@@ -86,7 +86,7 @@ The calculator and profile suites were updated for the new parameter.
 
 ## Limits
 
-- **Merge rule not yet confirmed live:** the first deployed read failed closed on repeated events. The merge rule needs redeployment and one more live read to confirm a `complete` record.
+- **Merge rule confirmed live:** after redeploying `1cc23c7` (no pending migrations, `/ready` healthy), the runtime read at 2026-10-19 15:37:58 UTC was `complete`. 4,875 rows merged into 4,651 events (207 repeated keys, 105 conflicting), covering 2026-10-19 through 2026-11-18, exactly matching the diagnostic.
 - **Coverage is Robinhood's.** "All names" is the provider's statement: a missing symbol is treated as nothing scheduled within the window, the documented meaning. ETFs normally have no earnings events.
 - **Exits not built yet:** exits before a report and signal-time rechecks belong to the signal step.
 - **Not used yet:** `get_earnings_results` (per-ticker history) and `get_equity_historicals`.
