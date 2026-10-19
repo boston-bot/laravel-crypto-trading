@@ -26,6 +26,12 @@ Current milestone update, October 18: M4 is accepted under the owner's explicit 
 | [M5 execution and handoff evidence](M5-EXECUTION-HANDOFF-EVIDENCE.md) | Owner and developer | Versioned execution choices, recorded read-only input provenance, disabled proposal handoff, synthetic workflow tests and remaining owner/provider gaps |
 | [M5 watchlist and fee evidence](M5-WATCHLIST-EVIDENCE.md) | Owner and developer | Existing-gateway watchlist reads, actual On Watch retrieval, decimal percentage fees and validation |
 | [M5 owner mandate intake](M5-OWNER-MANDATE.md) | Owner and developer | Actual paper choices, delegated allocation/fee decisions, verified watchlist membership and application status |
+| [M5 market collection deployment](M5-COLLECTION-DEPLOYMENT-EVIDENCE.md) | Owner and operator | Bounded read-only allowlist collector, deployment and actual stored-data verification |
+| [M5 paper corporate-action accounting](M5-CORPORATE-ACTION-ACCOUNTING-EVIDENCE.md) | Owner and developer | Disabled split/dividend ledger reconciliation, late-event review blocks, bounded observed-data policy and remaining coverage gaps |
+| [M5 Alpaca corporate-action data](M5-ALPACA-DATA-EVIDENCE.md) | Owner and developer | Owner-selected read-only data adapter, exact decimals, encrypted coverage, successful real access and remaining event-accounting work |
+| [M5 Robinhood reference coverage](M5-REFERENCE-COVERAGE-EVIDENCE.md) | Owner and developer | Observed stock/ETF types, dividend subset/date warnings, real gateway checks and missing complete action coverage |
+| [M5 real-data paper fill path](M5-REAL-DATA-PAPER-FILLS-EVIDENCE.md) | Owner and developer | Default-off broker-observation fills, simulated provenance, shared liquidity/recovery tests and remaining actual coverage blockers |
+| [M5 verified execution-data controls](M5-VERIFIED-DATA-EVIDENCE.md) | Owner and developer | Pinned share-unit semantics, fresh quote/book matching, per-symbol readiness and remaining provider requirements |
 | [M5 broker execution-input evidence](M5-MARKET-INPUT-EVIDENCE.md) | Owner and developer | Gated account-tradability and price-book reads, real contract checks and precise remaining fill blockers |
 | [M5 deployment evidence](M5-DEPLOYMENT-EVIDENCE.md) | Owner and operator | Deployed partial release/migrations, runtime safety and restore checks, prepared settings and blocked authenticated application |
 | [Repository AGENTS.md](../../AGENTS.md) | Codex | Concise standing development instructions |

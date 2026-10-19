@@ -8,6 +8,7 @@ use App\Models\PaperTrading\ExecutionVersion;
 use App\Models\PaperTrading\MarketInput;
 use App\Models\PaperTrading\OrderHandoff;
 use App\Services\Monitoring\AccountScope;
+use Carbon\CarbonImmutable;
 
 final class ExecutionOverview
 {
@@ -20,7 +21,7 @@ final class ExecutionOverview
         $versions = $paper ? ExecutionVersion::where('paper_portfolio_id', $paper['portfolio']->id) : null;
         $runs = DecisionRun::where('mcp_connection_id', $connection->id)->where('scope', $scope);
 
-        return ['latest' => $versions ? (clone $versions)->latest('version')->first() : null,
+        return ['readiness' => app(ExecutionDataReadiness::class)->for($connection, CarbonImmutable::now()), 'latest' => $versions ? (clone $versions)->latest('version')->first() : null,
             'applied' => $paper ? ExecutionPolicies::current($paper['portfolio']) : null,
             'history' => $versions ? (clone $versions)->latest('version')->paginate(5, ['*'], 'execution_page')->withQueryString() : null,
             'inputs' => MarketInput::where('mcp_connection_id', $connection->id)->where('scope', $scope)->latest('id')->paginate(5, ['*'], 'market_inputs_page')->withQueryString(),

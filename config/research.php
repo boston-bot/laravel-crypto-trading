@@ -30,7 +30,7 @@ return [
         'coverage' => [
             'quotes' => ['supported' => true, 'timestamp_quality' => 'broker component source times for bid/ask/last; regular and extended sessions labeled', 'scope' => 'requested equity symbols'],
             'account_tradability' => ['supported' => true, 'timestamp_quality' => 'retrieval only; broker supplies no source time', 'scope' => 'source mapping behind separate default-off execution-input read gate; not strategy eligibility'],
-            'price_book' => ['supported' => true, 'timestamp_quality' => 'broker book updated_at, not quote-component venue times', 'scope' => 'source mapping behind separate default-off gate; broker quantity units unverified'],
+            'price_book' => ['supported' => true, 'timestamp_quality' => 'reviewed broker snapshot time, not quote-component venue times', 'scope' => 'source mapping behind separate default-off gate; reviewed share units require matching fresh quote/book evidence'],
             'strategy_classification' => ['supported' => false, 'timestamp_quality' => 'none', 'scope' => 'stock/ETF and leveraged/inverse classification not supplied by reviewed contracts'],
             'instrument_lookup' => ['supported' => true, 'timestamp_quality' => 'retrieval time only', 'scope' => 'exact equity symbol match'],
             'market_sessions' => ['supported' => false, 'timestamp_quality' => 'none', 'scope' => 'no reviewed exchange-session read'],

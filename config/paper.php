@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'market_collection_enabled' => filter_var(env('MCP_PAPER_MARKET_COLLECTION_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'corporate_actions_enabled' => filter_var(env('MCP_PAPER_ACTIONS_ENABLED', false), FILTER_VALIDATE_BOOL),
+    // Independent real-market observation adapter; all resulting orders/fills remain simulated.
+    'real_data_fills_enabled' => filter_var(env('MCP_PAPER_REAL_DATA_FILLS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'market_inputs_enabled' => filter_var(env('MCP_PAPER_MARKET_INPUTS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'handoff_enabled' => filter_var(env('MCP_PAPER_HANDOFF_ENABLED', false), FILTER_VALIDATE_BOOL),
     // Synthetic fills only. Proposal handoff requires its own independent gate and applied settings.

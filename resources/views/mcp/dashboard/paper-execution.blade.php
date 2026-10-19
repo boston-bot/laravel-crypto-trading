@@ -56,6 +56,17 @@
     @endforeach
     {{ $execution['history']?->links('mcp.pagination') }}
 </x-panel>
+<x-panel title="Execution data readiness" subtitle="Stored observations only. This report makes no network request and does not enable fills." icon="shield">
+    <p>{{ $execution['readiness']['ready_count'] }} / {{ $execution['readiness']['symbol_count'] }} symbols have complete real execution data. Classification, corporate actions and fractional-limit coverage remain required.</p>
+    @if($execution['readiness']['symbol_count'] === 0)<p>Apply execution settings to inspect the selected symbol universe.</p>@endif
+    <details><summary>Inspect every symbol and missing requirement</summary>
+        <div class="table-wrap"><table class="data"><thead><tr><th>Symbol / status</th><th>Source</th><th>Coverage checks</th></tr></thead><tbody>
+        @foreach($execution['readiness']['symbols'] as $symbol => $readiness)
+            <tr><td>{{ $symbol }} · {{ $readiness['status'] }}</td><td>{{ $readiness['input_id'] ? 'Market input #'.$readiness['input_id'] : 'No stored observation' }}</td><td><dl>@foreach($readiness['checks'] as $field => $reason)<dt>{{ $field }}</dt><dd>{{ $reason }}</dd>@endforeach</dl></td></tr>
+        @endforeach
+        </tbody></table></div>
+    </details>
+</x-panel>
 <x-panel title="Recorded market input coverage" subtitle="Structurally checked reads are not proof of complete execution coverage. Publication, retrieval and local availability remain distinct." icon="clock" flush>
     <div class="table-wrap"><table class="data"><thead><tr><th>Symbol / origin</th><th>Coverage / blocker</th><th>Times / evidence</th></tr></thead><tbody>
     @forelse($execution['inputs'] as $input)

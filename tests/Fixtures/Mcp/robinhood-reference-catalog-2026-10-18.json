@@ -1,0 +1,530 @@
+{
+  "tools": {
+    "preview_scan": {
+      "name": "preview_scan",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filters": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "filter_type": {
+                  "type": "string"
+                },
+                "predicate": {
+                  "type": "string"
+                },
+                "values": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "interval": {
+                  "type": "string"
+                },
+                "length": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "plot": {
+                  "type": "string"
+                },
+                "expression": {
+                  "type": "string"
+                },
+                "display_title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "predicate",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "columns": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "display_name": {
+                  "type": "string"
+                },
+                "expression": {
+                  "type": "string"
+                },
+                "visible": {
+                  "type": [
+                    "null",
+                    "boolean"
+                  ]
+                },
+                "order": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                }
+              },
+              "required": [
+                "display_name"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "filters"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "result": {
+                "type": "object",
+                "properties": {
+                  "total_items": {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  },
+                  "results": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "ticker": {
+                          "type": "string"
+                        },
+                        "instrument_id": {
+                          "type": "string"
+                        },
+                        "instrument_type": {
+                          "type": "string"
+                        },
+                        "columns": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "ticker",
+                        "instrument_id",
+                        "instrument_type",
+                        "columns"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "sorted_by": {
+                    "type": "string"
+                  },
+                  "filters_applied": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "filter_type": {
+                          "type": "string"
+                        },
+                        "filter_type_enum": {
+                          "type": "string"
+                        },
+                        "predicate": {
+                          "type": "string"
+                        },
+                        "values": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "interval": {
+                          "type": "string"
+                        },
+                        "length": {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "plot": {
+                          "type": "string"
+                        },
+                        "expression": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "filter_type",
+                        "predicate",
+                        "values"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "total_items",
+                  "results"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "additionalProperties": false
+          },
+          "guide": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "guide"
+        ],
+        "additionalProperties": false
+      },
+      "fingerprint": "02372cd21aa2b6bced7b4fb51943f58d60fbeccd76bb33fd8ffbd899ed28a08b"
+    },
+    "get_equity_fundamentals": {
+      "name": "get_equity_fundamentals",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "bounds": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbols"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "results": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": [
+                    "null",
+                    "object"
+                  ],
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "open": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "high": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "low": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "volume": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "overnight_volume": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "bounds": {
+                      "type": "string"
+                    },
+                    "market_date": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "average_volume_2_weeks": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "average_volume": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "average_volume_30_days": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "high_52_weeks": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "high_52_weeks_date": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "low_52_weeks": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "low_52_weeks_date": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "float": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "market_cap": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "pb_ratio": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "pe_ratio": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "shares_outstanding": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "dividend_yield": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "dividend_per_share": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "distribution_frequency": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "payable_date": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "ex_dividend_date": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "record_date": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "thirty_day_sec_yield": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "ceo": {
+                      "type": "string"
+                    },
+                    "headquarters_city": {
+                      "type": "string"
+                    },
+                    "headquarters_state": {
+                      "type": "string"
+                    },
+                    "sector": {
+                      "type": "string"
+                    },
+                    "industry": {
+                      "type": "string"
+                    },
+                    "num_employees": {
+                      "type": [
+                        "null",
+                        "integer"
+                      ]
+                    },
+                    "year_founded": {
+                      "type": [
+                        "null",
+                        "integer"
+                      ]
+                    },
+                    "financial_status_indicator": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "financial_status_description": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "symbol",
+                    "open",
+                    "high",
+                    "low",
+                    "volume",
+                    "overnight_volume",
+                    "bounds",
+                    "market_date",
+                    "average_volume_2_weeks",
+                    "average_volume",
+                    "average_volume_30_days",
+                    "high_52_weeks",
+                    "high_52_weeks_date",
+                    "low_52_weeks",
+                    "low_52_weeks_date",
+                    "float",
+                    "market_cap",
+                    "pb_ratio",
+                    "pe_ratio",
+                    "shares_outstanding",
+                    "dividend_yield",
+                    "dividend_per_share",
+                    "distribution_frequency",
+                    "payable_date",
+                    "ex_dividend_date",
+                    "record_date",
+                    "thirty_day_sec_yield",
+                    "description",
+                    "ceo",
+                    "headquarters_city",
+                    "headquarters_state",
+                    "sector",
+                    "industry",
+                    "num_employees",
+                    "year_founded",
+                    "financial_status_indicator",
+                    "financial_status_description"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "not_found": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "results"
+            ],
+            "additionalProperties": false
+          },
+          "guide": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "guide"
+        ],
+        "additionalProperties": false
+      },
+      "fingerprint": "e7c30e46f563db99959205d983638a5f712cd74b3b9927fd6b752392433120f1"
+    }
+  }
+}

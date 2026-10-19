@@ -13,6 +13,7 @@ use App\Services\PaperTrading\DecisionScheduler;
 use App\Services\PaperTrading\OfflineSimulator;
 use App\Services\PaperTrading\PaperMarketInputs;
 use App\Services\PaperTrading\PaperOrderHandoff;
+use App\Services\PaperTrading\RealDataPaperFills;
 use App\Services\PaperTrading\StoredDecisionInputs;
 use App\Services\Research\ResearchModel;
 use Carbon\CarbonImmutable;
@@ -22,6 +23,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Tests\Support\BrokerInputFixture;
 use Tests\Support\ExecutionFixture as E;
 use Tests\Support\FakeDecisionModel;
 use Tests\Support\ResearchFixture;
@@ -64,6 +66,35 @@ class PaperOrderHandoffTest extends TestCase
         $run = DecisionRun::where('mcp_connection_id', $this->connection->id)->latest('scheduled_at')->latest('id')->firstOrFail();
 
         return app(DecisionRunner::class)->process($run->id);
+    }
+
+    public function test_broker_observations_reach_paper_order_and_later_fill_with_original_provenance(): void
+    {
+        config(['paper.real_data_fills_enabled' => true, 'paper.offline_simulation_enabled' => false]);
+        BrokerInputFixture::record($this->connection);
+        $run = $this->proposal();
+        $this->assertSame('proposed', $run->status, $run->reason ?? '');
+        $handoff = app(PaperOrderHandoff::class)->process($this->connection, $this->connection->user_id, $run->id)->sole();
+        $this->assertSame('order_created', $handoff->status, $handoff->reason ?? '');
+        $order = SimulationOrder::findOrFail($handoff->sim_order_id);
+        $this->assertSame('real_data_paper_simulation', $order->intent['origin']);
+        $this->travel(1)->seconds();
+        BrokerInputFixture::record($this->connection, ['execution_reads.price_book.fields.book_ask_quantity' => '100']);
+        $this->assertSame('filled', app(RealDataPaperFills::class)->process($this->connection, $this->connection->user_id, $order->id)->status);
+        $this->assertSame('9.000000000000000000', SimulationPosition::sole()->quantity);
+        $this->assertSame('9099.010000000000000000', $this->portfolio->fresh()->cash);
+        $this->assertSame(0, BrokerOrder::count());
+        Http::assertNothingSent();
+    }
+
+    public function test_disabled_real_data_gate_records_unavailable_handoff_without_orders(): void
+    {
+        BrokerInputFixture::record($this->connection);
+        $run = $this->proposal();
+        $handoff = app(PaperOrderHandoff::class)->process($this->connection, $this->connection->user_id, $run->id)->sole();
+        $this->assertSame('real_data_paper_fills_disabled', $handoff->reason);
+        $this->assertSame('unavailable', $handoff->status);
+        $this->assertSame(0, SimulationOrder::count());
     }
 
     public function test_applied_percentage_fee_reaches_order_reservation_and_later_fill(): void

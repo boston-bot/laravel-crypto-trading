@@ -34,7 +34,13 @@ class ExecutionInputsTest extends TestCase
 
     private function fake(array $data, ?callable $during = null): void
     {
-        McpFixture::rpcFake(array_values($this->catalog), function ($params) use ($data, $during) {
+        $tools = $this->catalog;
+        $semantics = json_decode(file_get_contents(base_path('tests/Fixtures/Mcp/robinhood-execution-input-catalog-2026-10-18.json')), true)['reviewed_price_book_semantics'];
+        $properties = &$tools['get_equity_price_book']['outputSchema']['properties']['data']['properties']['books']['items']['properties'];
+        $properties['bids']['items']['properties']['quantity']['description'] = $semantics['bid_quantity'];
+        $properties['asks']['items']['properties']['quantity']['description'] = $semantics['ask_quantity'];
+        $properties['updated_at']['description'] = $semantics['snapshot_time'];
+        McpFixture::rpcFake(array_values($tools), function ($params) use ($data, $during) {
             $this->assertSame(['TEST'], $params['arguments']['symbols']);
             $this->assertContains($params['name'], ['get_equity_price_book', 'get_equity_tradability']);
             if ($params['name'] === 'get_equity_tradability') {
@@ -60,9 +66,28 @@ class ExecutionInputsTest extends TestCase
         foreach ([Operation::Tradability, Operation::PriceBook] as $operation) {
             $profile = config('robinhood_mcp.operations.'.$operation->value);
             $tool = $this->catalog[$profile['tool']];
-            unset($tool['fingerprint']);
+            unset($tool['fingerprint'], $tool['semantic_fingerprint']);
             $this->assertSame($profile['fingerprint'], Capabilities::fingerprint($tool));
         }
+    }
+
+    public function test_unit_description_drift_blocks_calls_even_when_functional_schema_is_unchanged(): void
+    {
+        $tools = $this->catalog;
+        $semantics = json_decode(file_get_contents(base_path('tests/Fixtures/Mcp/robinhood-execution-input-catalog-2026-10-18.json')), true)['reviewed_price_book_semantics'];
+        $properties = &$tools['get_equity_price_book']['outputSchema']['properties']['data']['properties']['books']['items']['properties'];
+        $properties['bids']['items']['properties']['quantity']['description'] = 'Round lots, not individual shares.';
+        $properties['asks']['items']['properties']['quantity']['description'] = $semantics['ask_quantity'];
+        $properties['updated_at']['description'] = $semantics['snapshot_time'];
+        McpFixture::rpcFake(array_values($tools), fn () => $this->fail('Changed unit semantics reached tools/call.'));
+        try {
+            app(RobinhoodGateway::class)->read($this->connection, Operation::PriceBook, ['symbol' => 'TEST']);
+            $this->fail();
+        } catch (ReadFailure $failure) {
+            $this->assertSame(ReadError::SchemaChanged, $failure->reason);
+        }
+        $this->assertSame('schema_changed', $this->connection->fresh()->status);
+        Http::assertNotSent(fn ($request) => ($request['method'] ?? '') === 'tools/call');
     }
 
     public function test_tradability_is_account_bound_and_does_not_claim_strategy_eligibility(): void
@@ -77,7 +102,7 @@ class ExecutionInputsTest extends TestCase
         $this->assertArrayNotHasKey('corporate_actions_clear', $record->fields);
     }
 
-    public function test_price_book_selects_best_levels_without_assuming_units_or_filling_missing_sides(): void
+    public function test_price_book_selects_best_levels_with_reviewed_share_units_and_keeps_missing_sides_unknown(): void
     {
         $this->fake(['books' => [$this->book()]]);
         $record = app(RobinhoodGateway::class)->read($this->connection, Operation::PriceBook, ['symbol' => 'TEST'])->records[0];
@@ -85,7 +110,7 @@ class ExecutionInputsTest extends TestCase
         $this->assertSame('2', (string) $record->fields['book_ask_quantity']);
         $this->assertSame('99', (string) $record->fields['book_bid']);
         $this->assertSame('4', (string) $record->fields['book_bid_quantity']);
-        $this->assertSame('broker_quantity_unverified', $record->fields['book_quantity_unit']);
+        $this->assertSame('shares', $record->fields['book_quantity_unit']);
         $this->assertNotNull($record->sourceAsOf);
         $this->fake(['books' => [$this->book(['asks' => [], 'bids' => null])]]);
         $record = app(RobinhoodGateway::class)->read($this->connection, Operation::PriceBook, ['symbol' => 'TEST'])->records[0];

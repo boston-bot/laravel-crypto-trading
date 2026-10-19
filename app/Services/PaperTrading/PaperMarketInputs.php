@@ -4,12 +4,14 @@ namespace App\Services\PaperTrading;
 
 use App\Models\McpConnection;
 use App\Models\PaperTrading\MarketInput;
+use App\Models\PaperTrading\Portfolio;
 use App\Models\User;
 use App\Services\Broker\Agentic\BrokerGateway;
 use App\Services\Broker\Agentic\Operation;
 use App\Services\Broker\Agentic\ReadError;
 use App\Services\Broker\Agentic\ReadFailure;
 use App\Services\Broker\Agentic\TrustedHttp;
+use App\Services\MarketData\Alpaca\CorporateActions;
 use App\Services\Monitoring\AccountScope;
 use App\Support\Mcp\Decimal;
 use Carbon\CarbonImmutable;
@@ -76,16 +78,52 @@ final class PaperMarketInputs
                 }
             }
             $payload['coverage'] = 'prices_identity_and_separate_execution_read_evidence';
+            $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->first();
+            $execution = $portfolio ? ExecutionPolicies::current($portfolio) : null;
+            if ($execution) {
+                $payload['book_quote_match'] = app(BookQuoteMatcher::class)->match($payload, CarbonImmutable::now(), $execution->payload['quote_max_age_seconds']);
+                foreach (['bid_size', 'ask_size'] as $field) {
+                    $payload['quote'][$field] = $payload['book_quote_match'][$field];
+                }
+            }
+        }
+
+        if (config('robinhood_mcp.reference_data_enabled')) {
+            $payload['reference_reads'] = $this->executionReads($connection, $symbol, [Operation::Classification, Operation::Dividends]);
+            foreach ($payload['reference_reads'] as $entry) {
+                if (isset($entry['retrieved_at'])) {
+                    $retrieved = $retrieved->max(CarbonImmutable::parse($entry['retrieved_at']));
+                }
+            }
+            $payload['reference_coverage'] = app(ReferenceDataCoverage::class)->inspect($payload, CarbonImmutable::now(), config('robinhood_mcp.max_age_seconds'));
+            $payload['quote']['asset_type'] = $payload['reference_coverage']['asset_type'];
+            // This subset cannot establish leverage/inverse exclusion, complete actions or execution permission.
+        }
+
+        if (config('alpaca_data.enabled')) {
+            $day = CarbonImmutable::now('America/New_York')->startOfDay();
+            $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->first();
+            $start = $day->subDays(min(180, max(0, (int) config('alpaca_data.lookback_days'))));
+            if ($portfolio) {
+                $start = $start->min($portfolio->created_at->setTimezone('America/New_York')->startOfDay());
+            }
+            $payload['corporate_action_reads']['alpaca'] = app(CorporateActions::class)->read($symbol, $start->toDateString(),
+                $day->addDays(min(180, max(0, (int) config('alpaca_data.lookahead_days'))))->toDateString());
+            $entry = $payload['corporate_action_reads']['alpaca'];
+            if ($entry['retrieved_at'] !== null) {
+                $retrieved = $retrieved->max(CarbonImmutable::parse($entry['retrieved_at']));
+            }
+            // A complete process-date query is never an effective-date absence guarantee.
         }
 
         return $this->record($connection, $actor, $symbol, $requestId, 'broker_read', $payload, $source, $retrieved, $reason);
     }
 
     /** Optional, separately gated evidence. Never promote broker tradability to strategy eligibility. */
-    private function executionReads(McpConnection $connection, string $symbol): array
+    private function executionReads(McpConnection $connection, string $symbol, array $operations = [Operation::Tradability, Operation::PriceBook]): array
     {
         $evidence = [];
-        foreach ([Operation::Tradability, Operation::PriceBook] as $operation) {
+        foreach ($operations as $operation) {
             $entry = ['provider' => TrustedHttp::RESOURCE, 'complete' => false, 'source_as_of' => null,
                 'retrieved_at' => null, 'fields' => null, 'error' => null];
             try {
@@ -100,9 +138,17 @@ final class PaperMarketInputs
                     throw new ReadFailure(ReadError::AccountMismatch);
                 }
                 $entry['source_as_of'] = $record->sourceAsOf?->format(DATE_ATOM);
-                $fields = $operation === Operation::Tradability
-                    ? ['symbol', 'account_scope', 'broker_tradeable', 'fractional_tradability', 'extended_hours_fractional_tradability', 'internal_halt_reason']
-                    : ['symbol', 'book_bid', 'book_ask', 'book_bid_quantity', 'book_ask_quantity', 'book_quantity_unit'];
+                if ($operation === Operation::PriceBook) {
+                    $profile = config('robinhood_mcp.operations.price_book');
+                    $entry['semantic_fingerprint'] = $connection->fresh()->capability_manifest[$profile['tool']]['semantic_fingerprint'] ?? null;
+                }
+                $entry['contract_fingerprint'] = config('robinhood_mcp.operations.'.$operation->value.'.fingerprint');
+                $fields = match ($operation) {
+                    Operation::Tradability => ['symbol', 'account_scope', 'broker_tradeable', 'fractional_tradability', 'extended_hours_fractional_tradability', 'internal_halt_reason'],
+                    Operation::PriceBook => ['symbol', 'book_bid', 'book_ask', 'book_bid_quantity', 'book_ask_quantity', 'book_quantity_unit'],
+                    Operation::Classification => ['id', 'symbol', 'asset_type'],
+                    Operation::Dividends => ['symbol', 'market_date', 'dividend_per_share', 'ex_dividend_date', 'record_date', 'payable_date', 'dividend_schedule_status'],
+                };
                 // Decimal implements JSON serialization as a quoted string; no floats or account IDs escape.
                 $entry['fields'] = json_decode(json_encode(array_intersect_key($record->fields, array_flip($fields)), JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
                 $entry['complete'] = true;
@@ -163,7 +209,9 @@ final class PaperMarketInputs
         if ($q['eligible'] !== true || ! in_array($q['asset_type'], ['stock', 'etf'], true) || $q['leveraged'] !== false || $q['inverse'] !== false) {
             return 'instrument_eligibility_unverified';
         }
-        if ($q['corporate_actions_clear'] !== true) {
+        $actionClear = $input->origin === 'broker_read' && config('paper.corporate_actions_enabled')
+            ? app(CorporateActionClearance::class)->inspect($input, $cutoff, $maxAge)['clear'] : $q['corporate_actions_clear'];
+        if ($actionClear !== true) {
             return 'corporate_action_coverage_unknown';
         }
         if ($q['bid_size'] === null || $q['ask_size'] === null) {

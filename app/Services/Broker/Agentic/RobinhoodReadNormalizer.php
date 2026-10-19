@@ -29,6 +29,8 @@ final class RobinhoodReadNormalizer
                 'fees' => $row['fees'] ?? null, 'time_in_force' => $row['time_in_force'] ?? null, 'asset_class' => 'equity'],
             Operation::Instruments => ['id' => $row['instrument_id'] ?? null, 'symbol' => $row['symbol'] ?? null,
                 'name' => $row['name'] ?? null, 'asset_class' => 'equity'],
+            Operation::Classification => self::classification($row),
+            Operation::Dividends => self::dividends($row),
             Operation::Quotes => self::quote($row),
             Operation::PriceBook => self::book($row),
             Operation::Tradability => $scope + ['symbol' => $row['symbol'] ?? null, 'broker_tradeable' => $row['tradeable'] ?? null,
@@ -41,6 +43,41 @@ final class RobinhoodReadNormalizer
                 'symbol' => $row['symbol'] ?? null],
             default => throw new ReadFailure(ReadError::Unsupported),
         };
+    }
+
+    private static function classification(array $row): array
+    {
+        if (($row['instrument_type'] ?? null) !== 'EQUITY' || ! is_string($row['columns']['Asset type'] ?? null)) {
+            throw new ReadFailure(ReadError::Malformed);
+        }
+
+        return ['id' => $row['instrument_id'] ?? null, 'symbol' => $row['ticker'] ?? null,
+            'asset_type' => match ($row['columns']['Asset type']) {
+                'STOCK' => 'stock', 'ETF' => 'etf', default => null
+            }];
+    }
+
+    private static function dividends(array $row): array
+    {
+        $fields = ['symbol' => $row['symbol'] ?? null, 'dividend_per_share' => $row['dividend_per_share'] ?? null];
+        foreach (['market_date', 'ex_dividend_date', 'record_date', 'payable_date'] as $key) {
+            $value = $row[$key] ?? null;
+            if ($value !== null) {
+                if (! is_string($value) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $value)) {
+                    throw new ReadFailure(ReadError::Malformed);
+                }
+                $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+                if (! $date || $date->format('Y-m-d') !== $value || ($key === 'market_date' && $value > now('America/New_York')->toDateString())) {
+                    throw new ReadFailure(ReadError::Malformed);
+                }
+            }
+            $fields[$key] = $value;
+        }
+        $dates = [$fields['ex_dividend_date'], $fields['record_date'], $fields['payable_date']];
+        $fields['dividend_schedule_status'] = in_array(null, $dates, true) ? 'partial_or_unknown' :
+            ($dates[0] <= $dates[1] && $dates[1] <= $dates[2] ? 'observed_cycle_unverified' : 'inconsistent_dates');
+
+        return $fields;
     }
 
     private static function book(array $row): array
@@ -85,7 +122,7 @@ final class RobinhoodReadNormalizer
 
         return ['symbol' => $row['symbol'] ?? null, 'book_bid' => $best['bid'], 'book_ask' => $best['ask'],
             'book_bid_quantity' => $best['bid_quantity'], 'book_ask_quantity' => $best['ask_quantity'],
-            'book_quantity_unit' => 'broker_quantity_unverified'];
+            'book_quantity_unit' => 'shares'];
     }
 
     private static function quote(array $row): array

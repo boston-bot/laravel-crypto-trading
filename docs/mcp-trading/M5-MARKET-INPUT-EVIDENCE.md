@@ -2,6 +2,8 @@
 
 October 18, 2026. Source increment after deployed `b9b5146`. **M5 remains partial: real-data paper fills remain blocked.** This increment implements the independently available read contracts and records exact coverage gaps; it does not manufacture the missing eligibility/action facts or relabel broker data as synthetic. Prior deployment/settings/watchlist work is recorded separately in [deployment evidence](M5-DEPLOYMENT-EVIDENCE.md).
 
+Subsequent [verified-data control work](M5-VERIFIED-DATA-EVIDENCE.md) resolves the previously unknown book quantity units through the full app-owned tool metadata: quantities are shares. It pins the reviewed unit/time definitions, checks quote/book price and time agreement and adds per-symbol readiness reports. Historical unknown-unit statements below describe this original increment. Classification, corporate actions and fractional-limit coverage remain unresolved.
+
 ## Reviewed broker reads
 
 Inspected the complete stored app-owned capability catalog and the functional schemas for quotes, symbol search, fundamentals, account tradability and price books. The catalog advertises account tradability and price books; its reviewed output fields do not establish stock-versus-ETF classification, leveraged/inverse exclusions, corporate-action clearance or regular-session fractional-limit eligibility. Names, descriptions, search matches and a generic tradeable flag cannot establish those facts.

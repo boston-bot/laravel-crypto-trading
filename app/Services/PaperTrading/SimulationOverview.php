@@ -3,6 +3,7 @@
 namespace App\Services\PaperTrading;
 
 use App\Models\McpConnection;
+use App\Models\PaperTrading\CorporateActionRecord;
 use App\Models\PaperTrading\SimulationEvent;
 use App\Models\PaperTrading\SimulationOrder;
 use App\Models\PaperTrading\SimulationPosition;
@@ -32,7 +33,10 @@ final class SimulationOverview
             $fees = $fees->plus(Decimal::from($fill->fee));
         }
 
-        return ['positions' => $positions, 'cost_basis' => (string) $basis, 'realized_pnl' => (string) $realized, 'fees' => (string) $fees,
+        return ['dividend_income' => (string) app(PaperIncome::class)->received($paper['portfolio']),
+            'dividend_receivable' => (string) app(PaperIncome::class)->receivable($paper['portfolio']),
+            'corporate_actions' => CorporateActionRecord::where('paper_portfolio_id', $id)->latest('id')->paginate(10, ['*'], 'paper_actions_page')->withQueryString(),
+            'positions' => $positions, 'cost_basis' => (string) $basis, 'realized_pnl' => (string) $realized, 'fees' => (string) $fees,
             'valuation_status' => 'unavailable_no_current_marks', 'unrealized_pnl' => null, 'total_return' => null,
             'orders' => (clone $orders)->latest('id')->paginate(10, ['*'], 'sim_orders_page')->withQueryString(),
             'events' => (clone $events)->with('observation')->latest('id')->paginate(10, ['*'], 'sim_events_page')->withQueryString()];

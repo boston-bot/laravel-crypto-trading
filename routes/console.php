@@ -139,6 +139,10 @@ Artisan::command('mcp:paper-decisions {--once} {--sync : Process the current win
     return 0;
 })->purpose('Bounded non-executable paper proposals; requires explicit enablement, applied policy and reviewed AI configuration');
 
+if (config('paper.market_collection_enabled') && config('paper.market_inputs_enabled')) {
+    Schedule::command('mcp:paper-collect --once --scheduled')->everyFiveMinutes()->withoutOverlapping(10);
+}
+
 if (config('paper.decisions_enabled')) {
     Schedule::command('mcp:paper-decisions --once')->everyMinute()->withoutOverlapping();
 }

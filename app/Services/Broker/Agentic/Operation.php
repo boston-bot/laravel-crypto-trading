@@ -11,6 +11,8 @@ enum Operation: string
     case Orders = 'orders';
     case Instruments = 'instruments';
     case Quotes = 'quotes';
+    case Classification = 'classification';
+    case Dividends = 'dividends';
     case Tradability = 'tradability';
     case PriceBook = 'price_book';
     case Watchlists = 'watchlists';

@@ -2,6 +2,7 @@
 
 return [
     'enabled' => filter_var(env('ROBINHOOD_MCP_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'reference_data_enabled' => filter_var(env('ROBINHOOD_MCP_REFERENCE_DATA_ENABLED', false), FILTER_VALIDATE_BOOL),
     'execution_inputs_enabled' => filter_var(env('ROBINHOOD_MCP_EXECUTION_INPUTS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'watchlists_enabled' => filter_var(env('ROBINHOOD_MCP_WATCHLISTS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'client_id' => env('ROBINHOOD_MCP_CLIENT_ID'),
@@ -11,6 +12,23 @@ return [
     'max_age_seconds' => 300,
     // Reviewed application code/configuration only. Never populate from model or broker prose.
     'operations' => [
+        // Reviewed exact-symbol read-only reference subsets. Neither establishes complete execution eligibility.
+        'classification' => [
+            'tool' => 'preview_scan', 'reviewed_read_only' => true,
+            'fingerprint' => '02372cd21aa2b6bced7b4fb51943f58d60fbeccd76bb33fd8ffbd899ed28a08b',
+            'arguments' => ['filters' => [['expression' => 'symbol', 'predicate' => 'ANY_OF']],
+                'columns' => [['display_name' => 'Asset type', 'visible' => true]]],
+            'filters' => ['symbol' => 'filters.0.values'], 'array_filters' => ['symbol'], 'required_filter' => 'symbol',
+            'records' => 'data.result.results', 'total_count' => 'data.result.total_items', 'pagination' => ['kind' => 'single'],
+            'normalizer' => 'robinhood_v1', 'exact_symbol' => true, 'strict_symbol' => true, 'coverage' => 'observed_stock_etf_type_only_source_time_unknown',
+        ],
+        'dividends' => [
+            'tool' => 'get_equity_fundamentals', 'reviewed_read_only' => true,
+            'fingerprint' => 'e7c30e46f563db99959205d983638a5f712cd74b3b9927fd6b752392433120f1',
+            'arguments' => ['bounds' => 'regular'], 'filters' => ['symbol' => 'symbols'], 'array_filters' => ['symbol'], 'required_filter' => 'symbol',
+            'records' => 'data.results', 'pagination' => ['kind' => 'single'], 'normalizer' => 'robinhood_v1',
+            'exact_symbol' => true, 'strict_symbol' => true, 'coverage' => 'dividend_fields_only_no_complete_action_coverage',
+        ],
         // Reviewed app-owned functional schemas, October 18. No broker mutation.
         'tradability' => [
             'tool' => 'get_equity_tradability', 'reviewed_read_only' => true,
@@ -22,9 +40,10 @@ return [
         'price_book' => [
             'tool' => 'get_equity_price_book', 'reviewed_read_only' => true,
             'fingerprint' => '87c85f4d4e7b8bf62bbcc20d48e2706ce3f0ec145ea99ce010846405bc5268e4',
+            'semantic_fingerprint' => 'dd76d07a755062e252175451ccf92f050be453c404de990f637c94563e5d5e60',
             'filters' => ['symbol' => 'symbols'], 'array_filters' => ['symbol'], 'required_filter' => 'symbol',
             'records' => 'data.books', 'pagination' => ['kind' => 'single'], 'normalizer' => 'robinhood_v1',
-            'record_source_as_of' => 'updated_at', 'exact_symbol' => true, 'coverage' => 'displayed_book_quantity_units_unverified',
+            'record_source_as_of' => 'updated_at', 'exact_symbol' => true, 'coverage' => 'displayed_book_shares_snapshot_time',
         ],
         // Reviewed from the app-owned capability catalog, October 18, 2026.
         // These lists belong to the authorized Robinhood user, not the bound agentic account.

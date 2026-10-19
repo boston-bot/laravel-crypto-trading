@@ -57,7 +57,7 @@ final class RobinhoodGateway implements BrokerGateway
                 if (! in_array($key, ['symbol', 'instrument_id', 'order_id', 'list_id'], true) || ! isset($profile['filters'][$key]) || ! is_string($value) || $value === '' || strlen($value) > 128) {
                     throw new ReadFailure(ReadError::Malformed);
                 }
-                $arguments[$profile['filters'][$key]] = in_array($key, $profile['array_filters'] ?? [], true) ? [$value] : $value;
+                Arr::set($arguments, $profile['filters'][$key], in_array($key, $profile['array_filters'] ?? [], true) ? [$value] : $value);
             }
             if ($scoped && empty($profile['account_argument'])) {
                 throw new ReadFailure(ReadError::Unsupported);
@@ -98,6 +98,9 @@ final class RobinhoodGateway implements BrokerGateway
                 if (count($rows) + count($records) > config('robinhood_mcp.max_records')) {
                     return new ReadResult(TrustedHttp::RESOURCE, $retrieved, $records, false, $cursor, ReadError::Incomplete, $pages, $profile['coverage'] ?? 'configured_operation');
                 }
+                if (isset($profile['total_count']) && Arr::get($body, $profile['total_count']) !== count($rows)) {
+                    throw new ReadFailure(ReadError::Incomplete);
+                }
                 $pageAsOf = $this->timestamp(Arr::get($body, $profile['source_as_of'] ?? 'source_as_of'));
                 $normalized = [];
                 foreach ($rows as $row) {
@@ -127,6 +130,10 @@ final class RobinhoodGateway implements BrokerGateway
                         $fields += ['list_id' => $filters['list_id'], 'watchlist_scope' => 'request_list_id'];
                     }
                     if (($profile['exact_symbol'] ?? false) && ($fields['symbol'] ?? null) !== ($filters['symbol'] ?? null)) {
+                        if ($profile['strict_symbol'] ?? false) {
+                            throw new ReadFailure(ReadError::Incomplete);
+                        }
+
                         continue;
                     }
                     $asOf = isset($profile['record_source_as_of']) ? $this->timestamp(Arr::get($row, $profile['record_source_as_of'])) : $pageAsOf;

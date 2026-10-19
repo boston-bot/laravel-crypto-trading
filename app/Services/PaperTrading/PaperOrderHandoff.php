@@ -83,11 +83,27 @@ final class PaperOrderHandoff
                     if (SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('symbol', $symbol)->whereIn('status', ['open', 'partial'])->exists()) {
                         throw new DecisionFailure('symbol_has_open_order');
                     }
+                    if (config('paper.corporate_actions_enabled')) {
+                        $latest = $this->inputs->latest($current, $symbol, CarbonImmutable::now());
+                        if ($latest && isset($latest->payload['corporate_action_reads']['alpaca'])) {
+                            $beforeActions = $portfolio->fresh()->ledger_version;
+                            app(PaperCorporateActions::class)->process($current, $actor, $latest->id);
+                            if ($portfolio->fresh()->ledger_version !== $beforeActions) {
+                                throw new DecisionFailure('corporate_action_changed_ledger', 'unavailable');
+                            }
+                        }
+                    }
                     $requested = CarbonImmutable::parse($context['requested_at']);
                     $original = $context['subjects'][$symbol]['input_id'] ?? null;
                     $originalInput = MarketInput::whereKey($original)->where('mcp_connection_id', $current->id)->where('scope', $run->scope)->where('symbol', $symbol)->first();
                     if (! $originalInput || $this->inputs->executionReason($originalInput, $requested, $rules['quote_max_age_seconds'])) {
                         throw new DecisionFailure('proposal_market_provenance_unverified');
+                    }
+                    if ($originalInput->origin === 'broker_read') {
+                        if (! config('paper.real_data_fills_enabled')) {
+                            throw new DecisionFailure('real_data_paper_fills_disabled', 'unavailable');
+                        }
+                        BrokerSimulationQuote::fromStored($current, $originalInput->id, $requested, $rules['quote_max_age_seconds']);
                     }
                     $positions = SimulationPosition::where('paper_portfolio_id', $portfolio->id)->get();
                     $symbols = array_unique([$symbol, ...$positions->filter(fn ($p) => Decimal::from($p->quantity)->compareTo(Decimal::from('0')) > 0)->pluck('symbol')->all()]);
@@ -98,13 +114,16 @@ final class PaperOrderHandoff
                             throw new DecisionFailure($reason, 'unavailable');
                         }
                         $evidence['market_input_ids'][$needed] = $input->id;
-                        // Real broker coverage currently fails above; never relabel it as a synthetic executable quote.
-                        if ($input->origin !== 'synthetic' || $originalInput->origin !== 'synthetic') {
-                            throw new DecisionFailure('real_provider_execution_adapter_unavailable', 'unavailable');
+                        if ($input->origin !== $originalInput->origin) {
+                            throw new DecisionFailure('market_input_origin_changed', 'unavailable');
                         }
-                        $quote = $input->payload['quote'];
-                        unset($quote['bid_as_of'], $quote['ask_as_of']);
-                        $marks[$needed] = new SimulationQuote($quote);
+                        if ($input->origin === 'broker_read') {
+                            $marks[$needed] = BrokerSimulationQuote::fromStored($current, $input->id, CarbonImmutable::now(), $rules['quote_max_age_seconds']);
+                        } else {
+                            $quote = $input->payload['quote'];
+                            unset($quote['bid_as_of'], $quote['ask_as_of']);
+                            $marks[$needed] = new SimulationQuote($quote);
+                        }
                     }
                     $session = $this->calendar->at(CarbonImmutable::now());
                     if ($session['status'] !== 'regular') {
@@ -115,7 +134,7 @@ final class PaperOrderHandoff
                         throw new DecisionFailure('verified_session_baseline_unavailable', 'unavailable');
                     }
                     $evidence['session_baseline'] = $baseline;
-                    $equity = Decimal::from($portfolio->fresh()->cash);
+                    $equity = Decimal::from($portfolio->fresh()->cash)->plus(app(PaperIncome::class)->receivable($portfolio));
                     foreach ($positions as $position) {
                         if (isset($marks[$position->symbol])) {
                             $equity = $equity->plus(Decimal::from($position->quantity)->multipliedBy(Decimal::from($marks[$position->symbol]->data['bid'])));
@@ -128,7 +147,7 @@ final class PaperOrderHandoff
                     if ($bound->compareTo(Decimal::from('0')) <= 0) {
                         throw new DecisionFailure('price_bound_below_supported_precision');
                     }
-                    $quantityScale = $rules['allow_fractional'] && $rules['allow_fractional_limit'] ? 8 : 0;
+                    $quantityScale = $rules['allow_fractional'] && $rules['allow_fractional_limit'] && $marks[$symbol]->data['fractional'] === true ? 8 : 0;
                     $target = $equity->multipliedBy(Decimal::from($decision['target_weight_pct']))->dividedBy(Decimal::from('100'), 18)
                         ->dividedBy($bound, $quantityScale, RoundingMode::DOWN);
                     $held = Decimal::from($positions->where('symbol', $symbol)->where('sleeve', $rules['decision_sleeve'])->first()?->quantity ?? '0');
@@ -163,6 +182,9 @@ final class PaperOrderHandoff
             ->where('status', '!=', 'rejected')->orderBy('id')->first();
         if ($prior) {
             return ['equity' => $prior->assumptions['session_open_equity'], 'kind' => 'existing_synthetic_order_assumption', 'order_id' => $prior->id];
+        }
+        if (app(PaperIncome::class)->receivable($portfolio)->compareTo(Decimal::from('0')) > 0) {
+            return null; // A current receivable is not a verified session-opening valuation.
         }
         // A cash-only inception (or unchanged cash across the open) needs no invented security mark.
         if ($positions->contains(fn ($p) => Decimal::from($p->quantity)->compareTo(Decimal::from('0')) !== 0) ||

@@ -136,7 +136,8 @@
                 ],
                 "additionalProperties": false
             },
-            "fingerprint": "87c85f4d4e7b8bf62bbcc20d48e2706ce3f0ec145ea99ce010846405bc5268e4"
+            "fingerprint": "87c85f4d4e7b8bf62bbcc20d48e2706ce3f0ec145ea99ce010846405bc5268e4",
+            "semantic_fingerprint": "dd76d07a755062e252175451ccf92f050be453c404de990f637c94563e5d5e60"
         },
         "get_equity_tradability": {
             "name": "get_equity_tradability",
@@ -288,5 +289,10 @@
             },
             "fingerprint": "ed19983123824023cb2476f6b344dc234f9d8da6f20c2cc391b40fd31dee8fa7"
         }
+    },
+    "reviewed_price_book_semantics": {
+        "bid_quantity": "Aggregate shares resting at this price level.",
+        "ask_quantity": "Aggregate shares resting at this price level.",
+        "snapshot_time": "Time the snapshot was taken."
     }
 }

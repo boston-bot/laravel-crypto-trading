@@ -3,6 +3,8 @@
 use App\Models\McpConnection;
 use App\Models\User;
 use App\Services\PaperTrading\OfflineSimulator;
+use App\Services\PaperTrading\PaperCorporateActions;
+use App\Services\PaperTrading\RealDataPaperFills;
 use App\Services\PaperTrading\SimulationAssumptions;
 use App\Services\PaperTrading\SimulationQuote;
 use App\Support\Mcp\TestDatabaseGuard;
@@ -26,6 +28,18 @@ config(['paper.offline_simulation_enabled' => true, 'mcp.operator_emails' => [Us
 $data = json_decode(base64_decode($argv[2], true), true, 16, JSON_THROW_ON_ERROR);
 $simulator = app(OfflineSimulator::class);
 try {
+    if ($data['operation'] === 'actions') {
+        config(['paper.corporate_actions_enabled' => true]);
+        $records = app(PaperCorporateActions::class)->process($connection, $connection->user_id, $data['input_id']);
+        echo $records->last()?->status ?? 'empty';
+        exit(0);
+    }
+    if ($data['operation'] === 'real_observe') {
+        config(['paper.real_data_fills_enabled' => true, 'paper.offline_simulation_enabled' => false]);
+        $order = app(RealDataPaperFills::class)->process($connection, $connection->user_id, $data['order_id']);
+        echo $order->status;
+        exit(0);
+    }
     $order = $data['operation'] === 'submit'
         ? $simulator->submit($connection, $connection->user_id, $data['policy_id'], $data['ledger_version'], $data['intent'],
             new SimulationAssumptions($data['assumptions']), ['DEMO' => new SimulationQuote($data['quote'])])

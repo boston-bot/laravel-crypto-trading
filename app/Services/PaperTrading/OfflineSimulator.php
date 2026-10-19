@@ -21,25 +21,29 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
-/** Synthetic orders/fills only. A separately gated application handoff may supply recorded proposals; no AI/broker dependencies. */
+/** Simulated ledger only. Synthetic and broker observations use separate gates and immutable provenance. */
 final class OfflineSimulator
 {
     private const OPEN = ['open', 'partial'];
 
     public function __construct(private MarketCalendar $calendar) {}
 
-    /** $marks contains a synthetic quote for the candidate and every positive held position. */
+    /** $marks contains one consistent observation mode for the candidate and every positive held position. */
     public function submit(McpConnection $connection, int $actor, int $policyId, int $ledgerVersion, array $intent, SimulationAssumptions $assumptions, array $marks, ?int $executionVersionId = null): SimulationOrder
     {
         $intent = $this->intent($intent);
+        $real = ($marks[$intent['symbol']] ?? null) instanceof BrokerSimulationQuote;
         $identity = [$policyId, $ledgerVersion, $intent, $assumptions->data];
         if ($executionVersionId !== null) {
             $identity[] = $executionVersionId;
         }
+        if ($real) {
+            $identity[] = 'real_data_paper_simulation';
+        }
         $hash = hash('sha256', json_encode($identity, JSON_THROW_ON_ERROR));
 
         return DB::transaction(function () use ($connection, $actor, $policyId, $ledgerVersion, $intent, $assumptions, $marks, $hash, $executionVersionId) {
-            [$current, $portfolio] = $this->lock($connection, $actor);
+            [$current, $portfolio] = $this->lock($connection, $actor, true, ($marks[$intent['symbol']] ?? null) instanceof BrokerSimulationQuote);
             $repeat = SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('request_id', $intent['request_id'])->first();
             if ($repeat) {
                 abort_unless(hash_equals($repeat->intent_hash, $hash), 409, 'This scenario request already has a different intent.');
@@ -56,10 +60,17 @@ final class OfflineSimulator
                 abort_unless(($execution->payload['fee_bps'] ?? '0') === ($assumptions->data['fee_bps'] ?? '0'), 409, 'Percentage fee differs from applied execution settings.');
             }
             abort_unless($portfolio->ledger_version === $ledgerVersion, 409, 'Paper ledger changed.');
+            $real = ($marks[$intent['symbol']] ?? null) instanceof BrokerSimulationQuote;
+            abort_if($real && $executionVersionId === null, 409, 'Real-data paper orders require applied execution settings.');
+            if ($real) {
+                abort_unless(in_array($intent['symbol'], $execution->payload['allowed_symbols'], true) &&
+                    $execution->payload[$intent['side'] === 'BUY' ? 'allow_entries' : 'allow_exits'] && $intent['type'] === $execution->payload['order_type'], 409, 'Owner execution permission denied.');
+            }
+            $this->validateMarks($current, $marks, $assumptions->data['quote_max_age_seconds'], $real);
             $order = SimulationOrder::create(['paper_portfolio_id' => $portfolio->id, 'policy_application_id' => $policy->id,
                 'actor_id' => $actor, 'request_id' => $intent['request_id'], 'intent_hash' => $hash,
                 'execution_version_id' => $executionVersionId,
-                'intent' => $intent + ['origin' => 'offline_synthetic_scenario', 'policy_revision' => $policy->revision, 'ledger_version' => $ledgerVersion],
+                'intent' => $intent + ['origin' => $real ? 'real_data_paper_simulation' : 'offline_synthetic_scenario', 'policy_revision' => $policy->revision, 'ledger_version' => $ledgerVersion],
                 'assumptions' => $assumptions->data, 'auth_generation' => $current->auth_generation,
                 'symbol' => $intent['symbol'], 'sleeve' => $intent['sleeve'], 'side' => $intent['side'], 'type' => $intent['type'],
                 'status' => 'open', 'quantity' => $intent['quantity'], 'filled_quantity' => '0', 'reserved_cash' => '0', 'price_bound' => $intent['price_bound'],
@@ -90,10 +101,10 @@ final class OfflineSimulator
     }
 
     /** One observation cannot supply its displayed side size more than once across competing orders. */
-    public function observe(McpConnection $connection, int $actor, int $orderId, SimulationQuote $quote, array $marks = []): SimulationOrder
+    public function observe(McpConnection $connection, int $actor, int $orderId, SimulationQuote|BrokerSimulationQuote $quote, array $marks = []): SimulationOrder
     {
         return DB::transaction(function () use ($connection, $actor, $orderId, $quote, $marks) {
-            [$current, $portfolio] = $this->lock($connection, $actor);
+            [$current, $portfolio] = $this->lock($connection, $actor, true, $quote instanceof BrokerSimulationQuote);
             $order = SimulationOrder::whereKey($orderId)->where('paper_portfolio_id', $portfolio->id)->lockForUpdate()->firstOrFail();
             if (! in_array($order->status, self::OPEN, true)) {
                 return $order;
@@ -101,14 +112,18 @@ final class OfflineSimulator
             if ($reason = $this->invalidated($current, $portfolio, $order)) {
                 return $this->close($portfolio, $order, $reason === 'order_expired' ? 'expired' : 'cancelled', $reason);
             }
+            $real = $quote instanceof BrokerSimulationQuote;
+            abort_unless(($order->intent['origin'] === 'real_data_paper_simulation') === $real, 409, 'Synthetic and real-data paper observations cannot mix.');
+            $this->validateMarks($current, [$order->symbol => $quote] + $marks, $order->assumptions['quote_max_age_seconds'], $real);
             $d = $quote->data;
             abort_unless($d['symbol'] === $order->symbol, 422, 'Observation does not match order symbol.');
-            $fingerprint = hash('sha256', json_encode($d, JSON_THROW_ON_ERROR));
+            $fingerprintData = $real ? array_intersect_key($d, array_flip(['symbol', 'bid', 'ask', 'bid_size', 'ask_size', 'liquidity_key', 'provenance'])) : $d;
+            $fingerprint = hash('sha256', json_encode($fingerprintData, JSON_THROW_ON_ERROR));
             $observation = SimulationObservation::where('paper_portfolio_id', $portfolio->id)->where('source_key', $d['key'])->first();
             if ($observation) {
                 abort_unless(hash_equals($observation->fingerprint, $fingerprint), 409, 'Observation key already identifies different evidence.');
             } else {
-                $sampleKey = hash('sha256', $d['symbol'].':'.($d['source_at'] ?? $d['key']));
+                $sampleKey = hash('sha256', $real ? $d['liquidity_key'] : $d['symbol'].':'.($d['source_at'] ?? $d['key']));
                 abort_if(SimulationObservation::where('paper_portfolio_id', $portfolio->id)->where('sample_key', $sampleKey)->exists(), 409, 'This source sample already has another observation key.');
                 $observation = SimulationObservation::create(['paper_portfolio_id' => $portfolio->id, 'source_key' => $d['key'],
                     'sample_key' => $sampleKey, 'fingerprint' => $fingerprint, 'snapshot' => $d, 'source_at' => $d['source_at'], 'retrieved_at' => $d['retrieved_at'], 'recorded_at' => now()]);
@@ -174,6 +189,32 @@ final class OfflineSimulator
         });
     }
 
+    /** Close invalidated orders without requiring a usable quote or an enabled fill mode. */
+    public function revalidate(McpConnection $connection, int $actor, int $orderId): SimulationOrder
+    {
+        return DB::transaction(function () use ($connection, $actor, $orderId) {
+            [$current, $portfolio] = $this->lock($connection, $actor, false);
+            $order = SimulationOrder::whereKey($orderId)->where('paper_portfolio_id', $portfolio->id)->lockForUpdate()->firstOrFail();
+            if (in_array($order->status, self::OPEN, true) && ($reason = $this->invalidated($current, $portfolio, $order))) {
+                return $this->close($portfolio, $order, $reason === 'order_expired' ? 'expired' : 'cancelled', $reason);
+            }
+
+            return $order;
+        });
+    }
+
+    /** Conservative paper cancellation; do not reprice immutable intents across an issuer action. */
+    public function cancelForCorporateAction(McpConnection $connection, int $actor, string $symbol): void
+    {
+        DB::transaction(function () use ($connection, $actor, $symbol) {
+            [, $portfolio] = $this->lock($connection, $actor, false);
+            foreach (SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('symbol', $symbol)->whereIn('status', self::OPEN)->orderBy('id')->get() as $order) {
+                $expired = $order->expires_at->lte(now());
+                $this->close($portfolio, $order, $expired ? 'expired' : 'cancelled', $expired ? 'order_expired' : 'corporate_action_detected');
+            }
+        });
+    }
+
     /** Cancellation and expiry release resources even when the simulation switch has been turned off. */
     public function cancel(McpConnection $connection, int $actor, int $orderId): SimulationOrder
     {
@@ -198,9 +239,9 @@ final class OfflineSimulator
         });
     }
 
-    private function lock(McpConnection $connection, int $actor, bool $enabled = true): array
+    private function lock(McpConnection $connection, int $actor, bool $enabled = true, bool $real = false): array
     {
-        abort_if($enabled && ! config('paper.offline_simulation_enabled'), 409, 'Offline paper simulation is disabled.');
+        abort_if($enabled && ! config($real ? 'paper.real_data_fills_enabled' : 'paper.offline_simulation_enabled'), 409, 'Selected paper simulation mode is disabled.');
         $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
         abort_unless($current->user_id === $actor && User::whereKey($actor)->whereIn('email', config('mcp.operator_emails'))->exists(), 403);
         abort_unless($current->bound_account_id && AccountScope::key($current) === AccountScope::key($connection), 409, 'Account binding changed.');
@@ -240,11 +281,11 @@ final class OfflineSimulator
             return 'session_baseline_changed';
         }
         $quote = $marks[$order->symbol] ?? null;
-        if (! $quote instanceof SimulationQuote) {
+        if (! ($quote instanceof SimulationQuote || $quote instanceof BrokerSimulationQuote)) {
             return 'quote_unknown';
         }
         foreach ($marks as $symbol => $mark) {
-            if (! $mark instanceof SimulationQuote || $mark->data['symbol'] !== $symbol) {
+            if (! ($mark instanceof SimulationQuote || $mark instanceof BrokerSimulationQuote) || $mark->data['symbol'] !== $symbol) {
                 return 'invalid_marks';
             }
             $this->blockCorporateAction($portfolio, $mark, $order->sleeve);
@@ -258,7 +299,7 @@ final class OfflineSimulator
         if ($reason = $this->fractionalReason($order, $quote)) {
             return $reason;
         }
-        $equity = Decimal::from($portfolio->cash);
+        $equity = Decimal::from($portfolio->cash)->plus(app(PaperIncome::class)->receivable($portfolio));
         $exposure = Decimal::from('0');
         $symbolExposure = Decimal::from('0');
         if (SimulationPosition::where('paper_portfolio_id', $portfolio->id)->whereNotNull('blocked_reason')->exists()) {
@@ -269,7 +310,7 @@ final class OfflineSimulator
                 continue;
             }
             $mark = $marks[$position->symbol] ?? null;
-            if (! $mark instanceof SimulationQuote) {
+            if (! ($mark instanceof SimulationQuote || $mark instanceof BrokerSimulationQuote)) {
                 return 'position_mark_unknown';
             }
             $value = Decimal::from($position->quantity)->multipliedBy(Decimal::from($mark->data['bid']));
@@ -329,7 +370,7 @@ final class OfflineSimulator
         return null;
     }
 
-    private function fractionalReason(SimulationOrder $order, SimulationQuote $quote): ?string
+    private function fractionalReason(SimulationOrder $order, SimulationQuote|BrokerSimulationQuote $quote): ?string
     {
         $quantity = Decimal::from($order->quantity);
         $fractional = $quantity->compareTo($quantity->rounded(0, RoundingMode::DOWN)) !== 0;
@@ -357,7 +398,7 @@ final class OfflineSimulator
         return $policy->revision !== $portfolio->policy_revision ? 'policy_changed' : null;
     }
 
-    private function price(SimulationOrder $order, SimulationQuote $quote): Decimal
+    private function price(SimulationOrder $order, SimulationQuote|BrokerSimulationQuote $quote): Decimal
     {
         $buy = $order->side === 'BUY';
         $reference = Decimal::from($quote->data[$buy ? 'ask' : 'bid']);
@@ -451,7 +492,7 @@ final class OfflineSimulator
             ['quantity' => '0', 'reserved_quantity' => '0', 'cost_basis' => '0', 'realized_pnl' => '0']);
     }
 
-    private function blockCorporateAction(Portfolio $portfolio, SimulationQuote $quote, string $sleeve): void
+    private function blockCorporateAction(Portfolio $portfolio, SimulationQuote|BrokerSimulationQuote $quote, string $sleeve): void
     {
         $d = $quote->data;
         if ($d['corporate_actions_clear'] === false && $d['source_at'] !== null &&
@@ -468,12 +509,22 @@ final class OfflineSimulator
         return SimulationEvent::create(['sim_order_id' => $order->id, 'observation_id' => $observation?->id, 'event_key' => $key,
             'kind' => $kind, 'reason' => $reason, 'quantity' => (string) ($quantity ?? Decimal::from('0')), 'price' => $price === null ? null : (string) $price,
             'fee' => (string) ($fee ?? Decimal::from('0')), 'cash_delta' => (string) ($delta ?? Decimal::from('0')),
-            'ledger_version' => $portfolio->ledger_version, 'evidence' => $evidence + ['mode' => 'offline_synthetic_simulation', 'order_status' => $order->status], 'recorded_at' => now()]);
+            'ledger_version' => $portfolio->ledger_version, 'evidence' => $evidence + ['mode' => ($order->intent['origin'] ?? null) === 'real_data_paper_simulation' ? 'real_data_paper_simulation' : 'offline_synthetic_simulation', 'order_status' => $order->status], 'recorded_at' => now()]);
     }
 
     private function snapshots(array $marks): array
     {
-        return array_map(fn ($quote) => $quote instanceof SimulationQuote ? $quote->data : null, $marks);
+        return array_map(fn ($quote) => ($quote instanceof SimulationQuote || $quote instanceof BrokerSimulationQuote) ? $quote->data : null, $marks);
+    }
+
+    private function validateMarks(McpConnection $connection, array $marks, int $maxAge, bool $real): void
+    {
+        foreach ($marks as $quote) {
+            abort_unless(($quote instanceof BrokerSimulationQuote) === $real, 409, 'Synthetic and real-data paper marks cannot mix.');
+            if ($quote instanceof BrokerSimulationQuote) {
+                $quote->assertCurrent($connection, $maxAge);
+            }
+        }
     }
 
     private function min(Decimal $a, Decimal $b): Decimal

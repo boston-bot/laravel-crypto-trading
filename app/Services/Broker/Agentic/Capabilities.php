@@ -27,6 +27,18 @@ final class Capabilities
         return hash('sha256', json_encode(self::canonical($tool), JSON_THROW_ON_ERROR));
     }
 
+    /** Only these locally reviewed meanings establish units. Remote prose never grants permissions. */
+    public static function priceBookSemanticFingerprint(array $tool): string
+    {
+        $properties = $tool['outputSchema']['properties']['data']['properties']['books']['items']['properties'] ?? [];
+
+        return self::fingerprint([
+            'bid_quantity' => $properties['bids']['items']['properties']['quantity']['description'] ?? null,
+            'ask_quantity' => $properties['asks']['items']['properties']['quantity']['description'] ?? null,
+            'snapshot_time' => $properties['updated_at']['description'] ?? null,
+        ]);
+    }
+
     public function discover(McpConnection $connection, McpSession $session): array
     {
         $tools = [];
@@ -42,6 +54,9 @@ final class Capabilities
                 $schema = ['name' => $name, 'inputSchema' => $this->sanitize($tool['inputSchema']),
                     'outputSchema' => isset($tool['outputSchema']) ? $this->sanitize($tool['outputSchema']) : null];
                 $tools[$name] = $schema + ['fingerprint' => self::fingerprint($schema)];
+                if ($name === 'get_equity_price_book') {
+                    $tools[$name]['semantic_fingerprint'] = self::priceBookSemanticFingerprint($tool);
+                }
                 if (count($tools) > 1000) {
                     throw new ReadFailure(ReadError::Incomplete);
                 }
@@ -61,13 +76,17 @@ final class Capabilities
         ksort($tools);
         $changed = false;
         foreach (config('robinhood_mcp.operations') as $operation => $profile) {
+            if (in_array($operation, ['classification', 'dividends'], true) && ! config('robinhood_mcp.reference_data_enabled')) {
+                continue;
+            }
             if (in_array($operation, ['tradability', 'price_book'], true) && ! config('robinhood_mcp.execution_inputs_enabled')) {
                 continue;
             }
             if (in_array($operation, ['watchlists', 'watchlist_items'], true) && ! config('robinhood_mcp.watchlists_enabled')) {
                 continue;
             }
-            if (($profile['reviewed_read_only'] ?? false) && ($tools[$profile['tool']]['fingerprint'] ?? null) !== ($profile['fingerprint'] ?? null)) {
+            if (($profile['reviewed_read_only'] ?? false) && (($tools[$profile['tool']]['fingerprint'] ?? null) !== ($profile['fingerprint'] ?? null) ||
+                (isset($profile['semantic_fingerprint']) && ($tools[$profile['tool']]['semantic_fingerprint'] ?? null) !== $profile['semantic_fingerprint']))) {
                 $changed = true;
             }
         }
@@ -80,6 +99,9 @@ final class Capabilities
 
     public function profile(Operation $operation, array $manifest): array
     {
+        if (in_array($operation, [Operation::Classification, Operation::Dividends], true) && ! config('robinhood_mcp.reference_data_enabled')) {
+            throw new ReadFailure(ReadError::Disabled);
+        }
         if (in_array($operation, [Operation::Tradability, Operation::PriceBook], true) && ! config('robinhood_mcp.execution_inputs_enabled')) {
             throw new ReadFailure(ReadError::Disabled);
         }
@@ -92,6 +114,10 @@ final class Capabilities
         }
         $tool = $manifest[$profile['tool']] ?? null;
         if (! $tool || ! hash_equals($profile['fingerprint'] ?? '', $tool['fingerprint'])) {
+            throw new ReadFailure(ReadError::SchemaChanged);
+        }
+
+        if (isset($profile['semantic_fingerprint']) && ! hash_equals($profile['semantic_fingerprint'], $tool['semantic_fingerprint'] ?? '')) {
             throw new ReadFailure(ReadError::SchemaChanged);
         }
 

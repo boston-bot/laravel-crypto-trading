@@ -199,6 +199,14 @@ Use an in-app incident inbox plus one configured external delivery adapter. Send
 
 Source-only broker-input follow-up: [reviewed account-tradability and price-book reads](M5-MARKET-INPUT-EVIDENCE.md) now preserve independent encrypted evidence behind a new default-off gate. Bounded real reads succeeded; strategy classification/action coverage, fractional-limit support and quantity-unit semantics still block real-data paper fills. No runtime activation or migration occurred.
 
+Further [verified-data controls](M5-VERIFIED-DATA-EVIDENCE.md) pin the broker's explicit share-unit/snapshot-time definitions, derive size only from matching fresh quote/book evidence and report every applied symbol's missing coverage. Real data is not complete without classification, corporate-action and fractional-limit sources; no runtime activation or migration is part of this source increment.
+
+The subsequent [real-data paper fill path](M5-REAL-DATA-PAPER-FILLS-EVIDENCE.md) connects stored broker observations to proposal handoff and the simulated ledger behind an independent default-off gate. Orders/events retain actual observation provenance; duplicate/re-polled book snapshots share liquidity and transactional recovery. Whole-share processing is implemented, with unknown fractional limits blocked. Actual classification/action coverage, regular-session validation and held-portfolio opening baselines remain incomplete; no runtime activation or real broker execution is claimed.
+
+The [Robinhood reference-data increment](M5-REFERENCE-COVERAGE-EVIDENCE.md) adds independently gated exact-symbol stock/ETF observations and dividend fields through the same app-owned gateway. Four actual reads passed; a real inconsistent dividend date sequence was preserved as a warning. Retrieval is known while precise source time remains unknown. Leverage/inverse exclusion and complete corporate-action coverage are still absent, so collection does not grant eligibility or action clearance. No migration, activation or deployment occurred.
+
+The owner then selected Alpaca and configured development keys. The [read-only Alpaca action adapter](M5-ALPACA-DATA-EVIDENCE.md) now reads all-quality, paginated process-date event windows through a fixed GET-only endpoint, preserves exact numeric lexemes and stores scoped encrypted supplemental evidence. A real query returned three dividend events. Query completeness is distinct from event clearance; action accounting/correction policy and leveraged/inverse verification remain unfinished. No migration, permanent gate change or runtime deployment occurred.
+
 ## 11. Migration from ChatGPT/Sheets
 
 Import from an operator-provided export first; direct read-only Sheets access is optional. Map Bot Control to a disabled policy draft, Check Log to run history, Decision Log/Trade Ledger to sourced thesis/order history, Performance Log to historical snapshots, and Opportunity Review/System Health to research/incidents.
@@ -212,6 +220,8 @@ At cutover, have the operator verify legacy ChatGPT trading tasks are paused and
 ## 12. Delivery and release gates
 
 Follow M0–M6 in the checklist. Release 1 requires M0–M4, no missing/duplicate run identifiers in verified observations, complete snapshot reconciliation, verified external alert delivery, and a successful backup restore and forced worker restart drill. **Owner amendment, October 18:** the original seven-consecutive-session proving requirement is waived; M4 is accepted with that endurance period explicitly unverified (0/7 completed). Retain historical evidence and ongoing health/recovery controls. Do not describe the waiver as a passed test.
+
+October 18 source increment: ordinary domestic cash-dividend entitlements/payments and whole-share splits now reconcile into the paper ledger behind a default-off gate, with immutable records and conservative late/corrected/unsupported-event review blocks. A bounded observed-data policy requires fresh process-date coverage since cash-only paper inception and due-event accounting, while retaining publication-delay uncertainty. Comprehensive action accounting and authoritative leverage/inverse classification remain incomplete. One additive action-audit table is tested locally and not deployed. [Detailed evidence](M5-CORPORATE-ACTION-ACCOUNTING-EVIDENCE.md).
 
 M5 validates simulated execution and strategy evaluation. M6 requires explicit owner live settings and broker approval support, clean order state, an emergency-disable drill, and fault-injection tests. A successful monitoring week is not permission to trade or proof of investment edge.
 
@@ -230,3 +240,5 @@ Architecture and thresholds above are project design decisions. External protoco
 - [Codex AGENTS.md instructions](https://developers.openai.com/codex/guides/agents-md/)
 
 Checked October 16, 2026. Installed package and negotiated protocol versions, not the newest documentation alone, determine implementation compatibility.
+
+October 18 collection increment: a separate default-off, bounded rotating allowlist collector uses existing monitoring workers and encrypted market-input records without calling AI or execution paths. Scheduling is every five minutes in verified regular sessions and hourly otherwise, at most five symbols per tick. This is baseline data collection, not the proposed full-universe 60-second scan. [Deployment and evidence](M5-COLLECTION-DEPLOYMENT-EVIDENCE.md).

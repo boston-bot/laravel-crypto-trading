@@ -22,6 +22,7 @@
     </source>
     <php>
         <env name="ROBINHOOD_MCP_ENABLED" value="false" force="true"/>
+        <env name="ROBINHOOD_MCP_REFERENCE_DATA_ENABLED" value="false" force="true"/>
         <env name="ROBINHOOD_MCP_EXECUTION_INPUTS_ENABLED" value="false" force="true"/>
         <env name="ROBINHOOD_MCP_WATCHLISTS_ENABLED" value="false" force="true"/>
         <env name="ROBINHOOD_MCP_CLIENT_ID" value="" force="true"/>
@@ -31,7 +32,10 @@
         <env name="MCP_RESEARCH_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_DECISIONS_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_OFFLINE_SIMULATION_ENABLED" value="false" force="true"/>
+        <env name="MCP_PAPER_MARKET_COLLECTION_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_MARKET_INPUTS_ENABLED" value="false" force="true"/>
+        <env name="MCP_PAPER_ACTIONS_ENABLED" value="false" force="true"/>
+        <env name="MCP_PAPER_REAL_DATA_FILLS_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_HANDOFF_ENABLED" value="false" force="true"/>
         <env name="MCP_RESEARCH_API_KEY" value="" force="true"/>
         <env name="MCP_RESEARCH_MODEL" value="" force="true"/>
@@ -44,6 +48,9 @@
         <env name="MCP_BACKUP_OFFSITE_DIR" value="" force="true"/>
         <env name="MCP_OPERATOR_EMAILS" value="" force="true"/>
         <env name="TRADING_APPROVER_EMAILS" value="" force="true"/>
+        <env name="ALPACA_DATA_ENABLED" value="false" force="true"/>
+        <env name="ALPACA_KEY" value="" force="true"/>
+        <env name="ALPACA_SECRET" value="" force="true"/>
         <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_KEY" value="base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
