@@ -13,6 +13,8 @@ class SimulationEvent extends ImmutableRecord
 
     public $timestamps = false;
 
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
     public function observation(): BelongsTo
     {
         return $this->belongsTo(SimulationObservation::class, 'observation_id');

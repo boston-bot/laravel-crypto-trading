@@ -108,7 +108,7 @@ Exit orders are repriced each cycle while the exit condition holds, until filled
 - buys filled at the ask and sells at the bid (already implemented)
 - the owner's 1 bp adverse slippage
 
-The simulator currently charges fees on both sides, so it needs sell-only regulatory fees.
+The legacy simulator contract charges its saved assumptions on both sides. October 19 source adds separately owner-applied dated listed-equity fees for new signal-linked orders, including sell-only SEC fees, the current TAF pause and CAT charges. Historical orders retain their original assumptions. [Cost sources, risk limits, paper handoff and remaining coverage](M5-SIGNAL-PAPER-HANDOFF-EVIDENCE.md).
 
 ### Starting parameters
 
@@ -142,6 +142,8 @@ These are versioned owner settings, editable in the Control Center within bounds
 | Limit offset | 5 bp (owner, unchanged) |
 
 ## Signals and handoff
+
+October 19 source update: the independently default-off signal runner now records deterministic entry/exit evaluations from stored inputs, with atomic five-minute cycles and authenticated history. A later October 19 source increment connects a separate default-off signal paper handoff with explicit risk/cost settings; it is not deployed or activated. For `swing_signals_v1`, stop multiples and the progress threshold pin ATR at the opening signal; trailing levels never decrease, including after revised history, and triggered exits latch until the episode closes. Exits require an actual paper fill linked to the opening signal; broker/legacy holdings are not automatically adopted. [Implementation, verification and remaining limits](M5-STRATEGY-SIGNALS-EVIDENCE.md).
 
 - A signal records symbol, side, playbook, rule and parameter versions, watchlist revision, profile version, an input fingerprint (stored observation IDs and times) and the cutoff. It is unique per symbol, rule and cycle, so restarts and duplicate workers cannot double-signal.
 - Only data stored locally before the cutoff counts. Stale or missing inputs produce an `unavailable` result with a reason, never a signal from a guessed value.

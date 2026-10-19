@@ -120,7 +120,7 @@ class ExecutionPoliciesTest extends TestCase
         $this->assertSame('0', $saved['fee_per_share']);
         $this->assertNull($saved['slippage_bps']);
         $this->assertSame(['DEMO', 'SECOND'], $saved['allowed_symbols']);
-        $this->get('/mcp/dashboard/control')->assertOk()->assertSee('AI may propose new buys')->assertSee('Allowed stock / ETF symbols');
+        $this->get('/mcp/dashboard/control')->assertOk()->assertSee('Allow paper entries')->assertSee('Allowed stock / ETF symbols');
     }
 
     public function test_percentage_fee_is_explicit_decimal_bounded_and_legacy_per_share_contract_is_preserved(): void

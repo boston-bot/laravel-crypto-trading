@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'signal_handoff_enabled' => filter_var(env('MCP_SIGNAL_PAPER_HANDOFF_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'signals_enabled' => filter_var(env('MCP_STRATEGY_SIGNALS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'rule_eligibility_enabled' => filter_var(env('MCP_RULE_ELIGIBILITY_ENABLED', false), FILTER_VALIDATE_BOOL),
     // Daily profiles and playbook assignment from stored history. Local computation only; never an entry permission.
     'symbol_profiles_enabled' => filter_var(env('MCP_SYMBOL_PROFILES_ENABLED', false), FILTER_VALIDATE_BOOL),

@@ -7,11 +7,24 @@ use App\Services\Monitoring\AccountScope;
 use App\Services\PaperTrading\ExecutionPolicies;
 use App\Services\PaperTrading\PaperMarketInputs;
 use App\Services\PaperTrading\PaperOrderHandoff;
+use App\Services\PaperTrading\SignalExecutionPolicies;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 class PaperExecutionController extends Controller
 {
+    public function applySignalPolicy(Request $request, SignalExecutionPolicies $policies)
+    {
+        $data = $request->validate(['base_version' => ['required', 'integer', 'min:0'], 'request_id' => ['required', 'uuid'],
+            'execution_version_id' => ['required', 'integer', 'min:1'], 'confirm_signal_paper' => ['accepted'], 'signal_execution' => ['required', 'array']]);
+        $settings = $data['signal_execution'];
+        abort_if(array_key_exists('allow_fractional', $settings) && $settings['allow_fractional'] !== false, 422, 'Fractional limit-order support is unverified.');
+        $settings['allow_fractional'] = false; // Current reviewed broker contract cannot establish fractional LIMIT permission.
+        $policies->apply($this->connection($request), $request->user()->id, (int) $data['base_version'], $data['request_id'], $settings, (int) $data['execution_version_id']);
+
+        return $this->back('Signal paper risk and cost settings applied. Balances and service enablement are unchanged.');
+    }
+
     public function store(Request $request, ExecutionPolicies $policies)
     {
         $data = $request->validate(['base_version' => ['required', 'integer', 'min:0'], 'request_id' => ['required', 'uuid'],

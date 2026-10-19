@@ -29,10 +29,10 @@
         </dl>
         <p class="note">Configuration shown belongs to this running checkout. Production and development settings can differ.</p>
     </x-panel>
-    <x-panel title="How rules reach the AI" icon="spark">
-        <p>The decision runner attaches applied policy/guidance, execution settings and virtual ledger versions to each bounded request. A separately gated paper handoff rechecks these versions and current inputs, then sizes orders locally. Real-data paper fills stay separately gated: eligibility needs a fresh broker stock/ETF type plus stored SEC filing evidence, and corporate actions need the observed-data policy. Fractional quantities remain unsupported.</p>
-        <p>Unapplied paper drafts are <strong>not sent</strong>. ChatGPT conversations do not automatically update this application. You can paste a settings proposal below, review the editor and save a new draft yourself.</p>
-        <p class="note">Strategy guidance can describe what to look for. It cannot grant brokerage access, change credentials or bypass enforced limits. Changing an allocation target does not rebalance any holdings.</p>
+    <x-panel title="How strategy signals are evaluated" icon="spark">
+        <p>ChatGPT maintains dedicated watchlists outside this application. The app reads their symbols, checks eligibility, assigns a daily playbook and evaluates entry and exit rules from stored market data.</p>
+        <p>Signals are paper evaluation records. Risk sizing, dated costs and paper handoff require separately applied settings and activation. The superseded AI decision runner stays disabled.</p>
+        <p class="note">Watchlist membership nominates a symbol; it cannot grant permissions, set prices or change risk limits.</p>
     </x-panel>
 </div>
 
@@ -43,13 +43,25 @@
 @if(!$connection?->bound_account_id)
     <x-callout tone="info">Bind an account before saving account-scoped paper planning versions. No defaults have been saved.</x-callout>
 @else
+<x-panel title="Strategy signal history" subtitle="Paper evaluation only. These records do not place orders." icon="shield">
+    <p>Signal evaluation {{ config('paper.signals_enabled') ? 'enabled · every five minutes' : 'disabled' }}.</p>
+    @forelse($control['signals'] as $signal)
+        <details><summary>{{ $signal->symbol }} · {{ $signal->side ?? $signal->status }} · {{ $signal->reason }}</summary>
+            <p>Cutoff <x-time :at="$signal->cutoff" /> · rule {{ $signal->rule_version }} · parameters {{ $signal->parameters_version }}</p>
+            <pre class="code-block">{{ $pretty($signal->payload) }}</pre>
+        </details>
+    @empty
+        <p class="note">No strategy evaluations recorded for this paper portfolio.</p>
+    @endforelse
+    {{ $control['signals']->links('mcp.pagination') }}
+</x-panel>
 <x-panel title="Deterministic eligibility rules" subtitle="Membership nominates symbols; stored broker and regulatory facts must pass every rule. Unknown data blocks entries." icon="shield">
     @php
         $eligibilityPolicy = $control['eligibility']['policy'];
         $eligibilityParameters = $eligibilityPolicy?->payload['parameters'] ?? App\Services\PaperTrading\RuleEligibilityPolicies::DEFAULTS;
     @endphp
     <p>Rule evaluation {{ config('paper.rule_eligibility_enabled') ? 'enabled' : 'disabled' }} · {{ $eligibilityPolicy ? 'Watchlist rule universe selected · policy v'.$eligibilityPolicy->version : 'Current execution allowlist still selected' }}.</p>
-    <p class="note">The daily-history adapter is not configured, and reviewed US exchange-listing evidence is unavailable. History (252 sessions), 20-session dollar volume and listing therefore block full eligibility. Extra broker fields and model text cannot supply these facts. Applying rules blocks the superseded model handoff, preserves holdings and requires current watchlist membership for entries. Exits stay independent.</p>
+    <p class="note">Listing, 252-session history and 20-session dollar volume require complete stored market-reference reads. Missing or stale evidence blocks eligibility. Extra broker fields and model text cannot supply these facts. Applying rules blocks the superseded model handoff, preserves holdings and requires current watchlist membership for entries. Exits stay independent.</p>
     @if($paper && $control['execution']['applied'])
     <form method="post" action="{{ route('mcp.control.eligibility.apply') }}" class="stack">@csrf
         <input type="hidden" name="base_version" value="{{ $eligibilityPolicy->version ?? 0 }}">

@@ -6,6 +6,8 @@ Current application update, October 18: authenticated Control Center forms appli
 
 Status: proposed implementation baseline, October 16, 2026. Read [the index](README.md) for owner decisions and [the checklist](DEVELOPMENT-CHECKLIST.md) for work sequencing.
 
+October 19 source update: the M5 stored-data signal engine is implemented and default-off, with no runtime deployment. A subsequent source increment adds a separately gated [signal paper handoff, risk sizing and dated costs](M5-SIGNAL-PAPER-HANDOFF-EVIDENCE.md); live order handoff remains unimplemented. [Signal evidence](M5-STRATEGY-SIGNALS-EVIDENCE.md) defines the exact scope and remaining M5 work.
+
 ## 1. Product objective and release boundaries
 
 Build an always-on local application that maintains reliable portfolio state, monitors investment theses and operational failures, organizes research, and eventually manages bounded execution. Optimize for auditability, dependable follow-through, and useful decisions rather than trade frequency.

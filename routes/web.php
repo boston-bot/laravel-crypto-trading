@@ -44,6 +44,7 @@ Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAc
     Route::post('/control/proposal', [ControlCenterController::class, 'proposal'])->middleware('throttle:10,1')->name('mcp.control.proposal');
     Route::post('/control/versions/{version}/restore', [ControlCenterController::class, 'restore'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.restore');
     Route::post('/control/versions/{version}/apply-paper', [ControlCenterController::class, 'apply'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.apply');
+    Route::post('/paper/signal-execution/apply', [PaperExecutionController::class, 'applySignalPolicy'])->middleware('throttle:10,1')->name('mcp.paper.signal-execution.apply');
     Route::post('/paper/execution', [PaperExecutionController::class, 'store'])->middleware('throttle:10,1')->name('mcp.paper.execution.store');
     Route::post('/paper/execution/{version}/apply', [PaperExecutionController::class, 'apply'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.paper.execution.apply');
     Route::post('/paper/market-input', [PaperExecutionController::class, 'collect'])->middleware('throttle:5,1')->name('mcp.paper.market.collect');

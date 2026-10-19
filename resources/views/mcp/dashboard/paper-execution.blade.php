@@ -7,15 +7,40 @@
         'session' => ['Fill session', ['regular' => 'Regular market hours']],
         'time_in_force' => ['Order duration', ['day' => 'Expire by the session close']],
         'initial_holdings' => ['Starting portfolio', ['cash_only' => 'Virtual cash only; no imported holdings']],
-        'allow_entries' => ['AI may propose new buys', ['1' => 'Allowed', '0' => 'Disallowed']],
-        'allow_exits' => ['AI may propose sales', ['1' => 'Allowed', '0' => 'Disallowed']],
-        'allow_ai_sizing' => ['AI may propose target weights', ['1' => 'Allowed within application limits', '0' => 'Disallowed']],
+        'allow_entries' => ['Allow paper entries', ['1' => 'Allowed', '0' => 'Disallowed']],
+        'allow_exits' => ['Allow paper exits', ['1' => 'Allowed', '0' => 'Disallowed']],
+        'allow_ai_sizing' => ['Retired AI target-weight permission (unused by signals)', ['1' => 'Allowed within application limits', '0' => 'Disallowed']],
         'allow_fractional' => ['Fractional shares', ['1' => 'Allowed with verified instrument support', '0' => 'Whole shares only']],
         'allow_fractional_limit' => ['Fractional limit orders', ['1' => 'Allowed with verified instrument support', '0' => 'Disallowed']],
     ];
     $executionNumbers = ['fee_per_share' => 'Simulated fee per share (USD)', 'fee_bps' => 'Additional fee on fill value (basis points; 100 = 1%)', 'slippage_bps' => 'Adverse slippage (basis points)',
         'limit_offset_bps' => 'Limit offset from current ask / bid (basis points)', 'quote_max_age_seconds' => 'Maximum quote age (seconds, 1–300)'];
 @endphp
+<x-panel title="Signal paper risk and costs" subtitle="Explicit settings for deterministic signals. Applying them does not enable orders or alter balances." icon="shield">
+    <p>Signal handoff {{ config('paper.signal_handoff_enabled') ? 'enabled' : 'disabled' }} · applied version {{ $execution['signal_policy']?->version ?? 'none for current settings' }}.</p>
+    <p class="note">Whole shares only while fractional limit-order support is unverified. Existing cash floors and sleeve allocations still apply. Costs use the reviewed listed-equity schedule and expire on December 31, 2026; a new review is then required.</p>
+    @if($paper && $execution['applied'] && ($control['eligibility']['policy'] ?? null))
+    <form method="post" action="{{ route('mcp.paper.signal-execution.apply') }}" class="stack">@csrf
+        <input type="hidden" name="account_scope" value="{{ App\Services\Monitoring\AccountScope::key($connection) }}">
+        <input type="hidden" name="base_version" value="{{ $execution['signal_policy_latest']?->version ?? 0 }}">
+        <input type="hidden" name="execution_version_id" value="{{ $execution['applied']->id }}">
+        <input type="hidden" name="request_id" value="{{ Illuminate\Support\Str::uuid() }}">
+        @foreach(['risk_per_trade_pct' => 'Planned risk per trade (%) · maximum 1', 'max_position_pct' => 'Maximum position (%) · maximum 20', 'max_open_positions' => 'Maximum open positions · 1–8', 'slippage_bps' => 'Adverse slippage (basis points)', 'limit_offset_bps' => 'Limit offset (basis points)', 'quote_max_age_seconds' => 'Maximum quote age (seconds) · 1–60'] as $field => $label)
+            <label class="field">{{ $label }}<input name="signal_execution[{{ $field }}]" required inputmode="decimal" value="{{ old('signal_execution.'.$field, $execution['signal_policy']?->payload[$field] ?? App\Services\PaperTrading\SignalExecutionPolicies::DEFAULTS[$field]) }}"></label>
+        @endforeach
+        <details><summary>Reviewed cost schedule and sources</summary><pre class="code-block">{{ json_encode(App\Services\PaperTrading\TradingCosts::reviewed(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre></details>
+        <label class="check"><input type="checkbox" name="confirm_signal_paper" value="1" required><span>I reviewed these signal paper risk limits and the dated cost schedule. Apply them for the current allocation and execution versions without enabling any service.</span></label>
+        <button class="btn btn-secondary" type="submit">Apply signal paper risk and costs</button>
+    </form>
+    @endif
+    @if($execution['signal_policy'])<details><summary>Applied signal settings</summary><pre class="code-block">{{ json_encode($execution['signal_policy']->payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre></details>@endif
+    @forelse($execution['signal_handoffs'] as $handoff)
+        <details><summary>Signal #{{ $handoff->signal_id }} · {{ $handoff->status }} · {{ $handoff->reason }} · paper order {{ $handoff->sim_order_id ?? 'none' }}</summary><pre class="code-block">{{ json_encode($handoff->payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre></details>
+    @empty
+        <p class="note">No signal paper handoffs recorded.</p>
+    @endforelse
+    {{ $execution['signal_handoffs']->links('mcp.pagination') }}
+</x-panel>
 <x-panel title="Paper execution settings" subtitle="Owner choices, versioned separately from allocations. No values are inferred from legacy crypto rules." icon="shield">
     @if($control['eligibility']['policy'] ?? null)
         <p class="note">The separate eligibility rule policy replaces this legacy symbol allowlist for entries and data collection. The saved list is retained as execution-version history. The superseded model handoff is blocked; costs, position limits and cash are unchanged.</p>

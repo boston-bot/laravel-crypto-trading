@@ -55,10 +55,12 @@ final class OfflineSimulator
             if ($executionVersionId !== null) {
                 $execution = ExecutionPolicies::current($portfolio);
                 abort_unless($execution?->id === $executionVersionId && $intent['sleeve'] === $execution->payload['decision_sleeve'], 409, 'Execution settings changed.');
-                foreach (['fee_per_share', 'slippage_bps', 'quote_max_age_seconds', 'allow_fractional', 'allow_fractional_limit'] as $field) {
+                $signalMode = isset($intent['strategy_signal_id']);
+                abort_if($signalMode && ! (($marks[$intent['symbol']] ?? null) instanceof BrokerSimulationQuote), 409, 'Signals require broker observations.');
+                foreach ($signalMode ? [] : ['fee_per_share', 'slippage_bps', 'quote_max_age_seconds', 'allow_fractional', 'allow_fractional_limit'] as $field) {
                     abort_unless($execution->payload[$field] === $assumptions->data[$field], 409, 'Fill assumptions differ from applied execution settings.');
                 }
-                abort_unless(($execution->payload['fee_bps'] ?? '0') === ($assumptions->data['fee_bps'] ?? '0'), 409, 'Percentage fee differs from applied execution settings.');
+                abort_unless($signalMode || ($execution->payload['fee_bps'] ?? '0') === ($assumptions->data['fee_bps'] ?? '0'), 409, 'Percentage fee differs from applied execution settings.');
             }
             abort_unless($portfolio->ledger_version === $ledgerVersion, 409, 'Paper ledger changed.');
             $real = ($marks[$intent['symbol']] ?? null) instanceof BrokerSimulationQuote;
@@ -237,7 +239,7 @@ final class OfflineSimulator
     {
         return DB::transaction(function () use ($connection, $actor) {
             [, $portfolio] = $this->lock($connection, $actor, false);
-            $orders = SimulationOrder::where('paper_portfolio_id', $portfolio->id)->whereIn('status', self::OPEN)->where('expires_at', '<=', now())->orderBy('id')->get();
+            $orders = SimulationOrder::where('paper_portfolio_id', $portfolio->id)->whereIn('status', self::OPEN)->where('expires_at', '<=', now()->format('Y-m-d H:i:s.u'))->orderBy('id')->get();
             foreach ($orders as $order) {
                 $this->close($portfolio, $order, 'expired', 'order_expired');
             }
@@ -263,10 +265,11 @@ final class OfflineSimulator
             'side' => ['required', 'in:BUY,SELL'], 'sleeve' => ['required', 'in:active,long_term'], 'type' => ['required', 'in:limit,market'],
             'quantity' => ['required', 'string', 'regex:/^\d{1,12}(?:\.\d{1,8})?$/D'],
             'price_bound' => ['required', 'string', 'regex:/^\d{1,12}(?:\.\d{1,8})?$/D'],
+            'strategy_signal_id' => ['sometimes', 'integer', 'min:1'], 'strategy_execution_policy_id' => ['sometimes', 'integer', 'min:1'],
             'expires_at' => ['required', 'date_format:Y-m-d\TH:i:sP'], 'rationale' => ['required', 'string', 'max:4000']];
         abort_if(array_diff(array_keys($intent), array_keys($rules)), 422, 'Unsupported synthetic intent field.');
         $valid = Validator::make($intent, $rules)->validate();
-        $valid = array_replace(array_fill_keys(array_keys($rules), null), $valid);
+        $valid = array_replace(array_fill_keys(array_diff(array_keys($rules), ['strategy_signal_id', 'strategy_execution_policy_id']), null), $valid);
         abort_unless(Decimal::from($valid['quantity'])->compareTo(Decimal::from('0')) > 0 && Decimal::from($valid['price_bound'])->compareTo(Decimal::from('0')) > 0, 422, 'Positive quantity and price bound required.');
 
         return $valid;
@@ -284,6 +287,9 @@ final class OfflineSimulator
             ($reason = app(ExternalOrders::class)->entryReason(McpConnection::findOrFail($portfolio->mcp_connection_id)))) {
             return $reason;
         }
+        if ($reason = app(SignalOrderAdmission::class)->reason(McpConnection::findOrFail($portfolio->mcp_connection_id), $portfolio, $order, $marks, $existing)) {
+            return $reason;
+        }
         $now = CarbonImmutable::now();
         $session = $this->calendar->at($now);
         if ($session['status'] !== 'regular' || $order->assumptions['session_date'] !== $session['date']) {
@@ -292,9 +298,9 @@ final class OfflineSimulator
         if ($order->expires_at->lte($now) || $order->expires_at->gt(CarbonImmutable::parse($session['closes_at']))) {
             return 'invalid_day_order_expiry';
         }
-        $prior = SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('id', '!=', $order->id)
+        $prior = SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('side', 'BUY')->where('id', '!=', $order->id)
             ->where('accepted_at', '>=', CarbonImmutable::parse($session['opens_at']))->where('accepted_at', '<', CarbonImmutable::parse($session['closes_at']))->where('status', '!=', 'rejected')->orderBy('id')->first();
-        if ($prior && Decimal::from($prior->assumptions['session_open_equity'])->compareTo(Decimal::from($order->assumptions['session_open_equity'])) !== 0) {
+        if ($order->side === 'BUY' && $prior && Decimal::from($prior->assumptions['session_open_equity'])->compareTo(Decimal::from($order->assumptions['session_open_equity'])) !== 0) {
             return 'session_baseline_changed';
         }
         $quote = $marks[$order->symbol] ?? null;
@@ -401,6 +407,18 @@ final class OfflineSimulator
 
     private function invalidated(McpConnection $connection, Portfolio $portfolio, SimulationOrder $order): ?string
     {
+        if (isset($order->intent['strategy_signal_id'])) {
+            if (! config('paper.signal_handoff_enabled') || ! config('paper.signals_enabled')) {
+                return 'signal_execution_disabled';
+            }
+            $selected = SignalExecutionPolicies::current($portfolio);
+            if (! $selected || $selected->id !== ($order->intent['strategy_execution_policy_id'] ?? null)) {
+                return 'signal_execution_policy_changed';
+            }
+            if (! TradingCosts::valid($selected->payload['cost_schedule'], CarbonImmutable::now())) {
+                return 'cost_schedule_expired_or_unreviewed';
+            }
+        }
         if ($order->side === 'BUY' && ($order->intent['origin'] ?? null) === 'real_data_paper_simulation' && RuleEligibilityPolicies::current($portfolio)) {
             $report = app(RuleEligibility::class)->inspect($connection, $order->symbol, CarbonImmutable::now());
             if ($report['status'] !== 'eligible') {
@@ -438,11 +456,17 @@ final class OfflineSimulator
     {
         $price = Decimal::from($order->price_bound);
 
-        return $quantity->multipliedBy($price)->plus($this->fee($order, $quantity, $price, RoundingMode::CEILING));
+        $fee = isset($order->assumptions['cost_schedule']) && $order->side === 'BUY'
+            ? app(TradingCosts::class)->buyReserve($order->assumptions['cost_schedule'], $quantity) : $this->fee($order, $quantity, $price, RoundingMode::CEILING);
+
+        return $quantity->multipliedBy($price)->plus($fee);
     }
 
     private function fee(SimulationOrder $order, Decimal $quantity, Decimal $price, RoundingMode $rounding = RoundingMode::DOWN): Decimal
     {
+        if (isset($order->assumptions['cost_schedule'])) {
+            return app(TradingCosts::class)->fee($order->assumptions['cost_schedule'], $order->side, $quantity, $price);
+        }
         $rate = Decimal::from($order->assumptions['fee_bps'] ?? '0')->dividedBy(Decimal::from('10000'), 12);
 
         // Round fees down to ledger precision; reserve upward so partial fills cannot overdraw cash.

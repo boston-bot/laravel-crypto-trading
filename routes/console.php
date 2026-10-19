@@ -166,8 +166,17 @@ Artisan::command('mcp:strategy-watchlist {--once} {--account= : Local connection
     }
 })->purpose('Read the configured strategy watchlist; no policy, AI, order or brokerage mutation');
 
+// Signals consume stored observations only; stale or missing reads remain unavailable.
+if (config('paper.signals_enabled') && ! config('paper.signal_handoff_enabled')) {
+    Schedule::command('mcp:strategy-cycle --once')->everyFiveMinutes()->withoutOverlapping(5);
+}
+
 if (config('paper.watchlist_intake_enabled')) {
     Schedule::command('mcp:strategy-watchlist --once')->everyFiveMinutes()->withoutOverlapping(5);
+}
+
+if (config('paper.signals_enabled') && config('paper.signal_handoff_enabled') && config('paper.real_data_fills_enabled')) {
+    Schedule::command('mcp:signal-paper-cycle --once')->everyFiveMinutes()->withoutOverlapping(5);
 }
 
 // Public SEC filings change slowly; one daily refresh keeps stored classifications inside their seven-day validity.

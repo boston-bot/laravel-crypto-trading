@@ -33,6 +33,8 @@
         <env name="MCP_RESEARCH_ENABLED" value="false" force="true"/>
         <env name="MCP_STRATEGY_WATCHLIST_ENABLED" value="false" force="true"/>
         <env name="MCP_RULE_ELIGIBILITY_ENABLED" value="false" force="true"/>
+        <env name="MCP_SIGNAL_PAPER_HANDOFF_ENABLED" value="false" force="true"/>
+        <env name="MCP_STRATEGY_SIGNALS_ENABLED" value="false" force="true"/>
         <env name="MCP_SYMBOL_PROFILES_ENABLED" value="false" force="true"/>
         <env name="MCP_EXTERNAL_ORDER_DETECTION_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_DECISIONS_ENABLED" value="false" force="true"/>

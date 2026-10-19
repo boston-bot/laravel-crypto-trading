@@ -12,6 +12,8 @@ class SimulationOrder extends Model
 
     public $timestamps = false;
 
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
     protected static function booted(): void
     {
         static::updating(function (self $order) {
