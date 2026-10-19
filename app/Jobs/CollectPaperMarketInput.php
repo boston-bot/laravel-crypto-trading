@@ -4,9 +4,11 @@ namespace App\Jobs;
 
 use App\Models\McpConnection;
 use App\Models\PaperTrading\Portfolio;
+use App\Services\Broker\Agentic\BrokerBackoff;
 use App\Services\Monitoring\AccountScope;
 use App\Services\PaperTrading\ExecutionPolicies;
 use App\Services\PaperTrading\PaperMarketInputs;
+use App\Services\PaperTrading\SymbolUniverse;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -46,9 +48,13 @@ class CollectPaperMarketInput implements ShouldBeUnique, ShouldQueue
             $connection->auth_generation !== $this->generation || AccountScope::key($connection) !== $this->scope) {
             return;
         }
+        // During a broker rate-limit pause, skip instead of recording an avoidable failure; a later tick retries.
+        if (app(BrokerBackoff::class)->remaining($connection->id) > 0) {
+            return;
+        }
         $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', $this->scope)->first();
         $execution = $portfolio ? ExecutionPolicies::current($portfolio) : null;
-        if (! $execution || $execution->id !== $this->executionId || ! in_array($this->symbol, $execution->payload['allowed_symbols'], true)) {
+        if (! $execution || $execution->id !== $this->executionId || ! in_array($this->symbol, app(SymbolUniverse::class)->reads($connection, CarbonImmutable::now()), true)) {
             return;
         }
         $inputs->collect($connection, $connection->user_id, $this->symbol, $this->requestId);

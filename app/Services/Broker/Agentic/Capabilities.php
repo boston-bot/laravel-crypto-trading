@@ -90,9 +90,14 @@ final class Capabilities
                 $changed = true;
             }
         }
-        $connection->update(['capability_manifest' => $tools, 'capability_fingerprint' => self::fingerprint($tools),
-            'protocol_version' => $session->protocol(), 'capabilities_checked_at' => now(),
-            'status' => $changed ? 'schema_changed' : 'connected', 'error_code' => $changed ? ReadError::SchemaChanged->value : null]);
+        $values = ['protocol_version' => $session->protocol(), 'capabilities_checked_at' => now(),
+            'status' => $changed ? 'schema_changed' : 'connected', 'error_code' => $changed ? ReadError::SchemaChanged->value : null];
+        $fingerprint = self::fingerprint($tools);
+        // The encrypted catalog is rewritten only when its content changes, compared with the stored row rather than a stale model.
+        if (McpConnection::whereKey($connection->id)->value('capability_fingerprint') !== $fingerprint) {
+            $values += ['capability_manifest' => $tools, 'capability_fingerprint' => $fingerprint];
+        }
+        $connection->update($values);
 
         return $tools;
     }

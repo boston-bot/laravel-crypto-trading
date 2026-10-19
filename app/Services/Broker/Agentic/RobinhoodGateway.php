@@ -8,21 +8,58 @@ use Illuminate\Support\Arr;
 
 final class RobinhoodGateway implements BrokerGateway
 {
-    public function __construct(private SessionFactory $sessions, private Capabilities $capabilities) {}
+    private const SYMBOL = '/^[A-Z][A-Z0-9.\-]{0,14}$/D';
+
+    /** Data-level failures keep a scoped session; anything else may mean the session or token is unusable. */
+    private const SESSION_SAFE = [ReadError::Stale, ReadError::Incomplete, ReadError::Unsupported, ReadError::Disabled];
+
+    /** @var array<int, array{session: McpSession, manifest: array, generation: int, opened_at: int}|null> */
+    private array $shared = [];
+
+    public function __construct(private SessionFactory $sessions, private Capabilities $capabilities, private BrokerBackoff $backoff) {}
+
+    /**
+     * Reads inside $work share one MCP session and one catalog check. The session is reopened after
+     * `session_max_seconds`, after an authorization change, or after a session-level failure.
+     */
+    public function within(McpConnection $connection, callable $work): mixed
+    {
+        if (array_key_exists($connection->id, $this->shared)) {
+            return $work();
+        }
+        $this->shared[$connection->id] = null;
+        try {
+            return $work();
+        } finally {
+            $this->release($connection->id);
+            unset($this->shared[$connection->id]);
+        }
+    }
 
     public function discover(McpConnection $connection): array
     {
+        if ($remaining = $this->backoff->remaining($connection->id)) {
+            throw new ReadFailure(ReadError::RateLimited, $remaining);
+        }
         $session = $this->sessions->open($connection);
         try {
             return $this->capabilities->discover($connection, $session);
         } catch (ReadFailure $failure) {
             $this->recordError($connection, $failure);
+            if ($failure->reason === ReadError::RateLimited) {
+                throw new ReadFailure(ReadError::RateLimited, $this->backoff->record($connection->id, $failure->retryAfter));
+            }
             throw $failure;
         } finally {
             $session->close();
         }
     }
 
+    /**
+     * `symbols` (a list) reads several exact symbols in one call where the reviewed profile allows a batch.
+     * Records for unrequested symbols are skipped or refused as the profile specifies; missing symbols are left
+     * for the caller to report as unknown.
+     */
     public function read(McpConnection $connection, Operation $operation, array $filters = []): ReadResult
     {
         $connection->refresh();
@@ -35,23 +72,53 @@ final class RobinhoodGateway implements BrokerGateway
         if ($scoped && ! $connection->bound_account_id) {
             throw new ReadFailure(ReadError::AccountMismatch);
         }
-        // Missing configuration is refused before opening a network connection.
-        $this->capabilities->profile($operation, $connection->capability_manifest ?? []);
-        $session = $this->sessions->open($connection);
+        // Missing configuration and invalid batches are refused before opening a network connection.
+        $preflight = $this->capabilities->profile($operation, $connection->capability_manifest ?? []);
+        $symbols = null;
+        if (array_key_exists('symbols', $filters)) {
+            $symbols = $filters['symbols'];
+            unset($filters['symbols']);
+            $max = (int) ($preflight['max_batch_symbols'] ?? 0);
+            if ($max < 2 || isset($filters['symbol']) || ! isset($preflight['filters']['symbol']) || ! in_array('symbol', $preflight['array_filters'] ?? [], true)
+                || ! is_array($symbols) || ! array_is_list($symbols) || $symbols === [] || count($symbols) > $max) {
+                throw new ReadFailure(ReadError::Malformed);
+            }
+            foreach ($symbols as $symbol) {
+                if (! is_string($symbol) || ! preg_match(self::SYMBOL, $symbol)) {
+                    throw new ReadFailure(ReadError::Malformed);
+                }
+            }
+            if (count(array_unique($symbols)) !== count($symbols)) {
+                throw new ReadFailure(ReadError::Malformed);
+            }
+        }
+        if ($remaining = $this->backoff->remaining($connection->id)) {
+            throw new ReadFailure(ReadError::RateLimited, $remaining);
+        }
+        $shared = array_key_exists($connection->id, $this->shared);
+        $session = null;
         $records = [];
         $cursor = null;
         $seen = [];
         $pages = 0;
         $retrieved = new DateTimeImmutable;
         try {
-            $manifest = $this->capabilities->discover($connection, $session);
+            if ($shared) {
+                [$session, $manifest] = $this->scopedSession($connection);
+            } else {
+                $session = $this->sessions->open($connection);
+                $manifest = $this->capabilities->discover($connection, $session);
+            }
             $profile = $this->capabilities->profile($operation, $manifest);
             $arguments = $profile['arguments'] ?? [];
-            if (isset($profile['required_filter']) && empty($filters[$profile['required_filter']])) {
+            if (isset($profile['required_filter']) && empty($filters[$profile['required_filter']]) && ! ($symbols && $profile['required_filter'] === 'symbol')) {
                 throw new ReadFailure(ReadError::Malformed);
             }
-            if (isset($filters['symbol']) && ! preg_match('/^[A-Z][A-Z0-9.\-]{0,14}$/D', $filters['symbol'])) {
+            if (isset($filters['symbol']) && ! preg_match(self::SYMBOL, $filters['symbol'])) {
                 throw new ReadFailure(ReadError::Malformed);
+            }
+            if ($symbols) {
+                Arr::set($arguments, $profile['filters']['symbol'], $symbols);
             }
             foreach ($filters as $key => $value) {
                 if (! in_array($key, ['symbol', 'instrument_id', 'order_id', 'list_id'], true) || ! isset($profile['filters'][$key]) || ! is_string($value) || $value === '' || strlen($value) > 128) {
@@ -129,7 +196,7 @@ final class RobinhoodGateway implements BrokerGateway
                     if ($operation === Operation::WatchlistItems) {
                         $fields += ['list_id' => $filters['list_id'], 'watchlist_scope' => 'request_list_id'];
                     }
-                    if (($profile['exact_symbol'] ?? false) && ($fields['symbol'] ?? null) !== ($filters['symbol'] ?? null)) {
+                    if (($profile['exact_symbol'] ?? false) && ! in_array($fields['symbol'] ?? null, $symbols ?? [$filters['symbol'] ?? null], true)) {
                         if ($profile['strict_symbol'] ?? false) {
                             throw new ReadFailure(ReadError::Incomplete);
                         }
@@ -195,7 +262,7 @@ final class RobinhoodGateway implements BrokerGateway
                 }
                 $pages++;
             } while ($cursor !== null);
-            if (($profile['exact_symbol'] ?? false) && count($records) !== 1) {
+            if (($profile['exact_symbol'] ?? false) && $symbols === null && count($records) !== 1) {
                 throw new ReadFailure(ReadError::Incomplete);
             }
             $current = $connection->fresh();
@@ -206,12 +273,63 @@ final class RobinhoodGateway implements BrokerGateway
             return new ReadResult(TrustedHttp::RESOURCE, new DateTimeImmutable, $records, true, null, null, $pages, $profile['coverage'] ?? 'configured_operation');
         } catch (ReadFailure $failure) {
             $this->recordError($connection, $failure);
+            if ($failure->reason === ReadError::RateLimited) {
+                $failure = new ReadFailure(ReadError::RateLimited, $this->backoff->record($connection->id, $failure->retryAfter));
+            }
+            if ($shared && ! in_array($failure->reason, self::SESSION_SAFE, true)) {
+                $this->release($connection->id);
+            }
             if (($pages > 0 || $failure->reason === ReadError::Incomplete) && in_array($failure->reason, [ReadError::Timeout, ReadError::Transport, ReadError::RateLimited, ReadError::Incomplete], true)) {
                 return new ReadResult(TrustedHttp::RESOURCE, $retrieved, $records, false, $cursor, $failure->reason, $pages, $profile['coverage'] ?? 'configured_operation');
             }
             throw $failure;
         } finally {
+            if (! $shared) {
+                $session?->close();
+            }
+        }
+    }
+
+    /** @return array{0: McpSession, 1: array} */
+    private function scopedSession(McpConnection $connection): array
+    {
+        $scope = $this->shared[$connection->id] ?? null;
+        $maxAge = (int) config('robinhood_mcp.session_max_seconds');
+        if ($scope !== null && $scope['generation'] === $connection->auth_generation && $scope['opened_at'] > now()->getTimestamp() - $maxAge) {
+            return [$scope['session'], $scope['manifest']];
+        }
+        $this->release($connection->id);
+        // The token must outlive the session, so it is refreshed up front instead of expiring mid-scope.
+        $session = $this->sessions->open($connection, $maxAge + 30);
+        try {
+            $manifest = $this->capabilities->discover($connection, $session);
+        } catch (\Throwable $error) {
+            $this->closeQuietly($session);
+            throw $error;
+        }
+        $this->shared[$connection->id] = ['session' => $session, 'manifest' => $manifest,
+            'generation' => $connection->auth_generation, 'opened_at' => now()->getTimestamp()];
+
+        return [$session, $manifest];
+    }
+
+    private function release(int $connectionId): void
+    {
+        $session = $this->shared[$connectionId]['session'] ?? null;
+        if (array_key_exists($connectionId, $this->shared)) {
+            $this->shared[$connectionId] = null;
+        }
+        if ($session) {
+            $this->closeQuietly($session);
+        }
+    }
+
+    private function closeQuietly(McpSession $session): void
+    {
+        try {
             $session->close();
+        } catch (\Throwable) {
+            // Closing is best effort; the server expires abandoned sessions.
         }
     }
 

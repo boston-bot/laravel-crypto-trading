@@ -206,15 +206,91 @@ class PaperCorporateActionsTest extends TestCase
         $this->assertSame(0, CorporateActionRecord::where('phase', 'application')->count());
     }
 
-    public function test_special_foreign_due_bill_and_unsupported_actions_remain_blocked(): void
+    public function test_regular_calendar_special_dividend_is_paid_on_held_shares(): void
     {
+        $this->fill($this->order());
         $this->day('2026-10-22');
-        $event = A::dividend(['flags' => ['special' => true]]);
-        $result = $this->process([$event])->last();
+        $result = $this->process([A::dividend(['flags' => ['special' => true]])])->last();
+        $this->assertSame(['applied', true], [$result->status, $result->payload['special']]);
+        $this->decimal('2.5', CashEntry::where('kind', 'simulated_dividend')->sole()->amount);
+        $this->assertNull(SimulationPosition::sole()->blocked_reason);
+    }
+
+    public function test_foreign_dividend_on_held_shares_remains_blocked(): void
+    {
+        $this->fill($this->order());
+        $this->day('2026-10-22');
+        $result = $this->process([A::dividend(['flags' => ['foreign' => true]])])->last();
         $this->assertSame('dividend_terms_require_review', $result->reason);
         $this->assertSame(0, CashEntry::where('kind', 'simulated_dividend')->count());
         $this->assertSame('corporate_action_review_required', SimulationPosition::sole()->blocked_reason);
+    }
+
+    public function test_due_bill_special_dividend_on_held_shares_remains_blocked(): void
+    {
+        $this->fill($this->order());
+        $this->day('2026-10-22');
+        $result = $this->process([A::dividend(['flags' => ['special' => true], 'dates' => ['due_bill_on_date' => '2026-10-19']])])->last();
+        $this->assertSame('dividend_terms_require_review', $result->reason);
         $this->assertSame(0, CorporateActionRecord::where('phase', 'application')->count());
+    }
+
+    public function test_unsupported_action_settling_after_first_fill_freezes_held_shares(): void
+    {
+        $this->fill($this->order());
+        $this->day('2026-10-22');
+        $result = $this->process([$this->merger('2026-10-20')])->last();
+        $this->assertSame('unsupported_or_ambiguous_action', $result->reason);
+        $this->decimal('10', SimulationPosition::sole()->quantity);
+        $this->assertSame('corporate_action_review_required', SimulationPosition::sole()->blocked_reason);
+    }
+
+    private function merger(string $effective): array
+    {
+        return A::event(['id' => 'synthetic-merger', 'type' => 'cash_mergers', 'symbols' => ['symbol' => null, 'acquiree_symbol' => 'DEMO'],
+            'dates' => ['process_date' => $effective, 'ex_date' => null, 'effective_date' => $effective], 'rates' => ['rate' => '120', 'new_rate' => null, 'old_rate' => null]]);
+    }
+
+    public function test_unheld_unsupported_action_blocks_new_exposure_until_settled_then_reconciles_without_ledger_effect(): void
+    {
+        $clearance = fn (array $events) => app(CorporateActionClearance::class)->inspect(A::input($this->connection, $events), CarbonImmutable::now(), 60);
+        $this->assertTrue($clearance([A::event(['dates' => ['process_date' => '2026-10-25', 'ex_date' => '2026-10-25']])])['clear']); // Reviewed pending split.
+        $pending = $this->order();
+        $merger = $this->merger('2026-10-21');
+        $this->assertSame('observed', $this->process([$merger])->sole()->status);
+        $this->assertSame('action_terms_unverified', $clearance([$merger])['reason']);
+        $this->day('2026-10-21');
+        $cutoff = CarbonImmutable::now();
+        $this->assertSame('known_action_not_reconciled', $clearance([$merger])['reason']);
+        $this->travel(1)->seconds();
+        $result = $this->process([$merger])->last();
+        $this->assertSame(['application', 'no_effect', PaperCorporateActions::UNEXPOSED, 'no_paper_fills'], [$result->phase, $result->status, $result->reason, $result->payload['basis']]);
+        $this->assertNotSame('open', $pending->fresh()->status);
+        $this->decimal('0', $this->portfolio->fresh()->reserved_cash);
+        $this->assertDatabaseCount('mcp_paper_sim_positions', 0);
+        $this->assertTrue($clearance([$merger])['clear']);
+        $this->assertNull(app(CorporateActionClearance::class)->inspect(A::input($this->connection, [$merger]), $cutoff, 60)['clear']);
+        $this->fill($this->order()); // Shares bought after settlement never inherit the event.
+        $this->travel(1)->seconds();
+        $this->assertSame($result->id, $this->process([$merger])->last()->id);
+        $this->assertTrue($clearance([$merger])['clear']);
+        $this->decimal('10', SimulationPosition::sole()->quantity);
+    }
+
+    public function test_corrected_or_vanished_events_that_settled_before_the_first_fill_do_not_freeze(): void
+    {
+        $this->day('2026-10-22');
+        $first = $this->process([A::dividend()])->last();
+        $this->assertSame(['no_effect', PaperCorporateActions::UNEXPOSED], [$first->status, $first->reason]);
+        $this->fill($this->order());
+        $this->travel(1)->seconds();
+        $corrected = $this->process([A::dividend(['rates' => ['rate' => '0.30']])])->last();
+        $this->assertSame(['no_effect', 'settled_before_first_paper_fill'], [$corrected->status, $corrected->payload['basis']]);
+        $this->assertSame([], $this->process([])->all());
+        $this->assertSame(0, CorporateActionRecord::where('phase', 'block')->count());
+        $this->assertSame(0, CashEntry::where('kind', 'simulated_dividend')->count());
+        $this->assertNull(SimulationPosition::sole()->blocked_reason);
+        $this->assertTrue(app(CorporateActionClearance::class)->inspect(A::input($this->connection, []), CarbonImmutable::now(), 60)['clear']);
     }
 
     public function test_late_split_cannot_rewrite_an_already_booked_later_entitlement(): void

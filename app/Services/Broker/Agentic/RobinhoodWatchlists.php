@@ -23,6 +23,13 @@ final class RobinhoodWatchlists
         if (! $binding) {
             throw new ReadFailure(ReadError::AccountMismatch);
         }
+
+        // The three reads share one broker session.
+        return $this->gateway->within($connection, fn (): array => $this->read($connection, $name, $binding, $generation));
+    }
+
+    private function read(McpConnection $connection, string $name, string $binding, int $generation): array
+    {
         $lists = $this->gateway->read($connection, Operation::Watchlists);
         $list = $this->select($lists, $name);
         $items = $this->gateway->read($connection, Operation::WatchlistItems, ['list_id' => $list->fields['id']]);

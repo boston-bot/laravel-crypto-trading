@@ -150,6 +150,10 @@ final class RiskObservations
             }
         }
 
+        if ($reason = app(ExternalOrders::class)->entryReason($connection)) {
+            $pause[] = $reason;
+        }
+
         return ['holdings' => $holdings, 'equity' => $portfolio['equity'] ?? null, 'cash' => $portfolio['cash'] ?? null,
             'buying_power' => $portfolio['buying_power'] ?? null, 'equity_exposure' => $exposureKnown ? (string) $exposure : null,
             'sleeve_exposure' => $exposureKnown ? array_map(strval(...), $sleeves) : null,

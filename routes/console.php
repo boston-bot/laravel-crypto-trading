@@ -17,6 +17,7 @@ use App\Models\McpConnection;
 use App\Models\User;
 use App\Services\Monitoring\MonitoringScheduler;
 use App\Services\PaperTrading\DecisionScheduler;
+use App\Services\PaperTrading\StrategyWatchlists;
 use App\Services\Research\ResearchScheduler;
 use App\Services\Research\ResearchSummaries;
 use App\Support\Mcp\DatabaseReadiness;
@@ -141,6 +142,33 @@ Artisan::command('mcp:paper-decisions {--once} {--sync : Process the current win
 
 if (config('paper.market_collection_enabled') && config('paper.market_inputs_enabled')) {
     Schedule::command('mcp:paper-collect --once --scheduled')->everyFiveMinutes()->withoutOverlapping(10);
+}
+
+Artisan::command('mcp:strategy-watchlist {--once} {--account= : Local connection ID}', function (): int {
+    if (! $this->option('once') || ($this->option('account') !== null && ! ctype_digit($this->option('account')))) {
+        $this->error('Use --once and an optional numeric --account.');
+
+        return 1;
+    }
+    try {
+        $count = app(StrategyWatchlists::class)->tick($this->option('account') !== null ? (int) $this->option('account') : null);
+        $this->line('Strategy watchlist reads processed: '.$count);
+
+        return 0;
+    } catch (Throwable) {
+        $this->error('Watchlist intake unavailable. Check configuration, account binding and stored read evidence.');
+
+        return 1;
+    }
+})->purpose('Read the configured strategy watchlist; no policy, AI, order or brokerage mutation');
+
+if (config('paper.watchlist_intake_enabled')) {
+    Schedule::command('mcp:strategy-watchlist --once')->everyFiveMinutes()->withoutOverlapping(5);
+}
+
+// Public SEC filings change slowly; one daily refresh keeps stored classifications inside their seven-day validity.
+if (config('sec_edgar.enabled') && config('paper.market_collection_enabled')) {
+    Schedule::command('mcp:instrument-classification --scheduled')->dailyAt('06:20')->timezone('America/New_York')->withoutOverlapping(60);
 }
 
 if (config('paper.decisions_enabled')) {

@@ -2,6 +2,8 @@
 
 Current application update, October 18: authenticated Control Center forms applied mandate v1 / policy revision 1 / execution v2, with one $500 virtual opening balance and the 44-symbol allowlist. Read-only PostgreSQL verification confirms encryption, exact prepared values and zero execution activity. All AI/paper/live gates remain off. This resolves the earlier browser/settings blocker recorded below; populated-record backup/restore subsequently passed (66 tables / 434 rows), including exact M5 values/decryption, $500 ledger, disabled execution and scratch cleanup. [Evidence](M5-DEPLOYMENT-EVIDENCE.md#applied-owner-settings-verification).
 
+**Direction change, October 18:** the owner adopted a strategy/execution split. Every 30 minutes, ChatGPT scheduled tasks, under the owner's subscription and outside this repository, research equities and maintain a dedicated Robinhood watchlist. This application reads that list every 5 minutes. It checks eligibility, profiles each symbol from its own market data, assigns a deterministic playbook and makes the final decision. No paid LLM API runs in the application. Where sections below describe in-app AI research, AI-selected or AI-sized trades, or an AI budget and cadence, [AGENTS.md](../../AGENTS.md#project-direction) and the [revised M5 design](M5-DESIGN.md) take precedence. Those passages remain as a record of the components already built, which stay disabled.
+
 Status: proposed implementation baseline, October 16, 2026. Read [the index](README.md) for owner decisions and [the checklist](DEVELOPMENT-CHECKLIST.md) for work sequencing.
 
 ## 1. Product objective and release boundaries
@@ -32,26 +34,33 @@ The roadmap does not assert the existing tests pass. Establish that baseline in 
 
 ## 3. Target architecture
 
+Architecture after the October 18 direction change:
+
 ```mermaid
 flowchart TD
-    B[Robinhood Trading MCP] --> C[Broker adapter]
-    D[Market and news sources] --> I[Ingestion and validation]
-    C --> P[(PostgreSQL)]
-    I --> P
+    G[ChatGPT strategy tasks, outside this app] -->|edit dedicated watchlist| B[Robinhood Trading MCP]
+    B --> C[Broker read gateway: watchlist, quotes, account]
+    C --> W[Watchlist intake and eligibility]
+    D[Daily price history source] --> I[Ingestion and validation]
     S[Laravel scheduler and queues] --> C
     S --> I
+    W --> P[(PostgreSQL)]
+    C --> P
+    I --> P
     P --> R[Risk and thesis monitoring]
-    R --> A[Research queue]
-    A --> L[AI research API]
-    L --> V[Validate research and proposals]
-    V --> P
+    P --> Q[Profiles, playbooks and signal rules]
+    Q --> P
     P --> U[Authenticated dashboard]
     R --> N[Alerts and incident tracking]
-    P --> E[Future policy and approval gate]
-    E --> X[Future order executor]
+    P --> E[Policy gate and paper simulator]
+    E --> X[Future execution gateway, M6]
     X --> B
     X --> P
 ```
+
+Data flows one way, from strategy to execution. ChatGPT supplies symbols only; every number in a decision comes from the app's data and the owner's versioned settings. The app only reads the watchlist and never edits it, and no cloud service can reach the local machine. Broker reads and order placement use separate gateways, because the Robinhood token is not read-only. The ChatGPT tasks' own Robinhood connection may be able to trade, so the app treats any order it did not create as an incident. [M5 design](M5-DESIGN.md) details intake, eligibility, the strategy and data loops.
+
+The original diagram routed risk monitoring through a research queue to an AI research API and back as validated proposals. That path exists in code (M3, M5 decision runner) and stays disabled.
 
 ### Runtime choices
 
@@ -59,9 +68,8 @@ flowchart TD
 - PostgreSQL stores business state, queues, sessions, and cache initially. Redis is not a prerequisite.
 - Blade, existing Tailwind, and small JavaScript components are the default UI. Avoid adding a second frontend application for this scope.
 - A single scheduler dispatches work. Dedicated monitoring/reconciliation workers cannot be starved by slow AI requests. Use queues `monitoring`, `research`, `notifications`, and later `execution`.
-- Keep the broker transport behind an interface. M1 attempts a maintained PHP MCP client supporting the broker's negotiated protocol and OAuth flow. If a suitable implementation cannot pass the spike, use a small Python sidecar in this repository with a maintained MCP SDK. Record that decision before expanding it.
-- The optional sidecar binds only to loopback, requires a local service token, owns transport/session handling only, and exposes normalized operations. Laravel remains the sole business-state writer. The bridge never receives arbitrary model-generated tool names to execute.
-- The application is an MCP **client** of Robinhood. Building a custom MCP server for ChatGPT to query this application's research is a later optional feature, not a prerequisite.
+- Keep the broker transport behind an interface. M1 selected the maintained PHP `mcp/sdk` client; no Python sidecar was needed ([spike](M1-PHP-SDK-SPIKE.md)). Rule evaluation is also PHP with exact decimals; there is no Python/pandas strategy engine.
+- The application is an MCP **client** of Robinhood's remote server (`agent.robinhood.com`). Building a custom MCP server for ChatGPT to query this application's research is a later optional feature, not a prerequisite.
 
 ## 4. Integration contracts and capability discovery
 
@@ -83,7 +91,15 @@ Define `MarketDataProvider` for timestamped quotes, market sessions, corporate a
 
 Store exchange sessions with holiday and early-close support. Use `America/New_York` for U.S. trading sessions and `America/Chicago` for the owner's display preference; store timestamps in UTC. Missing session coverage means no future trading, not an assumed weekday schedule.
 
+The 5-minute cycle needs batched quotes for up to 75 watchlist symbols plus holdings; per-symbol MCP reads with a new session each time cannot supply them. Symbol profiles also need at least a year of split-adjusted daily bars and earnings dates, which the app has no reviewed source for yet. Select those sources after a coverage, licensing, rate-limit and cost check. See [M5 design](M5-DESIGN.md#market-data).
+
+### Strategy watchlist intake
+
+Added October 18. Every 5 minutes the app reads one dedicated Robinhood watchlist with the existing read-only watchlist tools. Each successful read is stored as an immutable revision. Membership only nominates symbols; code eligibility rules decide, and a list over 75 items is rejected. A failed or rejected read leaves the last valid revision in use for 30 minutes, then stops new entries. Removed symbols get no new entries, while held positions keep their exit rules. Details are in [M5 design](M5-DESIGN.md#watchlist-intake).
+
 ### AI research adapter
+
+**Superseded October 18 for continuous operation:** no paid LLM API runs in this application. The M3 adapter described below exists and stays disabled.
 
 Use a configurable model via an application API credential. Codex in VS Code is the development assistant, not the unattended production process. Do not assume a ChatGPT subscription supplies application API capacity.
 
@@ -131,6 +147,8 @@ Proposed starting cadence, configurable within provider limits:
 
 This is polling with event-triggered work downstream. WebSockets are optional later if measured requirements justify them. No promise of continuous protection or execution at an observed threshold.
 
+October 18 direction change: add 5-minute watchlist reads, entry/exit evaluation and paper fills in verified regular sessions, plus daily symbol profiles after the close ([M5 design](M5-DESIGN.md)). News analysis moves to the ChatGPT strategy tasks, so in-app news ingestion and AI-triggered research are no longer planned.
+
 Each trigger has a stable deduplication key. Overlapping scheduled work coalesces. A missed session is recorded, not replayed as old trade decisions. On startup, reconcile account/orders, validate calendar and freshness, then resume monitoring; stale trading proposals expire.
 
 Use bounded retry/backoff for idempotent reads, respecting provider rate limits and `Retry-After`. Distinguish transient failures from authorization and validation failures. Circuit-break persistently failing integrations. Persist progress so research failure does not erase a valid account snapshot.
@@ -175,7 +193,9 @@ Do not claim exactly-once delivery across the network. Enforce durable intent, s
 
 ## 9. Research, performance, and cost
 
-**M5 direction update, October 17, 2026:** the owner requested starting M5 design/development while M4's seven-session proving gate remains open. Target AI-selected **multi-day to multi-week** paper positions across a **broad US stock/ETF universe**, within the existing **$100 target / $150 maximum monthly AI-and-data envelope**. Follow [the M5 design](M5-DESIGN.md) for the proposed one-minute local scan, five-minute bounded AI reviews, event-driven reviews, separate decision freshness/cache, provider selection and paper evaluation. Those cadences are proposed targets, not implemented schedules or guaranteed throughput. This refines the earlier 30-minute ingestion proposal; it does not complete M4, authorize recurring activation or enable M6 brokerage writes.
+**Direction change, October 18, 2026:** this supersedes the October 17 update below. The app makes no AI selection, review or sizing; trade decisions come from deterministic rules applied to the strategy watchlist. The $100 target / $150 maximum envelope now covers data only. The budget-ledger design in this section applies only to the disabled M3/M5 AI components.
+
+**M5 direction update, October 17, 2026 (superseded):** the owner requested starting M5 design/development while M4's seven-session proving gate remains open. Target AI-selected **multi-day to multi-week** paper positions across a **broad US stock/ETF universe**, within the existing **$100 target / $150 maximum monthly AI-and-data envelope**. Follow [the M5 design](M5-DESIGN.md) for the proposed one-minute local scan, five-minute bounded AI reviews, event-driven reviews, separate decision freshness/cache, provider selection and paper evaluation. Those cadences are proposed targets, not implemented schedules or guaranteed throughput. This refines the earlier 30-minute ingestion proposal; it does not complete M4, authorize recurring activation or enable M6 brokerage writes.
 
 Use a broad but bounded liquid U.S. stock/ETF universe, with existing holdings first. Record the strongest candidate and alternative/WAIT condition. Cache unchanged research; trigger a new review on material events or expiry, not every quote poll. Initial research limit: at most one active run per instrument/thesis version and event fingerprint.
 
@@ -185,7 +205,9 @@ Budget design: target $100/month, maximum envelope $150 including fixed subscrip
 
 ## 10. Dashboard and alert behavior
 
-M5 adds a **Control Center** to inspect current AI instructions and account-scoped PostgreSQL research/evidence, edit versioned paper allocations/risk/guidance/cadence, review manually returned ChatGPT proposals and restore prior settings as a new version. Distinguish drafts, applied settings and the version actually used in each model request. October 18 source supports explicit policy application/virtual opening cash, a separately disabled proposal runner consuming applied decision cadence/rules, and a separately disabled offline synthetic order/fill simulator with accounting reports. Encrypted evidence retains applied versions, inputs, usage, outcomes and costs. Real model compatibility, broad discovery, real-provider paper execution/proposal handoff and deployment remain unfinished. See [design](M5-DESIGN.md#browser-control-center-and-rule-delivery), [runner evidence](M5-DECISION-RUNNER-EVIDENCE.md) and [offline simulation evidence](M5-OFFLINE-SIMULATION-EVIDENCE.md). No chat memory is an application settings source; model output cannot approve rule changes or create simulation orders.
+Under the October 18 split, the Control Center also shows watchlist revisions and each symbol's eligibility, profile and playbook. It lets the owner edit the versioned strategy parameters within bounds set in code. Views of AI instructions and proposals describe disabled components.
+
+M5 adds a **Control Center** to inspect current AI instructions and account-scoped PostgreSQL research/evidence, edit versioned paper allocations/risk/guidance/cadence, review manually returned ChatGPT proposals and restore prior settings as a new version. Distinguish drafts, applied settings and the version actually used in each model request. October 18 source supports explicit policy application/virtual opening cash, a separately disabled proposal runner consuming applied decision cadence/rules, and a separately disabled offline synthetic order/fill simulator with accounting reports. Encrypted evidence retains applied versions, inputs, usage, outcomes and costs. Real model compatibility, broad discovery, real-provider paper execution/proposal handoff and deployment remain unfinished. See [design](M5-DESIGN.md#existing-m5-components), [runner evidence](M5-DECISION-RUNNER-EVIDENCE.md) and [offline simulation evidence](M5-OFFLINE-SIMULATION-EVIDENCE.md). No chat memory is an application settings source; model output cannot approve rule changes or create simulation orders.
 
 The subsequent [execution/handoff source increment](M5-EXECUTION-HANDOFF-EVIDENCE.md) adds separately versioned owner execution draft/apply controls, timestamped normalized broker-input records and a disabled, application-owned proposal-to-paper-order boundary. Recorded proposal IDs, applied permissions, ledger/source freshness and local decimal sizing govern that boundary; the model cannot supply broker parameters or change rules. Synthetic tests cover the connected workflow. Actual owner choices were captured in the [mandate intake](M5-OWNER-MANDATE.md); real eligibility/liquidity/action coverage and real-provider fill processing remain unfinished.
 
@@ -217,13 +239,17 @@ Reconcile current holdings and open orders from live broker reads before using i
 
 At cutover, have the operator verify legacy ChatGPT trading tasks are paused and no other executor is active. The app should show this as a recorded operator prerequisite; it cannot prove exclusive control of all external clients. No dual execution during migration. Sheets export failure must never block local monitoring.
 
+The October 18 strategy tasks are new ChatGPT tasks with one job: maintaining the dedicated Robinhood watchlist. Their Robinhood connection may be able to place orders. Configure and instruct them not to trade, and limit that connection if Robinhood allows it. The app cannot verify this, so record it as an operator prerequisite like the paused legacy tasks; the app also treats any order it did not create as an incident. Legacy trading tasks stay paused.
+
 ## 12. Delivery and release gates
 
 Follow M0–M6 in the checklist. Release 1 requires M0–M4, no missing/duplicate run identifiers in verified observations, complete snapshot reconciliation, verified external alert delivery, and a successful backup restore and forced worker restart drill. **Owner amendment, October 18:** the original seven-consecutive-session proving requirement is waived; M4 is accepted with that endurance period explicitly unverified (0/7 completed). Retain historical evidence and ongoing health/recovery controls. Do not describe the waiver as a passed test.
 
 October 18 source increment: ordinary domestic cash-dividend entitlements/payments and whole-share splits now reconcile into the paper ledger behind a default-off gate, with immutable records and conservative late/corrected/unsupported-event review blocks. A bounded observed-data policy requires fresh process-date coverage since cash-only paper inception and due-event accounting, while retaining publication-delay uncertainty. Comprehensive action accounting and authoritative leverage/inverse classification remain incomplete. One additive action-audit table is tested locally and not deployed. [Detailed evidence](M5-CORPORATE-ACTION-ACCOUNTING-EVIDENCE.md).
 
-M5 validates simulated execution and strategy evaluation. M6 requires explicit owner live settings and broker approval support, clean order state, an emergency-disable drill, and fault-injection tests. A successful monitoring week is not permission to trade or proof of investment edge.
+October 19 source increment: leveraged/inverse classification now uses SEC filings rather than names or absent fields. A default-off, GET-only EDGAR adapter confirms an ETF's class/ticker in its current N-CEN and reads Item C.3.c and the rule 18f-4(c)(5) answer. Stocks qualify only as an operating registrant's sole listed ticker. Immutable evidence feeds a separately gated policy that must also agree with a fresh Robinhood stock/ETF type. Events that settled before a symbol's first paper fill now reconcile without effect, and regular-calendar special dividends are paid. A live SEC read awaits the owner's declared identity. [Evidence](M5-CLASSIFICATION-AND-ACTION-COVERAGE-EVIDENCE.md).
+
+M5 validates simulated execution and evaluation of the deterministic, watchlist-driven rules (October 18 direction). M6 requires explicit owner live settings and broker approval support, clean order state, an emergency-disable drill, and fault-injection tests. A successful monitoring week is not permission to trade or proof of investment edge.
 
 The owner's October 17 instruction permitted beginning M5 design/development before the proving period; the October 18 waiver now closes M4 under that exception. Record deployments affecting the monitored runtime and continue verifying reliability after material changes. Neither acceptance nor M5 development enables live trading or proves investment performance.
 
@@ -242,3 +268,12 @@ Architecture and thresholds above are project design decisions. External protoco
 Checked October 16, 2026. Installed package and negotiated protocol versions, not the newest documentation alone, determine implementation compatibility.
 
 October 18 collection increment: a separate default-off, bounded rotating allowlist collector uses existing monitoring workers and encrypted market-input records without calling AI or execution paths. Scheduling is every five minutes in verified regular sessions and hourly otherwise, at most five symbols per tick. This is baseline data collection, not the proposed full-universe 60-second scan. [Deployment and evidence](M5-COLLECTION-DEPLOYMENT-EVIDENCE.md).
+
+
+M5 watchlist-intake source increment, October 19 UTC: dedicated-list selection is now separately versioned in the authenticated Control Center. A default-off five-minute command records encrypted successful membership revisions and failed-read reasons, rejects over-cap lists, and exposes a fail-closed 30-minute entry-nomination gate. Exits remain independent. This does not replace applied execution v2 or implement the deterministic eligibility/profile/signal engine. See [evidence](M5-STRATEGY-WATCHLIST-EVIDENCE.md).
+
+
+M5 external-order source increment, October 19 UTC: independently disabled detection now records immutable scoped equity-order cases and read attempts, including partial results. Per-order authenticated owner reviews clear only the selected case. A latched incident blocks nominations and real-data paper buys, while sells remain independent; missing/partial/expired order coverage also blocks buys when detection is enabled. There is no agentic submission path, so all observed broker orders require review. Not deployed or enabled. [Evidence](M5-EXTERNAL-ORDER-EVIDENCE.md).
+
+
+M5 deterministic eligibility source increment, October 19: an explicit immutable owner policy can replace the fixed allowlist with watchlist rules. Stored-data checks record all per-symbol reasons and exact decimal price/spread thresholds; missing US-listing/history/liquidity sources block full eligibility. Collection includes holdings independently of entry membership. Real-data paper buys record/recheck assessments; sells remain independent. The superseded model handoff cannot use this mode. No runtime application or enablement. [Evidence](M5-RULE-ELIGIBILITY-EVIDENCE.md).

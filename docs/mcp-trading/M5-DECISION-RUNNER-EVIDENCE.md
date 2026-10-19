@@ -1,5 +1,7 @@
 # M5 paper decision runner and request evidence
 
+**Superseded October 18:** the owner adopted a strategy/execution split in which deterministic rules, not an in-app model, make paper decisions ([AGENTS.md](../../AGENTS.md#project-direction), [revised M5 design](M5-DESIGN.md)). The runner described here stays disabled and should not be extended. This file remains the historical record.
+
 October 18, 2026. Source implementation and isolated tests only; M5 remains partial. M4's seven-session period remains owner-waived, **0/7 completed**. This increment does not deploy code, enable recurring work, call a real model or mutate a brokerage account.
 
 Later October 18: the separate [offline simulator](M5-OFFLINE-SIMULATION-EVIDENCE.md) now verifies synthetic order/fill accounting. The runner still cannot create orders and its default real evidence adapter still lacks instrument eligibility/positions; remaining-work statements below describe this runner's checkpoint.

@@ -9,18 +9,23 @@ use App\Models\Monitoring\Run;
 use App\Models\Monitoring\Snapshot;
 use App\Models\Monitoring\ThesisVersion;
 use App\Models\Operations\NotificationDelivery;
+use App\Models\PaperTrading\EligibilityAssessment;
 use App\Models\PaperTrading\MandateVersion;
 use App\Models\Research\Run as ResearchRun;
 use App\Models\Research\Source as ResearchSource;
 use App\Services\Monitoring\AccountScope;
+use App\Services\Monitoring\ExternalOrders;
 use App\Services\Monitoring\Monitor;
 use App\Services\Monitoring\RiskObservations;
 use App\Services\Operations\OperationsHealth;
 use App\Services\PaperTrading\DecisionOverview;
 use App\Services\PaperTrading\ExecutionOverview;
 use App\Services\PaperTrading\PaperPolicies;
+use App\Services\PaperTrading\RuleEligibilityPolicies;
 use App\Services\PaperTrading\SimulationOverview;
+use App\Services\PaperTrading\StrategyWatchlists;
 use App\Services\Research\ResearchOverview;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Throwable;
 
@@ -55,6 +60,7 @@ class MonitoringController extends Controller
         $openIncidents = $incidents->where('state', 'open')->count();
         $control = null;
         if ($page === 'control') {
+            $watchlist = $scope ? app(StrategyWatchlists::class)->nominations($connection, CarbonImmutable::now()) : null;
             $versions = $scope ? MandateVersion::where('mcp_connection_id', $connection->id)->where('scope', $scope) : null;
             $control = ['latest' => $versions ? (clone $versions)->latest('version')->first() : null,
                 'paper' => $scope ? app(PaperPolicies::class)->state($connection) : null,
@@ -64,9 +70,13 @@ class MonitoringController extends Controller
             $control['decisions'] = $scope ? app(DecisionOverview::class)->for($connection, $control['paper']) : null;
             $control['simulation'] = $scope ? app(SimulationOverview::class)->for($connection, $control['paper']) : null;
             $control['execution'] = $scope ? app(ExecutionOverview::class)->for($connection, $control['paper']) : null;
+            $control['external_orders'] = $scope ? ['pending' => app(ExternalOrders::class)->pending($connection)->latest('id')->paginate(10, ['*'], 'external_orders_page')->withQueryString(),
+                'entry_pause_reason' => app(ExternalOrders::class)->entryReason($connection)] : null;
+            $control['eligibility'] = $scope ? ['policy' => RuleEligibilityPolicies::selected($connection),
+                'assessments' => EligibilityAssessment::where('mcp_connection_id', $connection->id)->where('scope', $scope)->latest('id')->paginate(10, ['*'], 'eligibility_page')->withQueryString()] : null;
         }
 
-        return response()->view('mcp.dashboard', compact('pages', 'page', 'connection', 'snapshot', 'runs', 'incidents', 'observations', 'freshness', 'theses', 'pendingNotifications', 'research', 'operations', 'openIncidents', 'control'));
+        return response()->view('mcp.dashboard', compact('pages', 'page', 'connection', 'snapshot', 'runs', 'incidents', 'observations', 'freshness', 'theses', 'pendingNotifications', 'research', 'operations', 'openIncidents', 'control') + ['watchlist' => $watchlist ?? null]);
     }
 
     public function sync(Request $request, Monitor $monitor)

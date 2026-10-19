@@ -1,5 +1,24 @@
 # M5 owner mandate intake
 
+**Direction change, October 18:** the owner adopted the strategy/execution split in [AGENTS.md](../../AGENTS.md#project-direction) and the [revised M5 design](M5-DESIGN.md). ChatGPT tasks maintain a dedicated Robinhood watchlist every 30 minutes, and deterministic rules in the app make paper decisions on a 5-minute cycle. The owner made the strategy decisions below the same day. The table shows which intake choices still apply; the rest of this file is the unchanged historical record.
+
+| Intake choice | Status after October 18 |
+|---|---|
+| $500 cash-only start, 100% active allocation, active sleeve | Applies. The active sleeve now holds rule-based positions. |
+| 90% maximum position | Replaced by about 20% of paper equity, with risk-based sizing of 1% per trade (starting value) |
+| 20% daily loss pause | Applies |
+| Allowed instruments: 44 "On Watch" symbols | Replaced by eligibility rules in code applied to the dedicated watchlist, capped at 75 symbols |
+| 1% fee per fill | Replaced by realistic costs: the broker's actual commission, sell-side regulatory fees, bid/ask fills and slippage |
+| 1 bp slippage, 5 bp limit offset, 20-second quote age | Applies |
+| Fractional permissions | Applies; fractional shares chosen for sizing, subject to verified instrument and limit-order support |
+| AI entry / exit / sizing permissions | Superseded. Entries and exits come from deterministic playbooks; size comes from the risk-based rule. |
+| AI review every 5 minutes, news polling every 5 minutes | Superseded. No in-app AI; research and news analysis belong to the ChatGPT strategy tasks. |
+| Local scan every 60 seconds | Replaced by the 5-minute evaluation cycle |
+| $100/month AI-and-data envelope | Now covers data only; no paid LLM API runs in the app |
+| Symbol removed from the watchlist | New decision: no new entries; a held position keeps running its exit rules |
+
+Applied execution v2 still stores the 44-symbol allowlist, `fee_bps = "100"`, `max_position_pct = "90"` and `allow_ai_sizing = true`. They have no effect while paper decisions and handoff are disabled. The owner applies replacement versions through the Control Center once the code supports the new settings. Details: [M5 design](M5-DESIGN.md).
+
 **Applied October 18:** the normal authenticated Control Center forms saved mandate v1, applied paper policy revision 1 and applied execution v2. Read-only PostgreSQL verification confirmed exact prepared values, 44 symbols, one $500 opening cash entry, $0 reserved and no orders/positions. AI/execution gates remain disabled. This supersedes the intake-only/unapplied statements below; see [current application evidence](M5-DEPLOYMENT-EVIDENCE.md#applied-owner-settings-verification). Populated-record backup/restore subsequently passed: 66 tables / 434 rows, all 12 paper tables and 6 paper rows matched, encrypted settings readable and the $500 ledger intact. Scratch cleanup and disabled execution were verified; see the same evidence document.
 
 October 18, 2026. Owner answers and subsequent delegation of remaining choices recorded from this development conversation. This is an intake record, not an applied PostgreSQL policy version. No runtime settings, balances, schedules or execution gates were changed. M5 remains partial.

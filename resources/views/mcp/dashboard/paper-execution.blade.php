@@ -17,6 +17,9 @@
         'limit_offset_bps' => 'Limit offset from current ask / bid (basis points)', 'quote_max_age_seconds' => 'Maximum quote age (seconds, 1–300)'];
 @endphp
 <x-panel title="Paper execution settings" subtitle="Owner choices, versioned separately from allocations. No values are inferred from legacy crypto rules." icon="shield">
+    @if($control['eligibility']['policy'] ?? null)
+        <p class="note">The separate eligibility rule policy replaces this legacy symbol allowlist for entries and data collection. The saved list is retained as execution-version history. The superseded model handoff is blocked; costs, position limits and cash are unchanged.</p>
+    @endif
     <p>Applied execution version: {{ $execution['applied']?->version ?? 'None for the current allocation policy' }}. Handoff {{ config('paper.handoff_enabled') ? 'enabled' : 'disabled' }}; market collection {{ config('paper.market_inputs_enabled') ? 'enabled' : 'disabled' }}; synthetic simulator {{ config('paper.offline_simulation_enabled') ? 'enabled' : 'disabled' }}.</p>
     <p class="note">Choose each setting explicitly. The current handoff supports one selected sleeve per version, a symbol allowlist, cash-only initialization and regular-session DAY limit orders. Existing holdings are preserved; applying settings does not reset cash or positions. Real broker inputs currently lack reviewed eligibility, size and corporate-action coverage and cannot produce fills.</p>
     @if($paper)
@@ -57,7 +60,7 @@
     {{ $execution['history']?->links('mcp.pagination') }}
 </x-panel>
 <x-panel title="Execution data readiness" subtitle="Stored observations only. This report makes no network request and does not enable fills." icon="shield">
-    <p>{{ $execution['readiness']['ready_count'] }} / {{ $execution['readiness']['symbol_count'] }} symbols have complete real execution data. Classification, corporate actions and fractional-limit coverage remain required.</p>
+    <p>{{ $execution['readiness']['ready_count'] }} / {{ $execution['readiness']['symbol_count'] }} symbols have complete real execution data for whole-share paper fills. Each needs fresh broker evidence, stored SEC classification and reconciled corporate actions; fractional-limit coverage remains unavailable.</p>
     @if($execution['readiness']['symbol_count'] === 0)<p>Apply execution settings to inspect the selected symbol universe.</p>@endif
     <details><summary>Inspect every symbol and missing requirement</summary>
         <div class="table-wrap"><table class="data"><thead><tr><th>Symbol / status</th><th>Source</th><th>Coverage checks</th></tr></thead><tbody>

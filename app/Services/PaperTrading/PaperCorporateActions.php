@@ -26,6 +26,42 @@ use Illuminate\Support\Facades\DB;
 /** Paper ledger only. Consumes immutable adapter inputs, never model/user event JSON or brokerage mutations. */
 final class PaperCorporateActions
 {
+    public const UNEXPOSED = 'settled_before_paper_exposure';
+
+    /** Reviewed terms this ledger can apply to held shares. Anything else needs review or provable non-exposure. */
+    public static function supported(array $event): bool
+    {
+        if (! in_array($event['type'], ['forward_splits', 'reverse_splits', 'cash_dividends'], true) || ! empty($event['missing_fields']) || ! isset($event['dates']['ex_date'])) {
+            return false;
+        }
+        if ($event['type'] === 'cash_dividends') {
+            $d = $event['dates'];
+
+            // A special dividend on the regular ex <= record <= payable calendar has ordinary entitlement. Distributions of at
+            // least 25% move the ex-date after payment and use due bills, so either signal still requires review.
+            return ($event['flags']['foreign'] ?? null) === false && is_bool($event['flags']['special'] ?? null) &&
+                isset($d['record_date'], $d['payable_date']) && $d['record_date'] >= $d['ex_date'] && $d['payable_date'] >= $d['record_date'] &&
+                ($d['due_bill_on_date'] ?? null) === null && ($d['due_bill_off_date'] ?? null) === null && ($d['due_bill_redemption_date'] ?? null) === null;
+        }
+        try {
+            $new = Decimal::from($event['rates']['new_rate'] ?? null);
+            $old = Decimal::from($event['rates']['old_rate'] ?? null);
+
+            return $new->compareTo(Decimal::from('0')) > 0 && $old->compareTo(Decimal::from('0')) > 0 &&
+                ($event['type'] === 'forward_splits' ? $new->compareTo($old) > 0 : $new->compareTo($old) < 0);
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+    }
+
+    /** Start of the last reported New York date; before it, an unexposed portfolio could still acquire exposure. */
+    public static function settledAt(array $event): ?CarbonImmutable
+    {
+        $dates = array_filter($event['dates'] ?? [], 'is_string');
+
+        return $dates === [] ? null : CarbonImmutable::parse(max($dates), 'America/New_York')->startOfDay()->utc();
+    }
+
     public function process(McpConnection $connection, int $actor, int $inputId): Collection
     {
         abort_unless(config('paper.corporate_actions_enabled'), 409, 'Paper corporate-action processing is disabled.');
@@ -50,18 +86,21 @@ final class PaperCorporateActions
             $ids = array_column($events, 'id');
             abort_unless(count($ids) === count($events) && count($ids) === count(array_unique($ids)), 409, 'Unique action IDs required.');
 
+            $firstFill = self::firstFill($portfolio, $input->symbol, $now);
             // A vanished event is not a cancellation instruction, even in a complete process-date refresh.
             $prior = CorporateActionRecord::where('paper_portfolio_id', $portfolio->id)->where('symbol', $input->symbol)->where('phase', 'observation')->get();
             foreach ($prior as $record) {
                 $process = $record->payload['event']['dates']['process_date'] ?? null;
-                if ($process !== null && $process >= $read['start'] && $process <= $read['end'] && ! in_array($record->provider_event_id, $ids, true)) {
+                if ($process !== null && $process >= $read['start'] && $process <= $read['end'] && ! in_array($record->provider_event_id, $ids, true) &&
+                    ! self::beforeExposure($record->payload['event'], $firstFill)) {
                     return collect([$this->freeze($current, $portfolio, $actor, $input, $record->payload['event'], $record->fingerprint, 'event_missing_from_refresh')]);
                 }
             }
             $dated = [];
             foreach ($events as $event) {
                 $fingerprint = $this->fingerprint($event);
-                if (CorporateActionRecord::where('paper_portfolio_id', $portfolio->id)->where('provider_event_id', $event['id'])->where('fingerprint', '!=', $fingerprint)->exists()) {
+                $versions = CorporateActionRecord::where('paper_portfolio_id', $portfolio->id)->where('provider_event_id', $event['id'])->where('fingerprint', '!=', $fingerprint)->get();
+                if ($versions->isNotEmpty() && ! ($versions->every(fn ($r) => self::beforeExposure($r->payload['event'], $firstFill)) && self::beforeExposure($event, $firstFill))) {
                     return collect([$this->freeze($current, $portfolio, $actor, $input, $event, $fingerprint, 'provider_event_corrected_requires_review')]);
                 }
                 $date = $event['dates']['ex_date'] ?? $event['dates']['effective_date'] ?? null;
@@ -70,6 +109,7 @@ final class PaperCorporateActions
                 }
             }
             usort($events, fn ($a, $b) => strcmp($a['dates']['ex_date'] ?? $a['dates']['effective_date'] ?? '', $b['dates']['ex_date'] ?? $b['dates']['effective_date'] ?? ''));
+            $released = false;
             foreach ($events as $event) {
                 $fingerprint = $this->fingerprint($event);
                 $date = $event['dates']['ex_date'] ?? $event['dates']['effective_date'] ?? null;
@@ -80,8 +120,20 @@ final class PaperCorporateActions
 
                     continue;
                 }
-                if ($effective?->gt($now)) {
-                    $results->push($observation);
+                // Every reported date passed before this portfolio first filled the symbol: no entitlement, basis or quantity to change.
+                if (self::unexposed($event, $firstFill, $now)) {
+                    if (! $released) {
+                        app(OfflineSimulator::class)->cancelForCorporateAction($current, $actor, $input->symbol);
+                        $portfolio->refresh();
+                        $released = true;
+                    }
+                    $results->push($this->record($portfolio, $actor, $input, $event, $fingerprint, 'application', 'no_effect', self::UNEXPOSED, self::settledAt($event),
+                        ['cash_delta' => '0', 'basis' => $firstFill ? 'settled_before_first_paper_fill' : 'no_paper_fills', 'first_fill_at' => $firstFill?->toISOString()]));
+
+                    continue;
+                }
+                if ($firstFill === null || $effective?->gt($now)) {
+                    $results->push($observation); // Until exposure exists or the event settles, there is nothing to apply.
 
                     continue;
                 }
@@ -162,9 +214,7 @@ final class PaperCorporateActions
     private function dividend(McpConnection $connection, Portfolio $portfolio, int $actor, MarketInput $input, array $event, string $fingerprint, CarbonImmutable $effective, CarbonImmutable $now): CorporateActionRecord
     {
         $d = $event['dates'];
-        if (($event['flags']['special'] ?? null) !== false || ($event['flags']['foreign'] ?? null) !== false ||
-            ! isset($d['record_date'], $d['payable_date']) || $d['record_date'] < $d['ex_date'] || $d['payable_date'] < $d['record_date'] ||
-            ($d['due_bill_on_date'] ?? null) !== null || ($d['due_bill_off_date'] ?? null) !== null || ($d['due_bill_redemption_date'] ?? null) !== null) {
+        if (! self::supported($event)) {
             return $this->freeze($connection, $portfolio, $actor, $input, $event, $fingerprint, 'dividend_terms_require_review');
         }
         $rate = Decimal::from($event['rates']['rate']);
@@ -199,7 +249,7 @@ final class PaperCorporateActions
             $portfolio->save();
         }
         $application = $this->record($portfolio, $actor, $input, $event, $fingerprint, 'application', $gross->compareTo(Decimal::from('0')) > 0 ? 'applied' : 'no_effect',
-            null, $payable, ['cash_delta' => (string) $gross, 'entitlement_id' => $entitlement->id, 'income_kind' => 'gross_simulated_dividend']);
+            null, $payable, ['cash_delta' => (string) $gross, 'entitlement_id' => $entitlement->id, 'income_kind' => 'gross_simulated_dividend', 'special' => $event['flags']['special']]);
         if ($gross->compareTo(Decimal::from('0')) > 0) {
             CashEntry::create(['paper_portfolio_id' => $portfolio->id, 'actor_id' => $actor, 'reference' => 'paper-action:'.$application->id,
                 'kind' => 'simulated_dividend', 'amount' => (string) $gross, 'balance_after' => $portfolio->cash, 'ledger_version' => $portfolio->ledger_version, 'recorded_at' => now()]);
@@ -244,7 +294,34 @@ final class PaperCorporateActions
 
     private function fills(Portfolio $portfolio, string $symbol)
     {
+        return self::fillQuery($portfolio, $symbol);
+    }
+
+    private static function fillQuery(Portfolio $portfolio, string $symbol)
+    {
         return SimulationEvent::where('kind', 'fill')->whereIn('sim_order_id', SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('symbol', $symbol)->select('id'));
+    }
+
+    /** First paper fill recorded by the cutoff; null means the portfolio has never held the symbol. */
+    public static function firstFill(Portfolio $portfolio, string $symbol, CarbonImmutable $cutoff): ?CarbonImmutable
+    {
+        return self::fillQuery($portfolio, $symbol)->where('recorded_at', '<=', $cutoff->utc()->format('Y-m-d H:i:s.u'))->orderBy('recorded_at')->orderBy('id')->first()?->recorded_at;
+    }
+
+    /** Complete, settled by the cutoff and entirely before the first fill: reconcilable without a typed adjustment. */
+    public static function unexposed(array $event, ?CarbonImmutable $firstFill, CarbonImmutable $cutoff): bool
+    {
+        $settled = self::settledAt($event);
+
+        return empty($event['missing_fields']) && $settled !== null && $settled->lte($cutoff) && self::beforeExposure($event, $firstFill);
+    }
+
+    /** No reported date of the event falls after the first fill, so it cannot have touched paper holdings. */
+    public static function beforeExposure(array $event, ?CarbonImmutable $firstFill): bool
+    {
+        $settled = self::settledAt($event);
+
+        return $firstFill === null || ($settled !== null && $settled->lte($firstFill));
     }
 
     private function positive(array $quantities): bool

@@ -41,6 +41,9 @@ final class PaperOrderHandoff
                 return $prior; // A completed logical handoff cannot become another order after expiry/restart.
             }
             $execution = ExecutionPolicies::current($portfolio);
+            if (RuleEligibilityPolicies::current($portfolio)) {
+                return collect([$this->record($run, $actor, '*', 'unavailable', 'model_handoff_superseded_by_rules', [], $execution?->id)]);
+            }
             $reason = match (true) {
                 $current->status !== 'connected' || $current->auth_generation !== $run->auth_generation => 'account_authorization_changed',
                 ! in_array($run->status, ['proposed', 'wait'], true) => 'decision_not_accepted',

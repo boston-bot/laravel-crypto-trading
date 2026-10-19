@@ -63,6 +63,22 @@ class AlpacaCorporateActionsTest extends TestCase
         ExactJsonNumbers::decode('{"rate":01}');
     }
 
+    public function test_reviewed_sdk_event_models_define_required_terms_and_unlisted_groups_stay_unreviewed(): void
+    {
+        $base = ['process_date' => '2026-10-19'];
+        $this->fake([CorporateActions::URL.'*' => Http::response(['corporate_actions' => [
+            'name_changes' => [$base + ['id' => 'rename', 'old_symbol' => 'DEMO', 'new_symbol' => 'DEMOX'], $base + ['id' => 'rename-early', 'old_symbol' => 'DEMO']],
+            'worthless_removals' => [$base + ['id' => 'removal', 'symbol' => 'DEMO']],
+            'stock_and_cash_mergers' => [$base + ['id' => 'merger', 'acquiree_symbol' => 'DEMO', 'effective_date' => '2026-10-20', 'acquirer_rate' => '1', 'acquiree_rate' => '2']],
+            'partial_calls' => [$base + ['id' => 'call', 'symbol' => 'DEMO']],
+        ], 'next_page_token' => null])]);
+        $read = $this->read();
+        $this->assertTrue($read['complete']);
+        $this->assertSame(['rename' => [], 'rename-early' => ['new_symbol'], 'removal' => [], 'merger' => ['cash_rate'], 'call' => ['unreviewed_adjustment_contract']],
+            array_column($read['events'], 'missing_fields', 'id'));
+        $this->assertSame([false], array_values(array_unique(array_column($read['events'], 'adjustment_supported'))));
+    }
+
     public function test_all_quality_pagination_exact_rates_and_early_records_are_preserved_without_clearance(): void
     {
         $this->fake([CorporateActions::URL.'*' => Http::sequence()

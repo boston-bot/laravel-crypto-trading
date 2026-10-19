@@ -6,6 +6,7 @@ use App\Jobs\CollectPaperMarketInput;
 use App\Models\PaperTrading\CorporateActionRecord;
 use App\Models\PaperTrading\MarketInput;
 use App\Models\PaperTrading\SimulationOrder;
+use App\Services\Broker\Agentic\BrokerBackoff;
 use App\Services\Broker\Agentic\BrokerGateway;
 use App\Services\Monitoring\AccountScope;
 use App\Services\PaperTrading\MarketInputCollector;
@@ -72,6 +73,25 @@ class MarketInputCollectorTest extends TestCase
         config(['mcp.operator_emails' => []]);
         $this->assertSame(0, $collector->tick(true));
         $this->assertSame([], $this->gateway->calls);
+    }
+
+    public function test_broker_rate_limit_pause_stops_dispatch_and_queued_reads_until_it_expires(): void
+    {
+        Queue::fake();
+        app(BrokerBackoff::class)->record($this->connection->id, 90);
+        $collector = app(MarketInputCollector::class);
+        $this->assertSame(0, $collector->tick(true, $this->connection->id));
+        $this->assertSame(0, $collector->tick(false, $this->connection->id));
+        Queue::assertNothingPushed();
+        $job = new CollectPaperMarketInput($this->connection->id, AccountScope::key($this->connection), $this->connection->auth_generation,
+            $this->execution->id, 'ALFA', (string) Str::uuid(), now()->toISOString());
+        $job->handle(app(PaperMarketInputs::class));
+        $this->assertSame([], $this->gateway->calls);
+        $this->assertSame(0, MarketInput::where('origin', 'broker_read')->count());
+
+        $this->travel(91)->seconds();
+        $this->assertSame(3, $collector->tick(true, $this->connection->id));
+        $this->assertCount(6, $this->gateway->calls);
     }
 
     public function test_queued_work_rechecks_authorization_settings_gates_and_age(): void

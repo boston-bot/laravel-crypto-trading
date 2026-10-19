@@ -18,4 +18,9 @@ final class FakeBrokerGateway implements BrokerGateway
         return new ReadResult('fake:synthetic-not-broker-data', new DateTimeImmutable,
             array_map(fn ($row) => BrokerRecord::from($operation, $row, null), $this->records[$operation->value]), true);
     }
+
+    public function within(McpConnection $connection, callable $work): mixed
+    {
+        return $work();
+    }
 }

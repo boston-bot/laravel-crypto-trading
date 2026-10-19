@@ -14,6 +14,7 @@ use App\Models\PaperTrading\SimulationOrder;
 use App\Models\PaperTrading\SimulationPosition;
 use App\Models\User;
 use App\Services\Monitoring\AccountScope;
+use App\Services\Monitoring\ExternalOrders;
 use App\Services\Monitoring\MarketCalendar;
 use App\Support\Mcp\Decimal;
 use Brick\Math\RoundingMode;
@@ -63,14 +64,20 @@ final class OfflineSimulator
             $real = ($marks[$intent['symbol']] ?? null) instanceof BrokerSimulationQuote;
             abort_if($real && $executionVersionId === null, 409, 'Real-data paper orders require applied execution settings.');
             if ($real) {
-                abort_unless(in_array($intent['symbol'], $execution->payload['allowed_symbols'], true) &&
+                $rulePolicy = RuleEligibilityPolicies::current($portfolio);
+                $universeAllowed = $rulePolicy ? ($intent['side'] === 'BUY' || SimulationPosition::where('paper_portfolio_id', $portfolio->id)->where('symbol', $intent['symbol'])->exists()) : in_array($intent['symbol'], $execution->payload['allowed_symbols'], true);
+                abort_unless($universeAllowed &&
                     $execution->payload[$intent['side'] === 'BUY' ? 'allow_entries' : 'allow_exits'] && $intent['type'] === $execution->payload['order_type'], 409, 'Owner execution permission denied.');
             }
             $this->validateMarks($current, $marks, $assumptions->data['quote_max_age_seconds'], $real);
+            if ($real && $intent['side'] === 'BUY' && RuleEligibilityPolicies::current($portfolio)) {
+                $assessment = app(RuleEligibility::class)->record($current, $actor, $intent['symbol'], $intent['request_id'], CarbonImmutable::now());
+            }
             $order = SimulationOrder::create(['paper_portfolio_id' => $portfolio->id, 'policy_application_id' => $policy->id,
                 'actor_id' => $actor, 'request_id' => $intent['request_id'], 'intent_hash' => $hash,
                 'execution_version_id' => $executionVersionId,
-                'intent' => $intent + ['origin' => $real ? 'real_data_paper_simulation' : 'offline_synthetic_scenario', 'policy_revision' => $policy->revision, 'ledger_version' => $ledgerVersion],
+                'intent' => $intent + ['origin' => $real ? 'real_data_paper_simulation' : 'offline_synthetic_scenario', 'policy_revision' => $policy->revision, 'ledger_version' => $ledgerVersion] +
+                    (isset($assessment) ? ['eligibility_assessment_id' => $assessment->id] : []),
                 'assumptions' => $assumptions->data, 'auth_generation' => $current->auth_generation,
                 'symbol' => $intent['symbol'], 'sleeve' => $intent['sleeve'], 'side' => $intent['side'], 'type' => $intent['type'],
                 'status' => 'open', 'quantity' => $intent['quantity'], 'filled_quantity' => '0', 'reserved_cash' => '0', 'price_bound' => $intent['price_bound'],
@@ -267,6 +274,16 @@ final class OfflineSimulator
 
     private function admission(Portfolio $portfolio, SimulationOrder $order, PolicyApplication $policy, array $marks, bool $existing = false): ?string
     {
+        if ($order->side === 'BUY' && ($marks[$order->symbol] ?? null) instanceof BrokerSimulationQuote && RuleEligibilityPolicies::current($portfolio)) {
+            $report = app(RuleEligibility::class)->inspect(McpConnection::findOrFail($portfolio->mcp_connection_id), $order->symbol, CarbonImmutable::now());
+            if ($report['status'] !== 'eligible') {
+                return 'rule_eligibility_'.$report['status'];
+            }
+        }
+        if ($order->side === 'BUY' && ($marks[$order->symbol] ?? null) instanceof BrokerSimulationQuote &&
+            ($reason = app(ExternalOrders::class)->entryReason(McpConnection::findOrFail($portfolio->mcp_connection_id)))) {
+            return $reason;
+        }
         $now = CarbonImmutable::now();
         $session = $this->calendar->at($now);
         if ($session['status'] !== 'regular' || $order->assumptions['session_date'] !== $session['date']) {
@@ -384,6 +401,16 @@ final class OfflineSimulator
 
     private function invalidated(McpConnection $connection, Portfolio $portfolio, SimulationOrder $order): ?string
     {
+        if ($order->side === 'BUY' && ($order->intent['origin'] ?? null) === 'real_data_paper_simulation' && RuleEligibilityPolicies::current($portfolio)) {
+            $report = app(RuleEligibility::class)->inspect($connection, $order->symbol, CarbonImmutable::now());
+            if ($report['status'] !== 'eligible') {
+                return 'rule_eligibility_'.$report['status'];
+            }
+        }
+        if ($order->side === 'BUY' && ($order->intent['origin'] ?? null) === 'real_data_paper_simulation' &&
+            ($reason = app(ExternalOrders::class)->entryReason($connection))) {
+            return $reason;
+        }
         if ($order->expires_at->lte(now())) {
             return 'order_expired';
         }

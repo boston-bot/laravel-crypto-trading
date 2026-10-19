@@ -10,6 +10,10 @@ return [
     'max_pages' => 20,
     'max_records' => 10000,
     'max_age_seconds' => 300,
+    // One MCP session may serve several reads inside BrokerGateway::within(); it is reopened after this many seconds.
+    'session_max_seconds' => 120,
+    // Minimum local pause after a 429, used when Retry-After is missing, unparseable or shorter.
+    'rate_limit_min_backoff_seconds' => 30,
     // Reviewed application code/configuration only. Never populate from model or broker prose.
     'operations' => [
         // Reviewed exact-symbol read-only reference subsets. Neither establishes complete execution eligibility.
@@ -103,6 +107,8 @@ return [
             'filters' => ['symbol' => 'symbols'], 'array_filters' => ['symbol'], 'required_filter' => 'symbol',
             'records' => 'data.results', 'pagination' => ['kind' => 'single'],
             'normalizer' => 'robinhood_v1', 'exact_symbol' => true, 'coverage' => 'equity_quotes',
+            // The reviewed schema sets no array limit; this bound is local. Failed batches fall back to single reads.
+            'max_batch_symbols' => 25,
         ],
     ],
 ];

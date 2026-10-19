@@ -19,13 +19,16 @@ class BackupCipherTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (glob($this->dir.'/{,.}*', GLOB_BRACE) ?: [] as $file) {
-            if (is_file($file)) {
-                unlink($file);
+        foreach ([$this->dir.'/keys', $this->dir] as $dir) {
+            foreach (glob($dir.'/{,.}*', GLOB_BRACE) ?: [] as $file) {
+                if (is_file($file)) {
+                    unlink($file);
+                }
+            }
+            if (is_dir($dir)) {
+                rmdir($dir);
             }
         }
-        @rmdir($this->dir.'/keys');
-        @rmdir($this->dir);
     }
 
     private function key(): string

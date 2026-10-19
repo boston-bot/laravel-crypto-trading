@@ -5,6 +5,8 @@ namespace App\Services\Broker\Agentic;
 use App\Models\McpConnection;
 use App\Models\McpOauthAttempt;
 use App\Models\McpOauthCredential;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 final class OAuthService
@@ -157,54 +159,104 @@ final class OAuthService
         }
     }
 
-    public function accessToken(McpConnection $connection): string
+    /** The returned token stays valid for at least $minValidSeconds, so a reused MCP session cannot outlive it. */
+    public function accessToken(McpConnection $connection, int $minValidSeconds = 30): string
     {
-        return $this->credentialToken($connection, false);
+        return $this->credentialToken($connection, false, max(30, $minValidSeconds));
     }
 
     public function renew(McpConnection $connection): string
     {
-        return $this->credentialToken($connection, true);
+        return $this->credentialToken($connection, true, 30);
     }
 
-    private function credentialToken(McpConnection $connection, bool $forceRenewal): string
+    /**
+     * No database transaction or row lock is held during the token request. A cache lock serializes refreshes
+     * across workers, and the write-back only applies if no reconnect or other rotation replaced the credential.
+     */
+    private function credentialToken(McpConnection $connection, bool $forceRenewal, int $minValidSeconds): string
     {
         $this->requireEnabled();
-        $result = DB::transaction(function () use ($connection, $forceRenewal): string|ReadFailure {
-            $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
-            $credential = McpOauthCredential::where('mcp_connection_id', $connection->id)->lockForUpdate()->first();
-            if ($current->status === 'reconnect_required' || ! $credential?->access_token) {
-                return new ReadFailure(ReadError::Authentication);
+        $state = $this->tokenState($connection, $forceRenewal, $minValidSeconds);
+        if (! is_array($state)) {
+            return $this->tokenResult($state);
+        }
+        $lock = Cache::lock('mcp-oauth-refresh:'.$connection->id, 30);
+        try {
+            $lock->block(20);
+        } catch (LockTimeoutException) {
+            throw new ReadFailure(ReadError::Timeout);
+        }
+        try {
+            // Another worker may have refreshed while this one waited for the lock.
+            $state = $this->tokenState($connection, $forceRenewal, $minValidSeconds);
+            if (! is_array($state)) {
+                return $this->tokenResult($state);
             }
-            if (! $forceRenewal && $credential->expires_at && $credential->expires_at->isAfter(now()->addSeconds(30))) {
-                return $credential->access_token;
-            }
+            $values = null;
+            $outcome = null;
             try {
-                if (! $credential->refresh_token) {
+                if (! $state['refresh_token']) {
                     throw new ReadFailure(ReadError::Authentication);
                 }
-                $tokens = $this->json('POST', $credential->oauth_metadata['token_endpoint'], ['form_params' => [
-                    'grant_type' => 'refresh_token', 'refresh_token' => $credential->refresh_token,
-                    'client_id' => $credential->client_id, 'resource' => TrustedHttp::RESOURCE,
+                $tokens = $this->json('POST', $state['metadata']['token_endpoint'], ['form_params' => [
+                    'grant_type' => 'refresh_token', 'refresh_token' => $state['refresh_token'],
+                    'client_id' => $state['client_id'], 'resource' => TrustedHttp::RESOURCE,
                 ]]);
-                $values = $this->tokenValues($tokens, $credential->oauth_metadata);
+                $values = $this->tokenValues($tokens, $state['metadata']);
                 if (! isset($tokens['refresh_token'])) {
-                    $values['refresh_token'] = $credential->refresh_token;
+                    $values['refresh_token'] = $state['refresh_token'];
                 }
-                $credential->update($values);
-
-                return $credential->access_token;
             } catch (ReadFailure $failure) {
-                if ($failure->reason === ReadError::RateLimited) {
-                    return $failure;
+                $outcome = $failure;
+            }
+
+            return $this->tokenResult(DB::transaction(function () use ($connection, $state, $values, $outcome, $minValidSeconds): string|ReadFailure {
+                $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
+                $credential = McpOauthCredential::where('mcp_connection_id', $connection->id)->lockForUpdate()->first();
+                if (! $credential || $current->auth_generation !== $state['generation'] || $current->status === 'reconnect_required'
+                    || ! hash_equals((string) $state['refresh_token'], (string) $credential->refresh_token)) {
+                    // A reconnect or another rotation replaced this credential while the request ran; never overwrite or wipe it.
+                    return $current->status !== 'reconnect_required' && $credential?->access_token && $credential->expires_at?->isAfter(now()->addSeconds($minValidSeconds))
+                        ? $credential->access_token : new ReadFailure(ReadError::Authentication);
+                }
+                if ($outcome === null) {
+                    $credential->update($values);
+
+                    return $credential->access_token;
+                }
+                if ($outcome->reason === ReadError::RateLimited) {
+                    return $outcome;
                 }
                 // Revocation or a lost rotation response requires reconnect; no blind refresh retry.
-                $current->update(['status' => 'reconnect_required', 'error_code' => $failure->reason->value]);
+                $current->update(['status' => 'reconnect_required', 'error_code' => $outcome->reason->value]);
                 $credential->update(['access_token' => null, 'refresh_token' => null, 'expires_at' => null]);
 
-                return $failure;
-            }
-        });
+                return $outcome;
+            }));
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** @return string|ReadFailure|array{refresh_token: ?string, client_id: ?string, metadata: array, generation: int} */
+    private function tokenState(McpConnection $connection, bool $forceRenewal, int $minValidSeconds): string|ReadFailure|array
+    {
+        $current = McpConnection::whereKey($connection->id)->firstOrFail();
+        $credential = McpOauthCredential::where('mcp_connection_id', $connection->id)->first();
+        if ($current->status === 'reconnect_required' || ! $credential?->access_token) {
+            return new ReadFailure(ReadError::Authentication);
+        }
+        if (! $forceRenewal && $credential->expires_at && $credential->expires_at->isAfter(now()->addSeconds($minValidSeconds))) {
+            return $credential->access_token;
+        }
+
+        return ['refresh_token' => $credential->refresh_token, 'client_id' => $credential->client_id,
+            'metadata' => $credential->oauth_metadata, 'generation' => $current->auth_generation];
+    }
+
+    private function tokenResult(string|ReadFailure $result): string
+    {
         if ($result instanceof ReadFailure) {
             throw $result;
         }

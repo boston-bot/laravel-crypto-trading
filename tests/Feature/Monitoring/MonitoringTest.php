@@ -65,6 +65,28 @@ class MonitoringTest extends TestCase
         $this->assertSame(1, PolicyVersion::count());
     }
 
+    public function test_one_run_uses_one_broker_session_and_one_batched_quote_read(): void
+    {
+        $connection = McpFixture::connection();
+        $this->gateway->held = ['AAA', 'BBB', 'CCC'];
+        $this->gateway->unquoted = ['CCC'];
+        $run = app(Monitor::class)->sync($connection->id, 'batched');
+        $this->assertSame('complete', $run->status);
+        $this->assertSame(1, $this->gateway->scopes);
+        $this->assertSame(['portfolio', 'positions', 'orders', 'quotes'], $this->gateway->calls);
+        $this->assertSame(['symbols' => ['AAA', 'BBB', 'CCC']], $this->gateway->filters[3]);
+        $payload = Snapshot::where('run_id', $run->id)->firstOrFail()->payload;
+        $this->assertSame(['AAA', 'BBB'], array_keys($payload['quotes']));
+        foreach ($payload['quotes'] as $symbol => $quote) {
+            $this->assertSame('complete', $quote['completeness']);
+            $this->assertCount(1, $quote['records']);
+            $this->assertSame($symbol, $quote['records'][0]['data']['symbol']);
+        }
+        // A symbol the broker did not quote is explicitly unknown, never priced.
+        $this->assertSame(['CCC'], array_keys($payload['quote_failures']));
+        $this->assertSame('incomplete_quote', $payload['quote_failures']['CCC']['error_code']);
+    }
+
     public function test_binding_change_during_read_prevents_publication(): void
     {
         $connection = McpFixture::connection();

@@ -11,6 +11,7 @@ use App\Services\Broker\Agentic\ReadError;
 use App\Services\Broker\Agentic\ReadFailure;
 use App\Services\Broker\Agentic\TrustedHttp;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\McpFixture;
@@ -112,6 +113,45 @@ class OAuthTest extends TestCase
         $this->assertSame('synthetic-rotated-refresh', McpOauthCredential::first()->refresh_token);
         Http::assertSentCount(1);
         Http::assertSent(fn ($request) => $request['resource'] === TrustedHttp::RESOURCE && $request['grant_type'] === 'refresh_token');
+    }
+
+    public function test_refresh_request_holds_no_database_transaction_or_row_lock(): void
+    {
+        $connection = McpFixture::connection();
+        McpOauthCredential::first()->update(['expires_at' => now()->subMinute()]);
+        $baseline = DB::transactionLevel();
+        $levels = [];
+        Http::swap((new Factory)->preventStrayRequests());
+        Http::fake(['https://api.robinhood.com/oauth2/token/' => function () use (&$levels) {
+            $levels[] = DB::transactionLevel();
+
+            return Http::response(McpFixture::tokens());
+        }]);
+        $this->assertSame('synthetic-access', app(OAuthService::class)->accessToken($connection));
+        $this->assertSame([$baseline], $levels);
+        $this->assertTrue(McpOauthCredential::first()->expires_at->isFuture());
+    }
+
+    public function test_reconnect_during_a_refresh_is_never_overwritten_or_wiped(): void
+    {
+        foreach ([200, 400] as $status) {
+            $connection = McpFixture::connection();
+            McpOauthCredential::where('mcp_connection_id', $connection->id)->update(['expires_at' => now()->subMinute()]);
+            Http::swap((new Factory)->preventStrayRequests());
+            Http::fake(['https://api.robinhood.com/oauth2/token/' => function () use ($connection, $status) {
+                // The owner reconnects while this refresh is in flight.
+                McpOauthCredential::where('mcp_connection_id', $connection->id)->firstOrFail()->update(['access_token' => 'synthetic-reconnected-access',
+                    'refresh_token' => 'synthetic-reconnected-refresh', 'expires_at' => now()->addHour()]);
+                $connection->increment('auth_generation');
+
+                return $status === 200 ? Http::response(['access_token' => 'synthetic-stale-access', 'refresh_token' => 'synthetic-stale-refresh', 'token_type' => 'Bearer', 'expires_in' => 3600])
+                    : Http::response(['error' => 'invalid_grant'], 400);
+            }]);
+            $this->assertSame('synthetic-reconnected-access', app(OAuthService::class)->accessToken($connection));
+            $credential = McpOauthCredential::where('mcp_connection_id', $connection->id)->firstOrFail();
+            $this->assertSame('synthetic-reconnected-refresh', $credential->refresh_token, (string) $status);
+            $this->assertSame('connected', $connection->fresh()->status);
+        }
     }
 
     public function test_explicit_renewal_rotates_credentials_without_expiring_or_rebinding_account(): void

@@ -167,16 +167,23 @@ final class CorporateActions
             $event['flags'][$key] = $flag;
         }
         // All-quality records may lack critical fields; preserve rather than suppress that evidence.
+        // Required terms follow the official SDK event models; unlisted groups have no reviewed contract.
         $required = match ($group) {
             'forward_splits', 'reverse_splits' => ['ex_date', 'new_rate', 'old_rate'],
             'cash_dividends', 'stock_dividends', 'capital_gains_distributions' => ['ex_date', 'rate'],
             'cash_mergers' => ['effective_date', 'rate'],
-            'stock_mergers', 'stock_and_cash_mergers' => ['effective_date', 'acquirer_rate', 'acquiree_rate'],
+            'stock_mergers' => ['effective_date', 'acquirer_rate', 'acquiree_rate'],
+            'stock_and_cash_mergers' => ['effective_date', 'acquirer_rate', 'acquiree_rate', 'cash_rate'],
             'spin_offs' => ['ex_date', 'source_rate', 'new_rate'],
+            'unit_splits' => ['effective_date', 'old_rate', 'new_rate', 'alternate_rate'],
+            'rights_distributions' => ['ex_date', 'rate'],
+            'redemptions' => ['rate'],
+            'name_changes' => ['old_symbol', 'new_symbol'],
+            'worthless_removals' => [],
             default => ['unreviewed_adjustment_contract'],
         };
         foreach ($required as $key) {
-            if (($event['dates'][$key] ?? $event['rates'][$key] ?? null) === null) {
+            if (($event['dates'][$key] ?? $event['rates'][$key] ?? $event['symbols'][$key] ?? null) === null) {
                 $event['missing_fields'][] = $key;
             }
         }

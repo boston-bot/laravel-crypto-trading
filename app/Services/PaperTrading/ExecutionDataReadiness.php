@@ -20,14 +20,24 @@ final class ExecutionDataReadiness
             return ['status' => 'unavailable', 'reason' => 'applied_execution_settings_missing', 'symbols' => [], 'symbol_count' => 0, 'ready_count' => 0];
         }
         $symbols = [];
-        foreach ($execution->payload['allowed_symbols'] as $symbol) {
+        foreach (app(SymbolUniverse::class)->reads($connection, $cutoff) as $symbol) {
             $input = app(PaperMarketInputs::class)->latest($connection, $symbol, $cutoff);
             $symbols[$symbol] = $this->inspect($input, $cutoff, $execution->payload['quote_max_age_seconds']);
+            if (RuleEligibilityPolicies::current($portfolio, $cutoff)) {
+                $eligibility = app(RuleEligibility::class)->inspect($connection, $symbol, $cutoff);
+                $symbols[$symbol]['checks']['rule_eligibility'] = $eligibility['status'];
+                $symbols[$symbol]['eligibility'] = $eligibility;
+                if ($eligibility['status'] !== 'eligible') {
+                    $symbols[$symbol]['status'] = 'blocked';
+                }
+            }
         }
+        $ready = count(array_filter($symbols, fn ($s) => $s['status'] === 'data_ready_whole_shares'));
+        $complete = $ready === count($symbols) && $symbols !== [];
 
-        return ['status' => 'blocked', 'reason' => 'verified_reference_and_real_fill_coverage_incomplete',
+        return ['status' => $complete ? 'data_ready_whole_shares' : 'blocked', 'reason' => $complete ? null : 'verified_reference_and_real_fill_coverage_incomplete',
             'as_of' => $cutoff->toIso8601String(), 'policy_revision' => $portfolio->policy_revision, 'execution_version' => $execution->version,
-            'symbols' => $symbols, 'symbol_count' => count($symbols), 'ready_count' => 0];
+            'symbols' => $symbols, 'symbol_count' => count($symbols), 'ready_count' => $ready];
     }
 
     public function inspect(?MarketInput $input, CarbonImmutable $cutoff, int $maxAge): array
@@ -61,11 +71,24 @@ final class ExecutionDataReadiness
         $checks['alpaca_incomplete_event_count'] = (string) $actions['incomplete_events'];
         $reads = $payload['execution_reads'] ?? [];
         $tradability = $reads['tradability'] ?? [];
+        if (config('paper.instrument_classification_enabled')) {
+            $class = app(InstrumentEligibility::class)->inspect($input, $cutoff, $maxAge);
+            $checks['instrument_eligibility'] = $class['reason'] ?? $class['status'];
+            $checks['leverage_and_inverse'] = match (true) {
+                $class['status'] === 'eligible' => 'verified_not_leveraged_or_inverse_'.$class['basis'],
+                $class['reason'] === 'regulatory_leveraged_or_inverse_fund' => 'sec_reports_leveraged_or_inverse',
+                default => 'unverified',
+            };
+        }
         $checks = ['market_observation' => ($payload['complete'] ?? false) ? 'base_reads_complete' : 'base_reads_incomplete',
             'quote_and_book' => $match['status'] === 'matched' ? 'verified_prices_times_and_share_units' : $match['reason'],
             'broker_tradability' => $this->tradabilityStatus($tradability, $cutoff, $maxAge)] + $checks;
+        // The same stored-input gate used by real-data fills; fractional quantities remain unsupported.
+        $gate = app(PaperMarketInputs::class)->executionReason($input, $cutoff, $maxAge);
+        $checks['execution_gate'] = $gate ?? 'passed_whole_shares_only';
+        $ready = $gate === null && $checks['quote_and_book'] === 'verified_prices_times_and_share_units' && $checks['broker_tradability'] === 'observed_tradeable_source_time_unknown';
 
-        return ['status' => 'blocked', 'input_id' => $input->id, 'checks' => $checks];
+        return ['status' => $ready ? 'data_ready_whole_shares' : 'blocked', 'input_id' => $input->id, 'checks' => $checks];
     }
 
     private function tradabilityStatus(array $entry, CarbonImmutable $cutoff, int $maxAge): string

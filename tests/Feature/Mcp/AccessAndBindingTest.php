@@ -47,6 +47,24 @@ class AccessAndBindingTest extends TestCase
         $this->getJson('/mcp/robinhood/reads/submit')->assertNotFound();
     }
 
+    public function test_operator_broker_read_routes_are_throttled_per_user(): void
+    {
+        $user = User::factory()->create();
+        McpFixture::connection($user);
+        config(['mcp.operator_emails' => [$user->email], 'robinhood_mcp.enabled' => false]);
+        foreach (range(1, 10) as $i) {
+            $this->assertNotSame(429, $this->actingAs($user)->getJson('/mcp/robinhood/reads/portfolio')->status());
+        }
+        $this->actingAs($user)->getJson('/mcp/robinhood/reads/portfolio')->assertStatus(429);
+        // The limit is shared by every route that reaches the broker, including state-changing POSTs.
+        $this->actingAs($user)->post('/mcp/robinhood/discover')->assertStatus(429);
+        $this->actingAs($user)->post('/mcp/robinhood/accounts')->assertStatus(429);
+        $other = User::factory()->create();
+        McpFixture::connection($other);
+        config(['mcp.operator_emails' => [$user->email, $other->email]]);
+        $this->assertNotSame(429, $this->actingAs($other)->getJson('/mcp/robinhood/reads/portfolio')->status());
+    }
+
     public function test_binding_revalidates_complete_accounts_and_server_actor(): void
     {
         $user = User::factory()->create();

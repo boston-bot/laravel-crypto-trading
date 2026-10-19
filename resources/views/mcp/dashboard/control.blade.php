@@ -30,7 +30,7 @@
         <p class="note">Configuration shown belongs to this running checkout. Production and development settings can differ.</p>
     </x-panel>
     <x-panel title="How rules reach the AI" icon="spark">
-        <p>The decision runner attaches applied policy/guidance, execution settings and virtual ledger versions to each bounded request. A separately gated paper handoff rechecks these versions and current inputs, then sizes orders locally. The current fill engine accepts synthetic data only; real broker eligibility, size and corporate-action coverage remain unavailable.</p>
+        <p>The decision runner attaches applied policy/guidance, execution settings and virtual ledger versions to each bounded request. A separately gated paper handoff rechecks these versions and current inputs, then sizes orders locally. Real-data paper fills stay separately gated: eligibility needs a fresh broker stock/ETF type plus stored SEC filing evidence, and corporate actions need the observed-data policy. Fractional quantities remain unsupported.</p>
         <p>Unapplied paper drafts are <strong>not sent</strong>. ChatGPT conversations do not automatically update this application. You can paste a settings proposal below, review the editor and save a new draft yourself.</p>
         <p class="note">Strategy guidance can describe what to look for. It cannot grant brokerage access, change credentials or bypass enforced limits. Changing an allocation target does not rebalance any holdings.</p>
     </x-panel>
@@ -43,6 +43,84 @@
 @if(!$connection?->bound_account_id)
     <x-callout tone="info">Bind an account before saving account-scoped paper planning versions. No defaults have been saved.</x-callout>
 @else
+<x-panel title="Deterministic eligibility rules" subtitle="Membership nominates symbols; stored broker and regulatory facts must pass every rule. Unknown data blocks entries." icon="shield">
+    @php
+        $eligibilityPolicy = $control['eligibility']['policy'];
+        $eligibilityParameters = $eligibilityPolicy?->payload['parameters'] ?? App\Services\PaperTrading\RuleEligibilityPolicies::DEFAULTS;
+    @endphp
+    <p>Rule evaluation {{ config('paper.rule_eligibility_enabled') ? 'enabled' : 'disabled' }} · {{ $eligibilityPolicy ? 'Watchlist rule universe selected · policy v'.$eligibilityPolicy->version : 'Current execution allowlist still selected' }}.</p>
+    <p class="note">The daily-history adapter is not configured, and reviewed US exchange-listing evidence is unavailable. History (252 sessions), 20-session dollar volume and listing therefore block full eligibility. Extra broker fields and model text cannot supply these facts. Applying rules blocks the superseded model handoff, preserves holdings and requires current watchlist membership for entries. Exits stay independent.</p>
+    @if($paper && $control['execution']['applied'])
+    <form method="post" action="{{ route('mcp.control.eligibility.apply') }}" class="stack">@csrf
+        <input type="hidden" name="base_version" value="{{ $eligibilityPolicy->version ?? 0 }}">
+        <input type="hidden" name="account_scope" value="{{ App\Services\Monitoring\AccountScope::key($connection) }}">
+        <input type="hidden" name="request_id" value="{{ (string) Illuminate\Support\Str::uuid() }}">
+        @foreach(['minimum_price' => 'Minimum bid price (USD)', 'minimum_dollar_volume' => 'Minimum 20-session average dollar volume (USD)', 'maximum_spread_pct' => 'Maximum spread (% of midpoint)'] as $field => $label)
+            <label class="field">{{ $label }}<input name="parameters[{{ $field }}]" value="{{ $eligibilityParameters[$field] }}" required inputmode="decimal" maxlength="24"></label>
+        @endforeach
+        <label class="check"><input type="checkbox" name="confirm_rules" value="1" required><span>Replace the fixed allowlist with these versioned watchlist eligibility rules. Missing history blocks new entries. Do not enable any service or change cash, costs or risk limits.</span></label>
+        <button class="btn btn-secondary" type="submit">Apply eligibility rules</button>
+    </form>
+    @endif
+    @if($eligibilityPolicy)
+    <form method="post" action="{{ route('mcp.control.eligibility.assess') }}" class="stack">@csrf
+        <input type="hidden" name="account_scope" value="{{ App\Services\Monitoring\AccountScope::key($connection) }}">
+        <input type="hidden" name="request_id" value="{{ (string) Illuminate\Support\Str::uuid() }}">
+        <input type="hidden" name="cutoff" value="{{ Carbon\CarbonImmutable::now()->toISOString() }}">
+        <button class="btn btn-secondary" type="submit">Record eligibility from stored data</button>
+    </form>
+    @endif
+    @foreach($control['eligibility']['assessments'] as $assessment)
+        <details><summary>{{ $assessment->symbol }} · {{ $assessment->status }} · rule {{ $assessment->rule_version }} · policy #{{ $assessment->policy_id }}</summary>
+            <p>Cutoff <x-time :at="$assessment->cutoff" /> · recorded <x-time :at="$assessment->recorded_at" /></p>
+            <pre class="code-block">{{ $pretty($assessment->payload) }}</pre>
+        </details>
+    @endforeach
+    {{ $control['eligibility']['assessments']->links('mcp.pagination') }}
+</x-panel>
+<x-panel title="External orders and entry pause" subtitle="Review each observed external order. Acknowledging an alert does not clear this pause." icon="shield">
+    <p>Detection {{ config('mcp.external_order_detection_enabled') ? 'enabled' : 'disabled' }}. {{ $control['external_orders']['pending']->total() }} orders awaiting review.</p>
+    @if($control['external_orders']['entry_pause_reason'])
+        <x-callout tone="warn" title="New entries paused">{{ $control['external_orders']['entry_pause_reason'] }}. Position exits remain independent.</x-callout>
+    @elseif(!config('mcp.external_order_detection_enabled'))
+        <p class="note">Order detection is disabled; this is not evidence of current broker-order coverage.</p>
+    @else
+        <p>No external-order pause. Every other eligibility, data and execution check still applies.</p>
+    @endif
+    @foreach($control['external_orders']['pending'] as $external)
+        @php $orderEvidence = $external->payload['order']; @endphp
+        <div class="stack">
+            <p><strong>{{ $orderEvidence['symbol'] ?? 'Symbol unavailable' }}</strong> · {{ $orderEvidence['side'] ?? 'Side unavailable' }} · first observed status: {{ $orderEvidence['status'] ?? 'unknown' }}<br>
+                Broker order <code>{{ $orderEvidence['id'] }}</code> · observed <x-time :at="$external->retrieved_at" /></p>
+            <form method="post" action="{{ route('mcp.control.external-order.review', $external->id) }}" class="stack">@csrf
+                <input type="hidden" name="account_scope" value="{{ App\Services\Monitoring\AccountScope::key($connection) }}">
+                <input type="hidden" name="request_id" value="{{ (string) Illuminate\Support\Str::uuid() }}">
+                <label class="field">Review note<input name="note" required maxlength="500"></label>
+                <label class="check"><input type="checkbox" name="confirm_review" value="1" required><span>I reviewed this external order and its account impact. Record my review of this order.</span></label>
+                <button class="btn btn-secondary" type="submit">Record order review</button>
+            </form>
+        </div>
+    @endforeach
+    {{ $control['external_orders']['pending']->links() }}
+    <p class="note">This application has no agentic live-submission path yet, so all observed broker orders require review, including completed or cancelled orders. Reviewing an order does not cancel it or authorize a future trade. The latest complete equity-order read must be less than five minutes old when detection is enabled.</p>
+</x-panel>
+<x-panel title="Dedicated strategy watchlist" subtitle="ChatGPT supplies symbols. This application checks eligibility and makes deterministic paper decisions." icon="shield">
+    <p>Intake {{ config('paper.watchlist_intake_enabled') ? 'enabled' : 'disabled' }} · every five minutes when enabled. Membership only nominates symbols; execution eligibility remains unverified. The current execution allowlist remains in force.</p>
+    <p>{{ ($watchlist['fresh'] ?? false) ? 'Fresh membership available' : 'No fresh membership: new strategy entries blocked' }} · {{ count($watchlist['symbols'] ?? []) }} nominated symbols.</p>
+    @if($watchlist['revision'] ?? null)
+        <p>Revision {{ $watchlist['revision']->id }} · retrieved <x-time :at="$watchlist['revision']->retrieved_at" />. Broker source time is unavailable.</p>
+        <details><summary>Membership and skipped items</summary><pre class="code-block">{{ $pretty($watchlist['revision']->payload['members']) }}</pre></details>
+    @endif
+    <form method="post" action="{{ route('mcp.control.watchlist') }}" class="stack">@csrf
+        <input type="hidden" name="base_version" value="{{ $watchlist['setting']->version ?? 0 }}">
+        <input type="hidden" name="account_scope" value="{{ App\Services\Monitoring\AccountScope::key($connection) }}">
+        <input type="hidden" name="request_id" value="{{ (string) Illuminate\Support\Str::uuid() }}">
+        <label class="field">Dedicated Robinhood list name<input name="name" required maxlength="128" value="{{ $watchlist['setting']->payload['name'] ?? '' }}"></label>
+        <label class="check"><input type="checkbox" name="confirm_dedicated" value="1" required><span>This list is dedicated to this strategy and separate from my personal watchlists.</span></label>
+        <button class="btn btn-secondary" type="submit">Save strategy watchlist</button>
+    </form>
+    <p class="note">More than 75 items rejects the entire read. Failed reads retain the last valid membership for less than 30 minutes. Removed symbols receive no new entries; position exits and risk checks operate independently. Saving a list requires a fresh read and does not enable intake.</p>
+</x-panel>
 <x-panel title="Applied paper plan and virtual cash" subtitle="Simulation only. These balances are not brokerage funds. Offline synthetic fills are separate from AI proposals and broker activity." icon="wallet">
     @if($paper)
         <dl class="kv kv-grid">

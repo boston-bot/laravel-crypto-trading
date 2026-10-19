@@ -8,7 +8,7 @@ class SessionFactory
 {
     public function __construct(private TrustedHttp $http, private OAuthService $oauth) {}
 
-    public function open(McpConnection $connection): McpSession
+    public function open(McpConnection $connection, int $minTokenSeconds = 30): McpSession
     {
         $allowed = [];
         foreach (Operation::cases() as $operation) {
@@ -27,7 +27,7 @@ class SessionFactory
             }
         }
         try {
-            return new McpSession(new RpcHttpClient($this->http, $this->oauth->accessToken($connection), $allowed));
+            return new McpSession(new RpcHttpClient($this->http, $this->oauth->accessToken($connection, $minTokenSeconds), $allowed));
         } catch (ReadFailure $failure) {
             $connection->update(['error_code' => $failure->reason->value] + ($failure->reason === ReadError::Authentication ? ['status' => 'reconnect_required'] : []));
             throw $failure;

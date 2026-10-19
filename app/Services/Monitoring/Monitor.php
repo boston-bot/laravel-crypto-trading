@@ -9,6 +9,7 @@ use App\Models\Monitoring\Run;
 use App\Models\Monitoring\Snapshot;
 use App\Services\Broker\Agentic\BrokerGateway;
 use App\Services\Broker\Agentic\Operation;
+use App\Services\Broker\Agentic\QuoteBatch;
 use App\Services\Broker\Agentic\ReadError;
 use App\Services\Broker\Agentic\ReadFailure;
 use Illuminate\Support\Facades\DB;
@@ -72,70 +73,80 @@ final class Monitor
             return $run;
         }
         try {
-            $parts = [];
-            foreach ([Operation::Portfolio, Operation::Positions, Operation::Orders] as $operation) {
-                $result = $this->gateway->read($connection, $operation);
-                $part = json_decode(json_encode($result, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
-                foreach ($result->records as $record) {
-                    if ($record->operation !== $operation || ($record->fields['account_id'] ?? null) !== $connection->bound_account_id) {
-                        throw new ReadFailure(ReadError::AccountMismatch);
-                    }
-                }
-                $parts[$operation->value] = $part;
-                $this->stage($connection, $run, $parts, $operation->value);
-                if (! $result->complete || $result->continuation !== null) {
-                    throw new ReadFailure($result->incompleteReason ?? ReadError::Incomplete);
-                }
-                if ($operation === Operation::Portfolio && count($result->records) !== 1) {
-                    throw new ReadFailure(ReadError::Malformed);
-                }
-            }
-            $parts['quotes'] = [];
-            $parts['quote_failures'] = [];
-            // Bounded optional enrichment. A quote failure makes valuation/rules unknown, never erases holdings.
-            foreach (array_slice($parts['positions']['records'], 0, 100) as $row) {
-                $symbol = $row['data']['symbol'] ?? null;
-                if ($symbol === null || isset($parts['quotes'][$symbol])) {
-                    continue;
-                }
-                try {
-                    $quote = $this->gateway->read($connection, Operation::Quotes, ['symbol' => $symbol]);
-                    if ($quote->complete && $quote->continuation === null && count($quote->records) === 1 &&
-                        $quote->records[0]->operation === Operation::Quotes && ($quote->records[0]->fields['symbol'] ?? null) === $symbol) {
-                        $parts['quotes'][$symbol] = json_decode(json_encode($quote, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
-                    } else {
-                        $parts['quote_failures'][$symbol] = ['error_code' => 'incomplete_quote', 'attempted_at' => now()->toIso8601String()];
-                    }
-                } catch (ReadFailure $failure) {
-                    $parts['quote_failures'][$symbol] = ['error_code' => $failure->reason->value, 'attempted_at' => now()->toIso8601String()];
-                    // Explicit unknown below; no broker writes or fallback to an invented price.
-                }
-                $this->stage($connection, $run, $parts, 'quotes');
-            }
-            $this->stage($connection, $run, $parts, 'quotes');
+            // One broker session serves every read in this run.
+            $parts = $this->gateway->within($connection, fn (): array => $this->readParts($connection, $run));
             $this->publish($connection, $run, $parts);
         } catch (Throwable $error) {
-            DB::transaction(function () use ($connectionId, $run, $error): void {
-                $current = McpConnection::whereKey($connectionId)->lockForUpdate()->firstOrFail();
-                $ownedRun = Run::whereKey($run->id)->where('claim', $run->claim)->where('status', 'running')->first();
-                if (! $ownedRun) {
-                    return;
-                }
-                $code = $error instanceof ReadFailure ? $error->reason->value : 'monitoring_failed';
-                $staged = Snapshot::where('run_id', $run->id)->where('status', 'staged')->first();
-                if ($staged) {
-                    $payload = $staged->payload ?? [];
-                    $payload['failure'] = ['error_code' => $code, 'retry_after' => $error instanceof ReadFailure ? $error->retryAfter : null];
-                    $staged->update(['payload' => $payload]);
-                }
-                $ownedRun->update(['status' => 'failed', 'error_code' => $code, 'finished_at' => now(), 'lease_until' => null]);
-                if ($current->bound_account_id && AccountScope::key($current) === $run->scope) {
-                    $this->incidents->record($current, $code, 'critical');
-                }
-            });
+            $this->fail($connectionId, $run, $error);
         }
 
         return $run->fresh();
+    }
+
+    private function readParts(McpConnection $connection, Run $run): array
+    {
+        $parts = [];
+        foreach ([Operation::Portfolio, Operation::Positions, Operation::Orders] as $operation) {
+            $result = $this->gateway->read($connection, $operation);
+            $part = json_decode(json_encode($result, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+            foreach ($result->records as $record) {
+                if ($record->operation !== $operation || ($record->fields['account_id'] ?? null) !== $connection->bound_account_id) {
+                    throw new ReadFailure(ReadError::AccountMismatch);
+                }
+            }
+            $parts[$operation->value] = $part;
+            $this->stage($connection, $run, $parts, $operation->value);
+            if (! $result->complete || $result->continuation !== null) {
+                throw new ReadFailure($result->incompleteReason ?? ReadError::Incomplete);
+            }
+            if ($operation === Operation::Portfolio && count($result->records) !== 1) {
+                throw new ReadFailure(ReadError::Malformed);
+            }
+        }
+        $parts['quotes'] = [];
+        $parts['quote_failures'] = [];
+        // Bounded optional enrichment in batched reads. A quote failure makes valuation/rules unknown, never erases holdings.
+        $symbols = [];
+        foreach (array_slice($parts['positions']['records'], 0, 100) as $row) {
+            $symbol = $row['data']['symbol'] ?? null;
+            if (is_string($symbol) && ! in_array($symbol, $symbols, true)) {
+                $symbols[] = $symbol;
+            }
+        }
+        $batch = QuoteBatch::read($this->gateway, $connection, $symbols);
+        foreach ($symbols as $symbol) {
+            if (isset($batch['quotes'][$symbol])) {
+                $parts['quotes'][$symbol] = json_decode(json_encode($batch['quotes'][$symbol], JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+            } else {
+                // Explicit unknown below; no broker writes or fallback to an invented price.
+                $parts['quote_failures'][$symbol] = ['error_code' => $batch['failures'][$symbol] ?? 'incomplete_quote', 'attempted_at' => now()->toIso8601String()];
+            }
+        }
+        $this->stage($connection, $run, $parts, 'quotes');
+
+        return $parts;
+    }
+
+    private function fail(int $connectionId, Run $run, Throwable $error): void
+    {
+        DB::transaction(function () use ($connectionId, $run, $error): void {
+            $current = McpConnection::whereKey($connectionId)->lockForUpdate()->firstOrFail();
+            $ownedRun = Run::whereKey($run->id)->where('claim', $run->claim)->where('status', 'running')->first();
+            if (! $ownedRun) {
+                return;
+            }
+            $code = $error instanceof ReadFailure ? $error->reason->value : 'monitoring_failed';
+            $staged = Snapshot::where('run_id', $run->id)->where('status', 'staged')->first();
+            if ($staged) {
+                $payload = $staged->payload ?? [];
+                $payload['failure'] = ['error_code' => $code, 'retry_after' => $error instanceof ReadFailure ? $error->retryAfter : null];
+                $staged->update(['payload' => $payload]);
+            }
+            $ownedRun->update(['status' => 'failed', 'error_code' => $code, 'finished_at' => now(), 'lease_until' => null]);
+            if ($current->bound_account_id && AccountScope::key($current) === $run->scope) {
+                $this->incidents->record($current, $code, 'critical');
+            }
+        });
     }
 
     private function stage(McpConnection $connection, Run $run, array $parts, string $step): void
@@ -149,6 +160,9 @@ final class Monitor
             }
             $owned->update(['step' => $step, 'lease_until' => now()->addMinutes(10)]);
             Snapshot::where('run_id', $run->id)->where('status', 'staged')->firstOrFail()->update(['payload' => $parts]);
+            if ($step === 'orders') {
+                app(ExternalOrders::class)->record($current, Snapshot::where('run_id', $run->id)->firstOrFail(), $parts['orders'], $owned->claim);
+            }
         });
     }
 

@@ -39,6 +39,11 @@ final readonly class BrokerSimulationQuote
             $actionPolicy = app(CorporateActionClearance::class)->inspect($input, $cutoff, $maxAge);
             $q['corporate_actions_clear'] = $actionPolicy['clear'];
         }
+        $classPolicy = null;
+        if (config('paper.instrument_classification_enabled')) {
+            $classPolicy = app(InstrumentEligibility::class)->inspect($input, $cutoff, $maxAge);
+            $q = array_replace($q, array_intersect_key($classPolicy, array_flip(['eligible', 'asset_type', 'leveraged', 'inverse'])));
+        }
         abort_unless(($q['symbol'] ?? null) === $input->symbol, 409, 'Broker observation symbol differs from its stored identity.');
         $trade = $input->payload['execution_reads']['tradability'] ?? [];
         $time = $trade['retrieved_at'] ?? null;
@@ -70,7 +75,7 @@ final readonly class BrokerSimulationQuote
 
         return new self($quote, $input->id, $connection->id, AccountScope::key($connection), $connection->auth_generation,
             ['liquidity_key' => $liquidityKey, 'recorded_at' => $input->recorded_at->toISOString(), 'market_input_source_at' => $input->source_at?->toISOString(),
-                'corporate_action_policy' => $actionPolicy, 'quote_retrieved_at' => $q['retrieved_at'], 'tradability_retrieved_at' => $time, 'quote_times' => [$q['bid_as_of'], $q['ask_as_of']],
+                'corporate_action_policy' => $actionPolicy, 'classification_policy' => $classPolicy, 'quote_retrieved_at' => $q['retrieved_at'], 'tradability_retrieved_at' => $time, 'quote_times' => [$q['bid_as_of'], $q['ask_as_of']],
                 'book_source_at' => $book['source_as_of'], 'book_retrieved_at' => $book['retrieved_at'], 'semantic_fingerprint' => $book['semantic_fingerprint']]);
     }
 

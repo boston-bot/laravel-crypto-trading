@@ -1,99 +1,210 @@
-# M5 design: frequent discovery and AI paper decisions
+# M5 design: watchlist-driven rule strategy
 
-Current application update, October 18: the browser blocker is resolved. Authenticated forms applied mandate v1 / policy revision 1 / execution v2, with one $500 virtual opening balance and the 44-symbol allowlist. Read-only verification confirms exact settings, encryption and no execution activity; all AI/paper/live gates remain off. This supersedes older unapplied/browser-blocked checkpoints below. Populated-record backup/restore subsequently passed (66 tables / 434 rows), including exact M5 values/decryption, $500 ledger, disabled execution and scratch cleanup. [Evidence](M5-DEPLOYMENT-EVIDENCE.md#applied-owner-settings-verification).
+**Direction, October 18, 2026.** The owner adopted the strategy/execution split recorded in [AGENTS.md](../../AGENTS.md#project-direction). Every 30 minutes, ChatGPT scheduled tasks under the owner's subscription research equities and maintain a dedicated Robinhood watchlist. This application pulls that list every 5 minutes. It checks each symbol's eligibility, builds a profile from its own market data, assigns a playbook, evaluates entries and exits, and makes the final paper buy/sell decision. No paid LLM API runs in the application.
 
-Started October 17, 2026 at the owner's request. This specification describes planned M5 behavior; the first implemented control-center slice and its limits are recorded in [M5 control-center evidence](M5-CONTROL-CENTER-EVIDENCE.md). On October 18 the owner waived the seven-session requirement and accepted M4 with that period unverified (0/7 completed), directing continued M5 work. That does not authorize live trading or service activation. Continue documenting and verifying deployments affecting monitoring.
+This replaces the October 17 design, in which an in-app OpenAI model selected, reviewed and sized paper trades. It also replaces a same-day draft in which ChatGPT wrote a file of thresholds to a synced folder. Both are in Git history; this file at commit `7d9946c` holds the AI design.
 
-## Owner-confirmed direction
+Owner decisions, October 18:
 
-- The AI selects investment opportunities and proposes actions and sizing within an owner-defined mandate. Laravel supplies reliable data, validates decisions, enforces limits and manages the simulated lifecycle.
-- Target holding period: **multi-day to multi-week positions only**. Frequent evaluation does not require frequent trading or intraday liquidation.
-- Discovery scope: **a broad US stock and ETF universe**, requiring a screening/data-provider step. Exact instrument eligibility remains to be reviewed; retain the existing exclusions for options, borrowing, shorts, leveraged/inverse products and crypto. Unknown product classification is ineligible for simulated execution until resolved.
-- AI and data together retain the **$100/month target and $150/month maximum planned envelope**, including fixed subscriptions and in-flight usage. No subscription purchase is authorized by this design.
-- Collect and research much more frequently than the former 30-minute ChatGPT task. The application owns durable state; model requests contain bounded evidence rather than a growing chat history.
-- Use a browser **Control Center** to inspect and edit the investment mandate, allocations, risk allowance, AI guidance and collection/research frequency, with version history and restore. Browse stored PostgreSQL evidence/results without manual queries. ChatGPT-proposed settings changes must return as reviewable proposals, not silently replace application policy.
+| Decision | Choice |
+|---|---|
+| Universe | Eligibility rules in code instead of the fixed 44-symbol allowlist, with a cap of 75 watchlist symbols |
+| Symbol removed from the watchlist | No new entries; a held position keeps running its exit rules |
+| Costs | Model realistic costs instead of the 1% per-fill fee |
+| Sizing | Fractional shares; maximum position about 20% of paper equity |
 
-## Browser control center and rule delivery
+Runtime state is unchanged by these decisions. Applied execution v2 still holds the 44-symbol allowlist, the 1% fee and the 90% maximum position. The owner applies replacement versions through the Control Center once the code supports the new settings. Read-only market collection is on; AI, paper orders/fills, action accounting, live writes and legacy schedules are off. [Deployment evidence](M5-DEPLOYMENT-EVIDENCE.md#applied-owner-settings-verification).
 
-The browser is the operator's place to manage settings; PostgreSQL is authoritative. Distinguish editable drafts, validated/applied versions and the version actually used by each decision. AI strategy guidance and numeric policy are separate: guidance explains investment preferences; application code independently enforces the allowed universe, capital, exposure, loss/pause and cost limits. Free text cannot activate trading or bypass those limits.
+## Roles and data flow
 
-The first source implementation at `/mcp/dashboard/control` supports encrypted, append-only **paper drafts**, allocations totaling exactly 100% when specified, risk/capital fields, cadence fields, AI guidance, reasons for changes, history and restore-as-new-version. It displays current code-defined research instructions/configuration and paginated stored research runs/source evidence. A copied planning JSON object can be discussed in ChatGPT; a returned partial JSON proposal is validated and loaded into the editor for review without saving. It requires a separate save. There is no automatic connection from ChatGPT conversation memory to these settings.
+```mermaid
+flowchart LR
+    G[ChatGPT tasks, every 30 min] -->|edits via its own connection| L[Dedicated Robinhood watchlist]
+    L -->|read-only MCP, every 5 min| W[Watchlist intake]
+    W --> E[Eligibility]
+    H[Daily price history] --> PR[Daily symbol profiles]
+    E --> PR
+    PR --> PB[Playbook per symbol]
+    Q[Batched quotes, every 5 min] --> S[Entry and exit signals]
+    PB --> S
+    S --> HO[Paper order handoff]
+    HO --> SIM[Paper simulator and ledger]
+    HO -. M6 only, separately authorized .-> X[Execution gateway]
+```
 
-**October 18 increment:** a complete saved draft can be explicitly applied to a separate virtual portfolio, with an immutable rules snapshot and opening cash entry. Policy changes preserve its cash/reservations; changing initial capital through a policy is refused. See [paper-policy evidence](M5-PAPER-POLICY-EVIDENCE.md).
+Data moves one way. ChatGPT supplies symbols only, with no prices, thresholds or sizes. Every number used in a decision comes from the app's own data and the owner's versioned settings. The app never edits a watchlist.
 
-**October 18 runner increment:** the separately disabled paper proposal runner consumes applied `decision_minutes`, policy/guidance and ledger versions, retains encrypted request/result/cost evidence, and exposes configured versus observed attempts in the Control Center. Current-window deduplication, shared budget reservations and crash/late-result handling are implemented with fakes. See [decision-runner evidence](M5-DECISION-RUNNER-EVIDENCE.md). Applying local paper rules does not enable it. Default evidence is a bounded local research subset with unknown eligibility/positions, not the planned broad screening universe.
+Owner direction that still applies: long-only, multi-day to multi-week positions in US stocks and ETFs; no options, shorts, borrowing, leveraged/inverse products or crypto; an instrument with unknown classification is ineligible. A 5-minute cycle checks triggers and stops; it does not mean intraday trading.
 
-**October 18 offline increment:** a separately disabled synthetic simulator now supports decimal cash/share reservations, bounded market/limit DAY orders, later-observation partial fills, immutable intent/fill evidence, conservation and scoped accounting reports. No model-to-order handoff or real provider adapter. See [offline simulation evidence](M5-OFFLINE-SIMULATION-EVIDENCE.md).
+## Watchlist intake
 
-**Subsequent execution/handoff increment:** labeled owner execution draft/apply controls, normalized broker quote/identity provenance and selected-sleeve paper positions now feed versioned requests. A separate disabled boundary checks recorded proposals and current rules/inputs, sizes bounded paper orders and retains idempotent outcomes. Positive end-to-end evidence is synthetic only; actual owner settings and real execution eligibility/size/action coverage remain pending. See [current evidence](M5-EXECUTION-HANDOFF-EVIDENCE.md).
+- **Source.** One dedicated Robinhood watchlist, named in a versioned owner setting and separate from personal lists such as "On Watch". It is read with the existing read-only tools (`get_watchlists`, `get_watchlist_items`) through `RobinhoodWatchlists`. The app never edits watchlists.
+- **Cadence.** Every 5 minutes, with a separate default-off enablement flag.
+- **Revisions.** Each successful read becomes an immutable revision: members with their object types, a hash, and the retrieval time. Robinhood supplies no source time for watchlists, so the retrieval time is the only time. Each successful read, including an unchanged hash, retains a new revision with its own retrieval time, as required by AGENTS.md. The hash and original change time distinguish successful revalidation from membership churn.
+- **Cap.** A list with more than 75 items is rejected as a whole and raises an incident.
+- **Non-equity items.** Items that aren't equity instruments are skipped, with a recorded reason. They don't invalidate the list.
+- **Failed or rejected reads.** The last valid revision stays in use for at most 30 minutes, one ChatGPT cycle. After that there are no new entries until a read succeeds. Exits and risk checks never wait on the watchlist.
+- **Removal.** A removed symbol gets no new entries; a held position keeps running its exit rules. A symbol that returns is treated like a new one.
+- **Quiet list.** A list unchanged for two trading days raises an informational alert that the strategy tasks may have stopped. It doesn't block trading, because an unchanged list can be legitimate.
+- **External orders.** The ChatGPT tasks' Robinhood connection may be able to place orders, and the app cannot prevent that. Any order in the agentic account that the app did not create is an incident and pauses new entries until the owner reviews it. Monitoring already reads orders. Default-off source detection now retains immutable observed equity-order cases and per-order authenticated reviews. Before M6 there is no agentic submission boundary, so all observed orders require review. Acknowledgment and empty reads cannot dismiss a case. The gate blocks watchlist nominations and real-data paper buys; held-position exits remain independent. See [implementation evidence](M5-EXTERNAL-ORDER-EVIDENCE.md).
 
-**Not yet implemented:** real-provider execution/fills, `scan_seconds`/`news_minutes` consumption by new collectors, material-event decision triggers, broad market/news adapters and automatic proposal return through an MCP tool. Real model compatibility, recurring cadence/cost and strategy performance remain unverified. Current research uses M3's fixed reviewed instructions/configuration. Historical M3 runs retain hashes/versions/results rather than full request transcripts; the current prompt preview is not a reconstructed old request.
+## Universe and eligibility
 
-The M5 runner uses the atomically applied complete paper version, effective time and actor, and includes its policy/guidance snapshot in each bounded model request. Cadence and budget are enforced locally; a model need not receive scheduler or billing implementation details. Encrypted request/policy snapshots show the version used, model output and validation together. A concurrent policy or ledger change supersedes the pending proposal. Frequency changes use the existing scheduler without replaying old windows. Restore produces another version and affects future work; it never rewrites old decisions or reverses fills. Submission-time gates remain work for the future simulated execution boundary.
+Membership nominates a symbol; code decides whether it is eligible. Each check records a reason, and unknown fails closed:
 
-The console must show configured versus observed frequency, next eligible review, last successful collection/model call, coverage/source age, budget reservations/spend and deferrals. Browser visibility must label unavailable observations honestly. Initial M5 controls remain paper-scoped; credentials, broker authorization and M6 live activation stay outside this editor.
+- US-listed stock or ETF, with the existing two-source classification: a fresh Robinhood type plus SEC evidence that it isn't leveraged or inverse.
+- Tradable on the account (existing tradability read).
+- No unreconciled corporate action (existing clearance).
+- Price, liquidity and spread minimums (parameters below).
+- Enough daily history to compute a profile.
 
-## Proposed cadence, subject to coverage and measured cost
+This replaces the fixed `allowed_symbols` list, with the 75-symbol cap applying to the watchlist itself. October 19 source now supports an explicit separately versioned watchlist-rule policy, stored-data assessments and paper-buy boundary checks. Runtime choices are unchanged; no policy was applied. Reviewed listing evidence and a daily-history/liquidity source remain unavailable, so no symbol can pass the full rule set yet. [Implementation and exact gaps](M5-RULE-ELIGIBILITY-EVIDENCE.md).
 
-These are engineering targets for a paper experiment, not activated schedules or provider capability claims. The disabled proposal scheduler now consumes the applied decision interval; other ingestion/event targets remain planned. A scheduled evaluation can produce WAIT, REJECTED or UNAVAILABLE; it need not produce an order.
+## Market data
 
-| Activity | Starting target | Work and limits |
-|---|---|---|
-| Local opportunity scan | Every minute during a verified regular session | Evaluate the latest ingested universe data; no model call. Record the actual source age. Scanning cached data every minute does not make it one-minute market data. |
-| Market-data ingestion | Streaming or incremental updates where licensed; otherwise provider-supported polling | Select after verifying quote/bar coverage, timestamps, batch sizes, limits and cost. Do not poll every symbol individually through Robinhood MCP each minute. |
-| News/event ingestion | Incremental feed or 1–5 minute polling where supported | Deduplicate stories, retain publication and local availability times, map affected symbols, and record coverage gaps. Provider-specific capability is still unverified. |
-| AI opportunity/portfolio review | One bounded batch every five minutes during the regular session | Review a capped shortlist, existing paper exposure and relevant evidence. Exact batch size and token allowance follow a measured provider/model trial. |
-| Material-event AI review | Queue on ingestion, between scheduled reviews | Coalesce related events; one active decision run per paper portfolio. Budget and priority controls still apply. “Immediate” means eligible for dispatch, not guaranteed completion latency. |
-| Deeper thesis research | New candidate, material evidence, invalidation or thesis expiry | Persist reusable evidence and thesis versions. Do not rerun a full thesis analysis on every quote update. |
-| Outside the regular session | Continue provider-supported news collection; pre-open/post-close research | Initial paper fills are regular-session only. Overnight proposals must be revalidated after a fresh session/account/market view; no stale backlog trading. |
+- **Quotes every 5 minutes.** Read quotes for all watchlist symbols plus holdings in batches, within one MCP session per cycle. `get_equity_quotes` already accepts a list of symbols; the gateway needs to send more than one, and the batch limit must be checked. Cache the tool catalog per session and store it only when it changes. Respect `Retry-After`.
+- **Daily history.** Profiles need at least one year (252 sessions) of split-adjusted daily bars per symbol and for SPY, refreshed after each close and backfilled when a symbol joins. The app has no reviewed daily-bar source today. Alpaca's market-data API is the leading candidate, since the owner's keys already work for corporate actions. Verify the feed, history depth, adjustments, rate limits and terms first. No subscription is authorized by this document.
+- **Earnings dates.** The Robinhood catalog advertises earnings data without a reviewed mapping. Review it or select another source. An unknown earnings date blocks new entries.
+- **Order-time freshness.** The handoff reads a fresh quote immediately before creating an order. The 20-second quote-age limit applies to that read.
+- **Calendar.** Session data is loaded by hand and expires after seven days. Automate loading from a reviewed source, or alert well before expiry.
 
-The scheduler remains Laravel's existing single scheduler, with bounded dispatch and separate workers. New collection, AI decisions and paper simulation remain disabled by default. Workload must not starve monitoring, reconciliation or operational health jobs.
+## Strategy
 
-## Broad discovery with bounded model context
+The approach is trend-following swing trading with strict risk control. The edge it seeks is modest: trade only symbols in established uptrends when the overall market is healthy, enter on defined setups, cut losers quickly, and let winners run under a trailing stop. It must prove itself in replay and forward paper results before anyone relies on it.
 
-Maintain an explicit, versioned universe with instrument identifiers, eligibility/classification provenance and effective times. Screening can use verified liquidity, spread, completed-bar price/volume changes, upcoming events and news availability. These prioritize research; they do not replace the AI's investment judgment. Any numeric filter must be visible and versioned rather than copied from legacy crypto strategies.
+**Daily symbol profile.** Computed after each close from daily history, and when a symbol joins:
+- trend: close against the 50- and 200-day simple moving averages
+- relative strength: 126-session return against SPY
+- volatility: 14-day average true range (ATR), as a share of price
+- liquidity: 20-day average dollar volume
+- next known earnings date
 
-Build a rotating shortlist with slots for existing positions, new candidates and previously under-reviewed eligible symbols. Cap its size and record selection/exclusion reasons. Preserve the universe version, coverage ratio, last successful scan, age of each input and time since last review. A broad configured universe must not be displayed as fully researched when only a small subset has usable data. No requirement to fill the shortlist when evidence is weak.
+Each profile is versioned with an input fingerprint.
 
-Separate reusable thesis research from short-lived decisions. M3's 24-hour research cache intentionally ignores ordinary quote changes; it cannot serve as the decision cache. A decision fingerprint must include the paper ledger/open-order version, policy and universe versions, shortlist, decision window, thesis versions and material market/evidence inputs. An exact duplicate can reuse the recorded decision; changed exposure, invalidation or material evidence requires re-evaluation. A cache hit is displayed as reused, never counted as a new AI assessment.
+**Market filter.** New entries only while SPY's daily close is above its 200-day average. When the filter is off, exits continue as normal.
 
-## Paper decision contract and validation
+**Playbook assignment.** One per eligible symbol per session, with a reason code:
+1. **Breakout:** uptrend, strong relative strength, and a tight 20-session range.
+2. **Pullback:** uptrend, strong relative strength, and a close near the 20-day exponential average while still above the 50-day average.
+3. **No trade:** everything else, including downtrends, excessive volatility, low liquidity, approaching earnings or missing data.
 
-Add a separate, versioned paper-decision schema; retain M3's non-executable research schema and its restrictions. The model receives only bounded, timestamped context with source IDs, normalized paper exposure/available allocation and allowed instruments. Credentials and brokerage identifiers are excluded. Prefer weights or fractions of available paper capital so deterministic decimal code can calculate quantities locally.
+**Entries.** Every 5-minute cycle in a regular session, the app checks the symbol's playbook trigger against a fresh ask. No entries happen in the first 15 minutes after the open, or when the spread is too wide. Each symbol has one position at most, with no adding to losers and no re-entry during the cooldown.
 
-Each decision records BUY, SELL, HOLD or WAIT; instrument; proposed target weight or sizing fraction; cited rationale; multi-day/week horizon; invalidation; review time; and expiry. Required sizing bounds and accounting rules come from an immutable owner-approved paper policy. The model cannot change that policy. Preserve prompt/model version, input fingerprint, all evidence references, actual model usage, estimated cost, timings and validation outcome. No tool in the model request can mutate a brokerage account.
+**Exits.** Checked every cycle against the bid. Whichever comes first:
+- initial stop below entry
+- trailing stop under the highest close since entry, which only rises
+- daily close below the 50-day average
+- time exit if the trade hasn't progressed
+- the last session before a known earnings report
 
-Application checks cover instrument eligibility, evidence validity, source/availability times, quote freshness, session, paper cash and positions, pending commitments, portfolio/position limits, proposal expiry and concurrent ledger changes. Unsupported data produces an explicit unavailable/rejected outcome; it is never treated as zero. Record the proposed and accepted/rejected decision separately. An AI HOLD/WAIT is distinct from “no model call”, a cache hit, budget deferral or model failure.
+Exit orders are repriced each cycle while the exit condition holds, until filled or the session ends.
+
+**Sizing.** Quantity = (paper equity × risk per trade) ÷ (entry − initial stop). It is capped by the 20% maximum position, available cash after estimated costs, and the maximum number of open positions. Fractional quantities are used only where the instrument's fractional support and the fractional limit-order rules are verified. Until then quantities are whole shares, and a trade that sizes to zero is recorded as skipped.
+
+**Costs.** These replace the 1% per-fill fee:
+- the broker's actual stock/ETF commission (Robinhood's is $0; verify against its current fee schedule)
+- SEC Section 31 and FINRA trading activity fees on sells, at versioned published rates
+- buys filled at the ask and sells at the bid (already implemented)
+- the owner's 1 bp adverse slippage
+
+The simulator currently charges fees on both sides, so it needs sell-only regulatory fees.
+
+### Starting parameters
+
+These are versioned owner settings, editable in the Control Center within bounds set in code. Values marked "owner" are decisions already made; the rest are starting points to validate in replay before forward paper evaluation.
+
+| Parameter | Starting value |
+|---|---|
+| Watchlist cap | 75 symbols (owner) |
+| Failed-read grace | 30 minutes |
+| Market filter | SPY close above its 200-day average |
+| Minimum price | $5 |
+| Minimum liquidity | $10 million 20-day average dollar volume |
+| Maximum spread at entry | 0.5% of the midpoint |
+| Uptrend | Close above the 200-day average, and the 50-day above the 200-day |
+| Relative strength | 126-session return above SPY's |
+| Volatility cap | ATR(14) at most 6% of the close |
+| Earnings blackout | No entry within 5 sessions before a known report |
+| Pullback setup | Close within 1× ATR of the 20-day exponential average |
+| Pullback trigger | Ask above the prior session's high |
+| Breakout setup | 20-session high-low range at most 3× ATR |
+| Breakout trigger | Ask above the 20-session high, but not more than 0.5× ATR above it |
+| Initial stop | Entry minus 2× ATR |
+| Trailing stop | Highest close since entry minus 3× ATR |
+| Time exit | 20 sessions without a close at least 1× ATR above entry |
+| Risk per trade | 1% of paper equity |
+| Maximum position | 20% of paper equity (owner) |
+| Maximum open positions | 8 |
+| Re-entry cooldown | 5 sessions after an exit |
+| Daily loss pause | 20% (owner, unchanged) |
+| Slippage | 1 bp (owner, unchanged) |
+| Limit offset | 5 bp (owner, unchanged) |
+
+## Signals and handoff
+
+- A signal records symbol, side, playbook, rule and parameter versions, watchlist revision, profile version, an input fingerprint (stored observation IDs and times) and the cutoff. It is unique per symbol, rule and cycle, so restarts and duplicate workers cannot double-signal.
+- Only data stored locally before the cutoff counts. Stale or missing inputs produce an `unavailable` result with a reason, never a signal from a guessed value.
+- A signal is not an order. `PaperOrderHandoff` changes to accept signals instead of AI decision runs. It sizes from the rules above and stops reading `target_weight_pct` and `allow_ai_sizing`. It keeps the open-order, provenance, freshness, session, limit-offset and fractional checks, and `OfflineSimulator::admission`.
+- Paper fills run on the 5-minute cycle instead of only through `mcp:paper-fills`.
+
+## Existing M5 components
+
+| Component | Under this design |
+|---|---|
+| Applied mandate, paper policy, execution settings, $500 ledger | Kept. New versions replace `allowed_symbols`, `fee_bps`, `max_position_pct` and `allow_ai_sizing` with the settings above. |
+| `RobinhoodWatchlists`, `mcp:watchlist` | Kept; becomes the intake source, with the list name from settings and the 75-item cap |
+| Control Center drafts, history and restore | Kept. Adds watchlist revisions, per-symbol eligibility, profile and playbook views, and the strategy parameter editor. |
+| SEC classification, tradability, corporate actions, readiness | Kept as eligibility inputs |
+| Read-only collector | Replaced by the batched 5-minute cycle |
+| `PaperOrderHandoff`, offline simulator, real-data fills | Kept; handoff refactored to signals, and the simulator gains sell-only regulatory fees |
+| `DecisionRunner`, `PaperDecisionJob`, `DecisionSchema`, `mcp:paper-decisions` | Superseded. Keep disabled and do not extend; remove in a planned change. |
+| M3 research (`ResearchRunner`, OpenAI transport, budget ledger) | Superseded for continuous use; keep disabled. Evidence entry, theses and deterministic summaries work without AI. |
+| Legacy crypto order path (`TradeExecutionService`) | Do not use; candidate for removal |
 
 ## Simulation and evaluation
 
 Use a dedicated paper portfolio/ledger keyed to the local authorized connection and policy version, without writing simulated orders/fills into broker-confirmed ledgers. Starting capital, initial holdings and any sleeve allocation must be explicit. A hypothetical starting portfolio must never be described as actual broker holdings or spendable funds.
 
-Use exact decimals, atomic reservations and unique logical decision/order/fill keys. Model submission, open, partial, filled, cancelled, rejected and expired states. Buy fills use observed ask and sells use observed bid with reviewed slippage/fees; limit prices, fractional eligibility, available volume assumptions and session rules constrain fills. Absence of usable later observations leaves an order unfilled/unknown rather than generating a synthetic price or pretending liquidity is known. Market-data granularity limits claims about fill realism. Unsupported corporate actions pause affected simulation pending explicit adjustment evidence.
+Use exact decimals, atomic reservations and unique logical signal/order/fill keys. Model submission, open, partial, filled, cancelled, rejected and expired states. Limit prices, fractional eligibility, available volume assumptions and session rules constrain fills. Absence of usable later observations leaves an order unfilled/unknown rather than generating a synthetic price or pretending liquidity is known. Unsupported corporate actions pause affected simulation pending explicit adjustment evidence.
 
-Inputs must have been available locally by the decision cutoff, not merely carry an earlier publication timestamp. Evaluate hypothetical fills only on observations available after order acceptance; a bar used to choose a trade cannot also prove a later intrabar fill. Broker fills and paper fills remain separate on every report.
+Inputs must have been available locally by the evaluation cutoff, not merely carry an earlier publication timestamp. Evaluate hypothetical fills only on observations available after order acceptance; data used to produce a signal cannot also prove a later fill. Broker fills and paper fills remain separate on every report.
 
-Report opportunity coverage, scan-to-dispatch and event-to-decision latency, queue delay, actual AI review frequency, source gaps, WAIT/rejections, turnover, holding periods, costs and simulated results. Compare the proposed five-minute experiment with a 30-minute evaluation using the same mandate, starting portfolio and point-in-time evidence. Historical comparisons must be labeled retrospective unless equivalent past-available evidence and model provenance can be established. More frequent decisions are an experiment, not evidence of better returns.
+**Replay.** Once daily history is stored, replay the strategy over it to check the starting parameters before forward paper trading. Daily bars only approximate 5-minute triggers and fills, so use conservative assumptions and label replay results separately from forward results.
 
-## Cost and overload controls
+**Forward paper evaluation.** Report results after costs, drawdowns, hit rate, average win and loss, holding periods, turnover, skipped and unavailable evaluations, and watchlist churn. Attribute every result to playbook, rule and parameter versions. Compare against buying and holding SPY, and against an equal-weight portfolio of the eligible watchlist. Judge only after at least 30 closed trades. A short profitable sample is not evidence of an edge and cannot enable live mode.
 
-For an illustrative 6.5-hour session, five-minute batches mean 78 scheduled calls. At an illustrative 21 sessions that is 1,638 calls before event-driven/deep-research calls. Running a separate call for each of 20 symbols would instead mean 32,760 calls. These are workload calculations, not cost estimates or a promised monthly session count.
+## Costs and budget
 
-Measure input/output usage, latency and error rates with the selected model. Allocate the remaining envelope after fixed data costs across routine batches, event-triggered research and repair/unreconciled requests. If measured cost cannot support the proposed cadence, show the achievable cadence and tradeoff before activation; do not silently claim five-minute AI reviews while only polling locally. Prompt caching may reduce repeated input cost, but the existing ledger remains conservative until actual cache usage/pricing is reconciled. [OpenAI pricing](https://developers.openai.com/api/docs/pricing), [prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching).
+No paid LLM API runs in this application. The earlier $100 target / $150 maximum monthly envelope now covers data only, and any paid data source needs explicit owner approval. The ChatGPT subscription is outside the application's budget.
 
-Retain atomic reservations, bounded repairs and conservative timeout settlement from M3. Coalesce overlapping work, prioritize position/invalidation events and expire outdated candidates. Bound outstanding work; never catch up by issuing old paper trades after a restart. Log budget deferrals and lost coverage. Monitoring continues when AI spending stops.
+## Implementation order
 
-## Implementation order and unresolved inputs
+1. **Broker read efficiency.** One MCP session per cycle, cached tool catalog, batched quotes, `Retry-After` in collection, throttles on broker-read web routes, and no row lock held during the token-refresh request. Source done October 18, not deployed ([evidence](M5-BROKER-READ-EFFICIENCY-EVIDENCE.md)).
+2. **Watchlist intake and eligibility.** Dedicated list, revisions, cap, failed-read grace, removal handling, external-order detection, and code eligibility replacing the fixed allowlist.
+3. **Market data.** Batched 5-minute quotes, a reviewed daily-history source, an earnings-date source, and calendar automation or expiry alerts.
+4. **Profiles, playbooks and replay.** Daily profiles, the market filter and playbook assignment; replay over stored history to check the starting parameters.
+5. **Signals, sizing, costs and handoff.** Entry and exit signals, risk-based sizing with verified fractional support, realistic costs, signal-based handoff, scheduled fills, the Control Center parameter editor, and owner-applied replacement settings.
+6. **Retirement.** Remove the superseded AI decision code and the legacy crypto live order path in planned, tested changes.
+7. **Forward paper evaluation.** M6 stays separate.
 
-1. Define and version the paper mandate: virtual starting capital, initial holdings/sleeves, position/portfolio limits, loss/pause rules, allowed instruments, order/fractional assumptions and the AI's permitted sizing discretion. Horizon, broad-universe direction and monthly budget are already confirmed; no historical crypto limits are adopted.
-2. Audit/introduce the separate decimal paper ledger and order lifecycle with PostgreSQL persistence, concurrency and conservation tests. The legacy `PaperExecutionEngine` uses floats, fills immediately and can fabricate a fallback reference price; do not reuse those behaviors. Existing enum/model/audit patterns may be reused where their semantics fit.
-3. Add paper-decision contracts, context selection, validation, idempotency, recovery and faked model tests, reusing M3 transport/budget services where compatible. Do not loosen M3's research-only validator to accept executable instructions.
-4. Compare candidate market/news providers against actual universe coverage, freshness, rights, rate limits and total cost. Select a model and configure a dedicated application credential/reviewed rates privately. No credential, paid provider, API call or recurring activation is implied by this document.
-5. Complete ingestion/screening and dashboard coverage evidence alongside the disabled proposal scheduler; run bounded manual compatibility/cost checks before proposing recurring paper activation. Record deployment impact and operational checks; M4's seven-session period was waived, not passed.
-6. Run forward paper evaluation, failure/restart tests and the cadence comparison. Keep M6 and all real brokerage mutations outside M5.
+## Open items
 
-Required failure tests include changed portfolio/policy while the model runs; two workers reserving the same cash; duplicate event/model-result delivery; timeout after a potentially billed request; stale or missing quote/session; late-arriving news; expired/unfilled limits; partial fills and duplicate fills; unsupported corporate actions; restart with stale decisions; budget exhaustion; and strict separation from broker-confirmed state. Every blocked/model-failed/no-call outcome remains visible.
+| Item | Safe behavior until resolved |
+|---|---|
+| Name of the dedicated Robinhood watchlist | No intake |
+| ChatGPT tasks set up so they cannot place trades, if Robinhood allows it | External-order detection still pauses entries |
+| Daily-history source and any cost | No profiles, so no entries |
+| Earnings-date source | No new entries |
+| Fractional and fractional limit-order support verified | Whole shares; zero-size trades skipped |
+| Current commission and regulatory fee rates verified | Costs labeled unverified in reports |
+| Starting parameters confirmed by the owner after replay | Values stay versioned starting points |
 
-Current evidence includes design, initial paper-draft control center, [policy/virtual cash](M5-PAPER-POLICY-EVIDENCE.md), [disabled decision runner](M5-DECISION-RUNNER-EVIDENCE.md), [offline synthetic orders/fills/accounting](M5-OFFLINE-SIMULATION-EVIDENCE.md) and execution/handoff work. The completed portion and five additive migrations are now [deployed as `b9b5146`](M5-DEPLOYMENT-EVIDENCE.md), with all new AI/paper gates off. Actual owner settings validate but remain unapplied because saved browser permissions block agent access to the authenticated console. Policy/decision cadence consumption and synthetic accounting are verified with fakes; real model compatibility, provider coverage, attainable cost/latency, real-provider paper execution and forward strategy performance remain unverified. Development model/key/rates remain separate from the preserved runtime environment.
+## Required failure tests
 
-The newest [execution/handoff evidence](M5-EXECUTION-HANDOFF-EVIDENCE.md) adds three tables/two nullable references, pins execution settings to requests/orders, and records the exact remaining owner/provider inputs. No live account reads, actual owner settings application or recurring enablement were performed for that increment.
+- Watchlist read failures and expiry of the grace period; over-cap lists; non-equity items; a symbol removed while held and later re-added; an order the app did not create.
+- Missing history or earnings dates; a split inside the history window; stale or missing quotes and calendar; broker 429 responses.
+- Two workers on the same cycle; restart mid-cycle.
+- Unfilled and repriced limit orders; partial and duplicate fills; unsupported fractional quantities; regulatory-fee rounding; unsupported corporate actions.
+- Strict separation from broker-confirmed state.
+
+Every unavailable, rejected or skipped outcome remains visible.

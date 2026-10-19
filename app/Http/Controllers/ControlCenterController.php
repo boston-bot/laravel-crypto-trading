@@ -5,14 +5,60 @@ namespace App\Http\Controllers;
 use App\Models\McpConnection;
 use App\Models\PaperTrading\MandateVersion;
 use App\Services\Monitoring\AccountScope;
+use App\Services\Monitoring\ExternalOrders;
 use App\Services\PaperTrading\PaperMandates;
 use App\Services\PaperTrading\PaperPolicies;
+use App\Services\PaperTrading\RuleEligibility;
+use App\Services\PaperTrading\RuleEligibilityPolicies;
+use App\Services\PaperTrading\StrategyWatchlists;
+use App\Services\PaperTrading\SymbolUniverse;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use JsonException;
 
 class ControlCenterController extends Controller
 {
+    public function applyEligibility(Request $request, RuleEligibilityPolicies $policies)
+    {
+        $data = $request->validate(['base_version' => ['required', 'integer', 'min:0'], 'request_id' => ['required', 'uuid'],
+            'parameters' => ['required', 'array'], 'confirm_rules' => ['accepted']]);
+        $policies->apply($this->connection($request), $request->user()->id, (int) $data['base_version'], $data['request_id'], $data['parameters']);
+
+        return redirect()->route('mcp.dashboard', ['page' => 'control'])->with('monitor_status', 'Watchlist rule policy applied. Missing history blocks entries; execution and collection flags were not enabled.');
+    }
+
+    public function assessEligibility(Request $request, RuleEligibility $eligibility, SymbolUniverse $universe)
+    {
+        $data = $request->validate(['request_id' => ['required', 'uuid'], 'cutoff' => ['required', 'date_format:Y-m-d\TH:i:s.u\Z']]);
+        $connection = $this->connection($request);
+        $cutoff = CarbonImmutable::parse($data['cutoff']);
+        abort_if($cutoff->isFuture(), 422, 'Future cutoffs are not allowed.');
+        abort_unless(RuleEligibilityPolicies::selected($connection, $cutoff), 409, 'Apply an eligibility rule policy first.');
+        foreach ($universe->reads($connection, $cutoff) as $symbol) {
+            $eligibility->record($connection, $request->user()->id, $symbol, $data['request_id'], $cutoff);
+        }
+
+        return redirect()->route('mcp.dashboard', ['page' => 'control'])->with('monitor_status', 'Stored-data eligibility outcomes recorded. No broker, model, order or ledger operation was started.');
+    }
+
+    public function reviewExternalOrder(Request $request, ExternalOrders $orders, int $order)
+    {
+        $data = $request->validate(['request_id' => ['required', 'uuid'], 'note' => ['required', 'string', 'max:500'], 'confirm_review' => ['accepted']]);
+        $orders->review($this->connection($request), $request->user()->id, $order, $data['request_id'], $data['note']);
+
+        return redirect()->route('mcp.dashboard', ['page' => 'control'])->with('monitor_status', 'External order reviewed. Other unreviewed orders and data-readiness checks still pause new entries.');
+    }
+
+    public function watchlist(Request $request, StrategyWatchlists $watchlists)
+    {
+        $data = $request->validate(['base_version' => ['required', 'integer', 'min:0'], 'request_id' => ['required', 'uuid'],
+            'name' => ['required', 'string', 'max:128'], 'confirm_dedicated' => ['accepted']]);
+        $watchlists->configure($this->connection($request), $request->user()->id, (int) $data['base_version'], $data['request_id'], $data['name']);
+
+        return redirect()->route('mcp.dashboard', ['page' => 'control'])->with('monitor_status', 'Dedicated strategy watchlist saved. Intake requires separate configuration enablement.');
+    }
+
     public function apply(Request $request, PaperPolicies $policies, int $version)
     {
         $data = $request->validate(['base_version' => ['required', 'integer', 'min:1'], 'base_policy_revision' => ['required', 'integer', 'min:0'],

@@ -3,6 +3,7 @@
     $heartbeatConfigured = app(App\Services\Operations\HeartbeatPing::class)->configured();
     $switches = [
         ['Monitoring scheduler', 'MCP_MONITORING_ENABLED', (bool) config('mcp.monitoring_enabled'), 'refresh', false],
+        ['External order detection', 'MCP_EXTERNAL_ORDER_DETECTION_ENABLED', (bool) config('mcp.external_order_detection_enabled'), 'shield', false],
         ['Legacy schedules', 'LEGACY_CRYPTO_SCHEDULES_ENABLED', (bool) config('mcp.legacy_schedules_enabled'), 'clock', true],
         ['Brokerage writes', 'BROKERAGE_WRITES_ENABLED', (bool) config('mcp.brokerage_writes_enabled'), 'lock', true],
         ['Research', 'MCP_RESEARCH_ENABLED', (bool) config('research.enabled'), 'spark', false],

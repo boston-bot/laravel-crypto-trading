@@ -43,6 +43,8 @@ class AppServiceProvider extends ServiceProvider
     {
         RateLimiter::for('mcp-connect', fn ($request) => Limit::perMinute(3)->by((string) $request->user()?->getAuthIdentifier()));
         RateLimiter::for('mcp-renew', fn ($request) => Limit::perMinute(1)->by((string) $request->user()?->getAuthIdentifier()));
+        // Operator-triggered broker reads; a link from another site cannot spend the broker's rate limit freely.
+        RateLimiter::for('mcp-broker-read', fn ($request) => Limit::perMinute(10)->by((string) $request->user()?->getAuthIdentifier()));
         Gate::define('operate-finances', fn ($user) => in_array($user->email, config('mcp.operator_emails'), true));
         Gate::define('approve-decisions', fn ($user) => in_array($user->email, config('mcp.operator_emails'), true) && in_array($user->email, config('mcp.approver_emails'), true));
         // The console header shows the signed-in operator's own connection and open incidents when a page does not supply them.

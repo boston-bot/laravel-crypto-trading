@@ -6,6 +6,8 @@ Prepared October 16, 2026. This documentation describes planned work, not an app
 
 Current milestone update, October 18: M4 is accepted under the owner's explicit waiver of its seven-session proving requirement (0/7 completed; no passed endurance test claimed). M5 paper development is active. Live brokerage mutations remain unauthorized.
 
+Direction change, October 18: the owner adopted a strategy/execution split. Every 30 minutes, ChatGPT scheduled tasks outside this app maintain a dedicated Robinhood watchlist. This app reads it every 5 minutes, and code eligibility rules, daily symbol profiles and deterministic playbooks make the final paper decision. No paid LLM API runs in the app. See [AGENTS.md](../../AGENTS.md#project-direction) and the [revised M5 design](M5-DESIGN.md). Documents below that describe in-app AI decisions record disabled components.
+
 ## Documents and audience
 
 | Document | Audience | Purpose |
@@ -15,18 +17,23 @@ Current milestone update, October 18: M4 is accepted under the owner's explicit 
 | [Mac setup and operations](MAC-SETUP-AND-OPERATIONS.md) | Owner/operator; Codex for deployment work | PostgreSQL schema, dependencies, Nginx, background services, backups, recovery |
 | [M1 integration evidence](M1-INTEGRATION-EVIDENCE.md) | Developer and operator | Completed read-only integration, real OAuth/account evidence, coverage and limitations |
 | [M2 monitoring evidence](M2-MONITORING-EVIDENCE.md) | Developer and operator | Durable snapshots, dashboard, failure tests, archive contract and remaining data limitations |
-| [M3 research evidence](M3-RESEARCH-EVIDENCE.md) | Developer and operator | Research events, cache, budget ledger, validation, UI, summaries and what remains unverified |
+| [M3 research evidence](M3-RESEARCH-EVIDENCE.md) | Developer and operator | Research events, cache, budget ledger, validation, UI, summaries and what remains unverified; AI research superseded for continuous use October 18 |
 | [M4 operations evidence](M4-OPERATIONS-EVIDENCE.md) | Developer and operator | Health checks, heartbeat, ntfy alerts, incident lifecycle, encrypted backups, restore drill, Mac deployment tooling and remaining owner steps |
 | [M4 acceptance log](M4-ACCEPTANCE-LOG.md) | Developer and operator | Actual outage/recovery drill results, explicit calendar horizon, remaining Mac/cloud checks and seven-session proving record |
-| [M5 design](M5-DESIGN.md) | Owner and developer | Frequent discovery, AI-selected multi-day/week paper positions, proposed cadence, budget and unresolved mandate/provider inputs; not implemented functionality |
+| [M5 design](M5-DESIGN.md) | Owner and developer | Watchlist-driven rule strategy: Robinhood watchlist intake, eligibility, daily profiles, playbooks, sizing, costs, starting parameters and open items; not implemented functionality |
 | [M5 control-center evidence](M5-CONTROL-CENTER-EVIDENCE.md) | Owner and developer | Initial paper-draft editor, history/restore, proposal exchange and PostgreSQL research browsing; tests and remaining activation/deployment gaps |
 | [M5 applied paper policy evidence](M5-PAPER-POLICY-EVIDENCE.md) | Owner and developer | Explicit policy application, separate virtual opening cash, concurrent/idempotent initialization and remaining runner/fill gaps |
-| [M5 decision runner evidence](M5-DECISION-RUNNER-EVIDENCE.md) | Owner and developer | Disabled paper proposals, applied cadence/rules, request/result/cost audit, recovery/concurrency tests and remaining data/fill/setup gaps |
+| [M5 decision runner evidence](M5-DECISION-RUNNER-EVIDENCE.md) | Owner and developer | Disabled AI paper proposals, applied cadence/rules, request/result/cost audit and recovery/concurrency tests; superseded October 18 |
 | [M5 offline simulation evidence](M5-OFFLINE-SIMULATION-EVIDENCE.md) | Owner and developer | Synthetic decimal orders/fills, cash/share reservations, concurrency/recovery, accounting reports and remaining real-data/activation gaps |
 | [M5 execution and handoff evidence](M5-EXECUTION-HANDOFF-EVIDENCE.md) | Owner and developer | Versioned execution choices, recorded read-only input provenance, disabled proposal handoff, synthetic workflow tests and remaining owner/provider gaps |
+| [M5 deterministic eligibility](M5-RULE-ELIGIBILITY-EVIDENCE.md) | Owner and developer | Versioned watchlist-rule policy, immutable assessments, exact decimal thresholds and buy gates; listing/history/liquidity remain unavailable |
+| [M5 external-order detection and review](M5-EXTERNAL-ORDER-EVIDENCE.md) | Owner and developer | Immutable scoped external-order cases, owner reviews, latched entry pauses, paper-buy boundary checks and concurrent detection/review tests |
+| [M5 dedicated strategy watchlist intake](M5-STRATEGY-WATCHLIST-EVIDENCE.md) | Owner and developer | Versioned dedicated-list selection, encrypted revisions, five-minute intake, cap/grace/removal controls, quiet-list incidents and remaining signal/eligibility work |
 | [M5 watchlist and fee evidence](M5-WATCHLIST-EVIDENCE.md) | Owner and developer | Existing-gateway watchlist reads, actual On Watch retrieval, decimal percentage fees and validation |
-| [M5 owner mandate intake](M5-OWNER-MANDATE.md) | Owner and developer | Actual paper choices, delegated allocation/fee decisions, verified watchlist membership and application status |
+| [M5 owner mandate intake](M5-OWNER-MANDATE.md) | Owner and developer | Actual paper choices, delegated allocation/fee decisions, verified watchlist membership, application status and which choices still apply after October 18 |
+| [M5 broker read efficiency](M5-BROKER-READ-EFFICIENCY-EVIDENCE.md) | Owner and developer | Shared MCP sessions, catalog writes, batched quotes, rate-limit backoff, lock-free token refresh and read throttles; tests and unverified live limits |
 | [M5 market collection deployment](M5-COLLECTION-DEPLOYMENT-EVIDENCE.md) | Owner and operator | Bounded read-only allowlist collector, deployment and actual stored-data verification |
+| [M5 classification and action coverage](M5-CLASSIFICATION-AND-ACTION-COVERAGE-EVIDENCE.md) | Owner and developer | SEC N-CEN leveraged/inverse and sole-ticker stock evidence, derived eligibility policy, unexposed corporate-action reconciliation, tests and the pending live SEC read |
 | [M5 paper corporate-action accounting](M5-CORPORATE-ACTION-ACCOUNTING-EVIDENCE.md) | Owner and developer | Disabled split/dividend ledger reconciliation, late-event review blocks, bounded observed-data policy and remaining coverage gaps |
 | [M5 Alpaca corporate-action data](M5-ALPACA-DATA-EVIDENCE.md) | Owner and developer | Owner-selected read-only data adapter, exact decimals, encrypted coverage, successful real access and remaining event-accounting work |
 | [M5 Robinhood reference coverage](M5-REFERENCE-COVERAGE-EVIDENCE.md) | Owner and developer | Observed stock/ETF types, dividend subset/date warnings, real gateway checks and missing complete action coverage |
@@ -46,7 +53,8 @@ Open the repository root in VS Code so the repository instructions are available
 - Desired eventual capability: bounded automatic trading, subject to supported brokerage access and all required approvals.
 - First delivery has no brokerage writes, including watchlist edits and order reviews.
 - Host on the owner's MacBook initially. PHP, Nginx, Python, and PostgreSQL were reported installed; the current PostgreSQL application schema is `mcp_trading`. Installation versions, database name, credentials, and service configuration still need local verification.
-- Budget: $50–$150/month for AI and data. Planning target $100, maximum planned envelope $150; provider subscriptions and in-flight usage must be included.
+- Budget: $50–$150/month for AI and data. Planning target $100, maximum planned envelope $150; provider subscriptions and in-flight usage must be included. Since October 18 no paid LLM API runs in the app, so the envelope covers data only.
+- Strategy research runs in ChatGPT under the owner's subscription, which maintains a dedicated Robinhood watchlist every 30 minutes. This app reads it every 5 minutes, sets each symbol's strategy from its own data, and makes the final deterministic decision (October 18).
 - No options, borrowing, shorts, leveraged/inverse products, or crypto in the initial agentic strategy.
 
 ## What we inspected
@@ -68,9 +76,12 @@ Fill these in during the relevant milestone, not all before starting development
 | Database containing `mcp_trading`; DB login | M0 | No migrations |
 | Actual Mac paths and background-service account | M0/M4 | Foreground testing only |
 | Broker OAuth connection and allowed account | M1 | Fake data with conspicuous labels |
-| AI project/API credential and accessible model | M3 | Monitoring works; research unavailable |
+| AI project/API credential and accessible model | M3 | Monitoring works; research unavailable. No longer needed after October 18. |
 | Notification destination and independent heartbeat service | M4 | Dashboard incidents; no claim of off-device alerting |
 | Market/news provider and licensed coverage | M3 | Broker data and manual research only |
+| Name of the dedicated Robinhood watchlist; ChatGPT tasks set up not to trade | M5 | No watchlist intake; orders the app didn't create pause new entries |
+| Daily price-history and earnings-date sources | M5 | No symbol profiles or new entries |
+| Owner confirmation of starting strategy parameters after replay | M5 | Paper only, with versioned starting values |
 | Sleeve mapping and capital allocation | M2/M6 | Unclassified holdings visible; no automatic trading |
 | Approved strategy, sizing, order preferences, live limits | M6 | Shadow/paper only |
 | Paper capital/holdings, sleeve permissions, allowed symbols and fee/slippage assumptions | M5 | Unspecified execution drafts; handoff disabled |

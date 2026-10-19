@@ -27,16 +27,20 @@ Route::prefix('mcp/robinhood')->middleware([McpResponsePrivacy::class, 'auth', F
     Route::post('/connect', [McpConnectionController::class, 'connect'])->middleware('throttle:mcp-connect')->name('mcp.connect');
     Route::get('/callback', [McpConnectionController::class, 'callback'])->name('mcp.callback');
     Route::post('/renew', [McpConnectionController::class, 'renew'])->middleware('throttle:mcp-renew')->name('mcp.renew');
-    Route::post('/discover', [McpConnectionController::class, 'discover'])->name('mcp.discover');
-    Route::post('/accounts', [McpConnectionController::class, 'accounts'])->name('mcp.accounts');
-    Route::post('/bind', [McpConnectionController::class, 'bind'])->name('mcp.bind');
-    Route::get('/reads/{operation}', [McpConnectionController::class, 'read'])->name('mcp.read');
+    Route::post('/discover', [McpConnectionController::class, 'discover'])->middleware('throttle:mcp-broker-read')->name('mcp.discover');
+    Route::post('/accounts', [McpConnectionController::class, 'accounts'])->middleware('throttle:mcp-broker-read')->name('mcp.accounts');
+    Route::post('/bind', [McpConnectionController::class, 'bind'])->middleware('throttle:mcp-broker-read')->name('mcp.bind');
+    Route::get('/reads/{operation}', [McpConnectionController::class, 'read'])->middleware('throttle:mcp-broker-read')->name('mcp.read');
     Route::get('/watchlists/read', [McpConnectionController::class, 'watchlist'])->middleware('throttle:5,1')->name('mcp.watchlist.read');
 });
 
 Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAccess::class.':operate-finances'])->group(function (): void {
     Route::get('/dashboard/{page?}', [MonitoringController::class, 'show'])->name('mcp.dashboard');
     Route::post('/control/mandate', [ControlCenterController::class, 'store'])->middleware('throttle:10,1')->name('mcp.control.store');
+    Route::post('/control/strategy-watchlist', [ControlCenterController::class, 'watchlist'])->middleware('throttle:10,1')->name('mcp.control.watchlist');
+    Route::post('/control/eligibility/apply', [ControlCenterController::class, 'applyEligibility'])->middleware('throttle:10,1')->name('mcp.control.eligibility.apply');
+    Route::post('/control/eligibility/assess', [ControlCenterController::class, 'assessEligibility'])->middleware('throttle:10,1')->name('mcp.control.eligibility.assess');
+    Route::post('/control/external-orders/{order}/review', [ControlCenterController::class, 'reviewExternalOrder'])->whereNumber('order')->middleware('throttle:10,1')->name('mcp.control.external-order.review');
     Route::post('/control/proposal', [ControlCenterController::class, 'proposal'])->middleware('throttle:10,1')->name('mcp.control.proposal');
     Route::post('/control/versions/{version}/restore', [ControlCenterController::class, 'restore'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.restore');
     Route::post('/control/versions/{version}/apply-paper', [ControlCenterController::class, 'apply'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.apply');

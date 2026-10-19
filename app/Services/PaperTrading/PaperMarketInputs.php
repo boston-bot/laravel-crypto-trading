@@ -28,9 +28,21 @@ final class PaperMarketInputs
         Validator::make(['symbol' => $symbol, 'request_id' => $requestId], ['symbol' => ['required', 'regex:/^[A-Z][A-Z0-9.-]{0,15}$/D'], 'request_id' => ['required', 'uuid']])->validate();
         abort_unless(config('paper.market_inputs_enabled'), 409, 'Paper market collection is disabled.');
         $this->authorize($connection, $actor);
+        if (RuleEligibilityPolicies::selected($connection)) {
+            abort_unless(in_array($symbol, app(SymbolUniverse::class)->reads($connection, CarbonImmutable::now()), true), 422, 'Collect current watchlist symbols or holdings only.');
+        }
         if ($repeat = $this->repeat($connection, $symbol, $requestId)) {
             return $repeat;
         }
+        // Every broker read for this symbol shares one MCP session and catalog check.
+        [$payload, $source, $retrieved, $reason] = $this->broker->within($connection, fn (): array => $this->gather($connection, $symbol));
+
+        return $this->record($connection, $actor, $symbol, $requestId, 'broker_read', $payload, $source, $retrieved, $reason);
+    }
+
+    /** @return array{0: array, 1: ?CarbonImmutable, 2: CarbonImmutable, 3: string} */
+    private function gather(McpConnection $connection, string $symbol): array
+    {
         $payload = ['provider' => TrustedHttp::RESOURCE, 'complete' => false, 'instrument' => null,
             'quote' => ['symbol' => $symbol, 'bid' => null, 'ask' => null, 'bid_as_of' => null, 'ask_as_of' => null,
                 'bid_size' => null, 'ask_size' => null, 'eligible' => null, 'asset_type' => null, 'fractional' => null,
@@ -116,7 +128,7 @@ final class PaperMarketInputs
             // A complete process-date query is never an effective-date absence guarantee.
         }
 
-        return $this->record($connection, $actor, $symbol, $requestId, 'broker_read', $payload, $source, $retrieved, $reason);
+        return [$payload, $source, $retrieved, $reason];
     }
 
     /** Optional, separately gated evidence. Never promote broker tradability to strategy eligibility. */
@@ -206,7 +218,12 @@ final class PaperMarketInputs
         if ($bid->compareTo(Decimal::from('0')) <= 0 || $ask->compareTo($bid) < 0) {
             return 'quote_prices_unknown_or_invalid';
         }
-        if ($q['eligible'] !== true || ! in_array($q['asset_type'], ['stock', 'etf'], true) || $q['leveraged'] !== false || $q['inverse'] !== false) {
+        $class = $input->origin === 'broker_read' && config('paper.instrument_classification_enabled')
+            ? app(InstrumentEligibility::class)->inspect($input, $cutoff, $maxAge) : $q;
+        if ($class['eligible'] === false) {
+            return 'instrument_ineligible';
+        }
+        if ($class['eligible'] !== true || ! in_array($class['asset_type'], ['stock', 'etf'], true) || $class['leveraged'] !== false || $class['inverse'] !== false) {
             return 'instrument_eligibility_unverified';
         }
         $actionClear = $input->origin === 'broker_read' && config('paper.corporate_actions_enabled')
@@ -244,10 +261,17 @@ final class PaperMarketInputs
         return DB::transaction(function () use ($connection, $actor, $symbol, $requestId, $origin, $payload, $source, $retrieved, $reason) {
             McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
             $this->authorize($connection, $actor);
+            if ($origin === 'broker_read' && RuleEligibilityPolicies::selected($connection)) {
+                abort_unless(in_array($symbol, app(SymbolUniverse::class)->reads($connection, CarbonImmutable::now()), true), 409, 'Symbol membership changed during collection.');
+            }
             if ($repeat = $this->repeat($connection, $symbol, $requestId)) {
                 abort_unless($repeat->origin === $origin, 409, 'Collection request already used for another origin.');
 
                 return $repeat;
+            }
+
+            if ($origin === 'broker_read') {
+                $payload['auth_generation'] = $connection->auth_generation;
             }
 
             return MarketInput::create(['mcp_connection_id' => $connection->id, 'scope' => AccountScope::key($connection), 'request_id' => $requestId,

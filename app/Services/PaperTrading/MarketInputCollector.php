@@ -7,6 +7,7 @@ use App\Models\McpConnection;
 use App\Models\PaperTrading\MarketInput;
 use App\Models\PaperTrading\Portfolio;
 use App\Models\User;
+use App\Services\Broker\Agentic\BrokerBackoff;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\MarketCalendar;
 use Carbon\CarbonImmutable;
@@ -34,6 +35,10 @@ final class MarketInputCollector
             $count = 0;
             foreach (McpConnection::whereIn('user_id', $operators)->where('status', 'connected')->whereNotNull('bound_account_id')
                 ->when($account !== null, fn ($q) => $q->whereKey($account))->get() as $connection) {
+                // The broker asked this client to wait; queueing more reads would only fail locally.
+                if (app(BrokerBackoff::class)->remaining($connection->id) > 0) {
+                    continue;
+                }
                 $scope = AccountScope::key($connection);
                 $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', $scope)->first();
                 $execution = $portfolio ? ExecutionPolicies::current($portfolio) : null;
@@ -42,7 +47,7 @@ final class MarketInputCollector
                 }
                 $latest = MarketInput::where('mcp_connection_id', $connection->id)->where('scope', $scope)->where('origin', 'broker_read')
                     ->selectRaw('symbol, MAX(recorded_at) AS last_recorded')->groupBy('symbol')->pluck('last_recorded', 'symbol')->all();
-                $symbols = $execution->payload['allowed_symbols'];
+                $symbols = app(SymbolUniverse::class)->reads($connection, $now);
                 usort($symbols, fn ($a, $b) => strcmp($latest[$a] ?? '', $latest[$b] ?? '') ?: strcmp($a, $b));
                 foreach ($symbols as $symbol) {
                     $age = $scheduled && ! $regular ? 60 : 5;

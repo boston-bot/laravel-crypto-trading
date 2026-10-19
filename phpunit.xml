@@ -30,11 +30,15 @@
         <env name="MCP_MONITORING_ENABLED" value="false" force="true"/>
         <env name="BROKERAGE_WRITES_ENABLED" value="false" force="true"/>
         <env name="MCP_RESEARCH_ENABLED" value="false" force="true"/>
+        <env name="MCP_STRATEGY_WATCHLIST_ENABLED" value="false" force="true"/>
+        <env name="MCP_RULE_ELIGIBILITY_ENABLED" value="false" force="true"/>
+        <env name="MCP_EXTERNAL_ORDER_DETECTION_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_DECISIONS_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_OFFLINE_SIMULATION_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_MARKET_COLLECTION_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_MARKET_INPUTS_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_ACTIONS_ENABLED" value="false" force="true"/>
+        <env name="MCP_PAPER_CLASSIFICATION_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_REAL_DATA_FILLS_ENABLED" value="false" force="true"/>
         <env name="MCP_PAPER_HANDOFF_ENABLED" value="false" force="true"/>
         <env name="MCP_RESEARCH_API_KEY" value="" force="true"/>
@@ -51,6 +55,8 @@
         <env name="ALPACA_DATA_ENABLED" value="false" force="true"/>
         <env name="ALPACA_KEY" value="" force="true"/>
         <env name="ALPACA_SECRET" value="" force="true"/>
+        <env name="SEC_EDGAR_ENABLED" value="false" force="true"/>
+        <env name="SEC_EDGAR_USER_AGENT" value="" force="true"/>
         <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_KEY" value="base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>

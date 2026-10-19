@@ -58,6 +58,9 @@ class PaperMarketInputsTest extends TestCase
         $this->assertSame($record->id, app(PaperMarketInputs::class)->collect($this->connection, $this->connection->user_id, 'DEMO', $request)->id);
         $this->assertCount(2, $this->gateway->calls);
         $this->assertSame([Operation::Quotes, Operation::Instruments], array_column($this->gateway->calls, 0));
+        // Both reads ran inside one shared broker session; the repeated request made no new one.
+        $this->assertSame(1, $this->gateway->scopes);
+        $this->assertSame([true, true], $this->gateway->inside);
         Http::assertNothingSent();
     }
 

@@ -6,7 +6,6 @@ use App\Models\PaperTrading\CorporateActionRecord;
 use App\Models\PaperTrading\MarketInput;
 use App\Models\PaperTrading\Portfolio;
 use App\Models\PaperTrading\SimulationPosition;
-use App\Support\Mcp\Decimal;
 use Carbon\CarbonImmutable;
 
 /** Bounded observed-data policy, not a promise that the provider knows every event immediately. */
@@ -38,38 +37,37 @@ final class CorporateActionClearance
             return array_replace($result, ['reason' => 'action_review_required']);
         }
         $ids = array_column($read['events'], 'id');
-        foreach (CorporateActionRecord::where('paper_portfolio_id', $portfolio->id)->where('symbol', $input->symbol)->where('recorded_at', '<=', $cutoff->format('Y-m-d H:i:s.u'))->get() as $record) {
+        $at = $cutoff->format('Y-m-d H:i:s.u');
+        $firstFill = PaperCorporateActions::firstFill($portfolio, $input->symbol, $cutoff);
+        foreach (CorporateActionRecord::where('paper_portfolio_id', $portfolio->id)->where('symbol', $input->symbol)->where('recorded_at', '<=', $at)->get() as $record) {
             $process = $record->payload['event']['dates']['process_date'] ?? null;
-            if ($record->phase === 'block' || ($process !== null && $process >= $read['start'] && $process <= $read['end'] && ! in_array($record->provider_event_id, $ids, true))) {
+            if ($record->phase === 'block' || ($process !== null && $process >= $read['start'] && $process <= $read['end'] && ! in_array($record->provider_event_id, $ids, true) &&
+                ! PaperCorporateActions::beforeExposure($record->payload['event'], $firstFill))) {
                 return array_replace($result, ['reason' => 'action_history_changed_requires_review']);
             }
         }
         foreach ($read['events'] as $event) {
-            if (! in_array($event['type'], ['forward_splits', 'reverse_splits', 'cash_dividends'], true) || ! empty($event['missing_fields']) || ! isset($event['dates']['ex_date'])) {
-                return array_replace($result, ['reason' => 'action_terms_unverified']);
-            }
-            if ($event['type'] === 'cash_dividends' && (($event['flags']['special'] ?? null) !== false || ($event['flags']['foreign'] ?? null) !== false ||
-                ! isset($event['dates']['record_date'], $event['dates']['payable_date']) || $event['dates']['record_date'] < $event['dates']['ex_date'] ||
-                $event['dates']['payable_date'] < $event['dates']['record_date'] || ($event['dates']['due_bill_on_date'] ?? null) !== null ||
-                ($event['dates']['due_bill_off_date'] ?? null) !== null || ($event['dates']['due_bill_redemption_date'] ?? null) !== null)) {
-                return array_replace($result, ['reason' => 'action_terms_unverified']);
-            }
-            if (in_array($event['type'], ['forward_splits', 'reverse_splits'], true)) {
-                try {
-                    $new = Decimal::from($event['rates']['new_rate'] ?? null);
-                    $old = Decimal::from($event['rates']['old_rate'] ?? null);
-                    if ($new->compareTo(Decimal::from('0')) <= 0 || $old->compareTo(Decimal::from('0')) <= 0 ||
-                        ($event['type'] === 'forward_splits' ? $new->compareTo($old) <= 0 : $new->compareTo($old) >= 0)) {
-                        return array_replace($result, ['reason' => 'action_terms_unverified']);
-                    }
-                } catch (\InvalidArgumentException) {
-                    return array_replace($result, ['reason' => 'action_terms_unverified']);
-                }
-            }
             $fingerprint = PaperCorporateActions::fingerprint($event);
-            if (CorporateActionRecord::where('paper_portfolio_id', $portfolio->id)->where('provider_event_id', $event['id'])->where('fingerprint', '!=', $fingerprint)
-                ->where('recorded_at', '<=', $cutoff->format('Y-m-d H:i:s.u'))->exists()) {
+            $versions = CorporateActionRecord::where('paper_portfolio_id', $portfolio->id)->where('provider_event_id', $event['id'])->where('fingerprint', '!=', $fingerprint)
+                ->where('recorded_at', '<=', $at)->get();
+            if ($versions->isNotEmpty() && ! ($versions->every(fn ($r) => PaperCorporateActions::beforeExposure($r->payload['event'], $firstFill)) &&
+                PaperCorporateActions::beforeExposure($event, $firstFill))) {
                 return array_replace($result, ['reason' => 'action_history_changed_requires_review']);
+            }
+            if (PaperCorporateActions::unexposed($event, $firstFill, $cutoff)) {
+                if (! CorporateActionRecord::where('paper_portfolio_id', $portfolio->id)->where('provider_event_id', $event['id'])->where('fingerprint', $fingerprint)
+                    ->where('phase', 'application')->where('status', 'no_effect')->where('recorded_at', '<=', $at)->exists()) {
+                    return array_replace($result, ['reason' => 'known_action_not_reconciled']);
+                }
+
+                continue;
+            }
+            // Any type may still settle while unheld. Only a reviewed type may be held into its boundary.
+            if (! PaperCorporateActions::supported($event)) {
+                return array_replace($result, ['reason' => 'action_terms_unverified']);
+            }
+            if ($firstFill === null) {
+                continue;
             }
             $effective = CarbonImmutable::parse($event['dates']['ex_date'], 'America/New_York')->startOfDay()->utc();
             if ($effective->gt($cutoff)) {
