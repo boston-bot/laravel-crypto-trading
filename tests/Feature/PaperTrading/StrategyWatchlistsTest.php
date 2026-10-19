@@ -19,6 +19,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Support\McpFixture;
 use Tests\Support\SimulationFixture;
@@ -257,6 +258,103 @@ class StrategyWatchlistsTest extends TestCase
         $this->assertSame('filled', $simulator->observe($connection, $connection->user_id, $sell->id, SimulationFixture::quote())->status);
         $this->assertSame('0.000000000000000000', SimulationPosition::sole()->quantity);
         Http::assertNothingSent();
+    }
+
+    private function member(string $symbol, string $type = 'instrument'): array
+    {
+        return ['id' => 'fixture-'.strtolower($symbol), 'object_type' => $type, 'symbol' => $symbol];
+    }
+
+    /** Core and Growth nominate; Awaiting only warms up data. */
+    private function threeLists(array $core = ['AAA', 'BBB'], array $growth = ['BBB', 'CCC'], array $awaiting = ['DDD', 'AAA']): void
+    {
+        $this->gateway->lists = ['Core candidates' => ['id' => 'list-core', 'members' => array_map(fn ($s) => $this->member($s), $core)],
+            'Growth opportunities' => ['id' => 'list-growth', 'members' => array_map(fn ($s) => $this->member($s), $growth)],
+            'Awaiting price or evidence' => ['id' => 'list-awaiting', 'members' => [...array_map(fn ($s) => $this->member($s), $awaiting), $this->member('OPTN', 'option_strategy')]]];
+        $this->service->configure($this->connection, $this->connection->user_id, $this->service->setting($this->connection)->version, (string) Str::uuid(), [
+            ['name' => 'Core candidates', 'role' => 'nominate'], ['name' => 'Growth opportunities', 'role' => 'nominate'],
+            ['name' => 'Awaiting price or evidence', 'role' => 'data_only']]);
+    }
+
+    public function test_several_lists_nominate_by_role_and_data_only_members_only_warm_up_collection(): void
+    {
+        $this->threeLists();
+        $this->assertNull($this->read()->reason);
+        $revision = WatchlistRevision::latest('id')->first();
+        $this->assertSame(['Core candidates' => 'list-core', 'Growth opportunities' => 'list-growth', 'Awaiting price or evidence' => 'list-awaiting'], $revision->payload['list_ids']);
+        $tagged = array_map(fn ($m) => [$m['symbol'], $m['list'], $m['role'], $m['skip_reason']], $revision->payload['members']);
+        $this->assertContains(['BBB', 'Growth opportunities', 'nominate', null], $tagged);
+        $this->assertContains(['OPTN', 'Awaiting price or evidence', 'data_only', 'non_equity_item'], $tagged);
+        $nominations = $this->nominations();
+        // A symbol on a nominating list nominates even when it also sits on the data-only list.
+        $this->assertSame(['AAA', 'BBB', 'CCC'], $nominations['symbols']);
+        $this->assertSame(['DDD'], $nominations['data_symbols']);
+        // Moving a symbol from Awaiting to Core nominates it on the next read; removal from every list drops it.
+        $this->threeLists(['AAA', 'BBB', 'DDD'], ['CCC'], []);
+        $this->read();
+        $this->assertSame([['AAA', 'BBB', 'CCC', 'DDD'], []], [$this->nominations()['symbols'], $this->nominations()['data_symbols']]);
+    }
+
+    public function test_any_failed_list_fails_the_whole_read_and_caps_apply_per_role(): void
+    {
+        $this->threeLists();
+        $this->read();
+        $before = WatchlistRevision::count();
+        $this->gateway->fail = true;
+        $this->gateway->failList = 'Growth opportunities';
+        $this->assertSame('broker_transport_unavailable', $this->read()->reason);
+        $this->assertSame($before, WatchlistRevision::count());
+        $this->assertSame(['AAA', 'BBB', 'CCC'], $this->nominations()['symbols']); // last valid membership, within the grace period
+        $this->gateway->fail = false;
+        $symbols = fn (int $n, string $prefix) => array_map(fn ($i) => $prefix.chr(65 + intdiv($i, 26)).chr(65 + $i % 26), range(0, $n - 1));
+        $this->threeLists($symbols(40, 'C'), $symbols(36, 'G'), $symbols(75, 'W'));
+        $this->assertSame('watchlist_over_cap', $this->read()->reason); // 76 nominating items
+        $this->threeLists($symbols(40, 'C'), $symbols(35, 'G'), $symbols(75, 'W'));
+        $this->assertSame('watchlist_over_cap', $this->read()->reason); // 76 data-only items, counting the option
+        $this->threeLists($symbols(40, 'C'), $symbols(35, 'G'), $symbols(74, 'W'));
+        $this->assertNull($this->read()->reason);
+        $this->assertCount(75, $this->nominations()['symbols']);
+    }
+
+    public function test_each_list_identity_is_pinned_for_its_settings_version(): void
+    {
+        $this->threeLists();
+        $this->read();
+        $this->gateway->lists['Growth opportunities']['id'] = 'list-growth-replacement';
+        $this->assertSame('watchlist_identity_changed', $this->read()->reason);
+    }
+
+    public function test_multi_list_settings_are_validated_and_saved_from_the_control_form(): void
+    {
+        $configure = fn (array $lists) => $this->service->configure($this->connection, $this->connection->user_id, $this->service->setting($this->connection)->version, (string) Str::uuid(), $lists);
+        foreach ([
+            [['name' => 'Core candidates', 'role' => 'nominate'], ['name' => 'core CANDIDATES', 'role' => 'data_only']],
+            [['name' => 'Core candidates', 'role' => 'nominate'], ['name' => 'On Watch', 'role' => 'data_only']],
+            [['name' => 'Awaiting price or evidence', 'role' => 'data_only']],
+        ] as $lists) {
+            try {
+                $configure($lists);
+                $this->fail();
+            } catch (HttpException $error) {
+                $this->assertSame(422, $error->getStatusCode());
+            }
+        }
+        foreach ([[['name' => 'Core candidates', 'role' => 'buy_now']], array_fill(0, 6, ['name' => 'X', 'role' => 'nominate'])] as $lists) {
+            try {
+                $configure($lists);
+                $this->fail();
+            } catch (ValidationException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        $this->actingAs(User::find($this->connection->user_id));
+        $this->post('/mcp/control/strategy-watchlist', ['base_version' => $this->service->setting($this->connection)->version, 'request_id' => (string) Str::uuid(),
+            'account_scope' => AccountScope::key($this->connection), 'confirm_dedicated' => '1', 'lists' => [
+                ['name' => 'Core candidates', 'role' => 'nominate'], ['name' => 'Growth opportunities', 'role' => 'nominate'],
+                ['name' => 'Awaiting price or evidence', 'role' => 'data_only'], ['name' => '', 'role' => 'nominate'], ['name' => ' ', 'role' => 'data_only']]])->assertRedirect();
+        $this->assertSame(['lists' => [['name' => 'Core candidates', 'role' => 'nominate'], ['name' => 'Growth opportunities', 'role' => 'nominate'],
+            ['name' => 'Awaiting price or evidence', 'role' => 'data_only']]], $this->service->setting($this->connection)->payload);
+        $this->get('/mcp/dashboard/control')->assertOk()->assertSee('Growth opportunities')->assertSee('Data only (warm-up)');
     }
 
     public function test_control_form_is_operator_scoped_validated_versioned_and_never_enables_intake(): void

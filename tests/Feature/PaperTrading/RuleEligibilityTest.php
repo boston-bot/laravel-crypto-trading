@@ -208,6 +208,21 @@ class RuleEligibilityTest extends TestCase
         $this->assertSame('daily_history_stale', $later['checks']['liquidity']['reason']);
     }
 
+    public function test_data_only_lists_warm_up_collection_but_never_pass_membership(): void
+    {
+        $this->gateway->lists = ['Core candidates' => ['id' => 'list-core', 'members' => [['id' => 'fixture-demo', 'object_type' => 'instrument', 'symbol' => 'DEMO']]],
+            'Awaiting price or evidence' => ['id' => 'list-awaiting', 'members' => [['id' => 'fixture-wait', 'object_type' => 'instrument', 'symbol' => 'WAIT']]]];
+        $this->watchlists->configure($this->connection, $this->connection->user_id, $this->watchlists->setting($this->connection)->version, (string) Str::uuid(),
+            [['name' => 'Core candidates', 'role' => 'nominate'], ['name' => 'Awaiting price or evidence', 'role' => 'data_only']]);
+        $this->watchlists->collect($this->connection, $this->connection->user_id, (string) Str::uuid());
+        $this->apply();
+        $universe = app(SymbolUniverse::class);
+        $this->assertSame(['DEMO'], $universe->candidates($this->connection, CarbonImmutable::now()));
+        $this->assertContains('WAIT', $universe->reads($this->connection, CarbonImmutable::now()));
+        $report = app(RuleEligibility::class)->inspect($this->connection, 'WAIT', CarbonImmutable::now());
+        $this->assertSame(['unavailable', 'watchlist_not_fresh_or_symbol_removed'], [$report['checks']['membership']['status'], $report['checks']['membership']['reason']]);
+    }
+
     public function test_known_price_spread_and_tradability_failures_are_recorded_alongside_unknown_sources(): void
     {
         $this->apply();

@@ -104,9 +104,9 @@
     {{ $control['external_orders']['pending']->links() }}
     <p class="note">This application has no agentic live-submission path yet, so all observed broker orders require review, including completed or cancelled orders. Reviewing an order does not cancel it or authorize a future trade. The latest complete equity-order read must be less than five minutes old when detection is enabled.</p>
 </x-panel>
-<x-panel title="Dedicated strategy watchlist" subtitle="ChatGPT supplies symbols. This application checks eligibility and makes deterministic paper decisions." icon="shield">
+<x-panel title="Dedicated strategy watchlists" subtitle="ChatGPT supplies symbols. This application checks eligibility and makes deterministic paper decisions." icon="shield">
     <p>Intake {{ config('paper.watchlist_intake_enabled') ? 'enabled' : 'disabled' }} · every five minutes when enabled. Membership only nominates symbols; execution eligibility remains unverified. The current execution allowlist remains in force.</p>
-    <p>{{ ($watchlist['fresh'] ?? false) ? 'Fresh membership available' : 'No fresh membership: new strategy entries blocked' }} · {{ count($watchlist['symbols'] ?? []) }} nominated symbols.</p>
+    <p>{{ ($watchlist['fresh'] ?? false) ? 'Fresh membership available' : 'No fresh membership: new strategy entries blocked' }} · {{ count($watchlist['symbols'] ?? []) }} nominated symbols · {{ count($watchlist['data_symbols'] ?? []) }} data-only symbols.</p>
     @if($watchlist['revision'] ?? null)
         <p>Revision {{ $watchlist['revision']->id }} · retrieved <x-time :at="$watchlist['revision']->retrieved_at" />. Broker source time is unavailable.</p>
         <details><summary>Membership and skipped items</summary><pre class="code-block">{{ $pretty($watchlist['revision']->payload['members']) }}</pre></details>
@@ -115,11 +115,20 @@
         <input type="hidden" name="base_version" value="{{ $watchlist['setting']->version ?? 0 }}">
         <input type="hidden" name="account_scope" value="{{ App\Services\Monitoring\AccountScope::key($connection) }}">
         <input type="hidden" name="request_id" value="{{ (string) Illuminate\Support\Str::uuid() }}">
-        <label class="field">Dedicated Robinhood list name<input name="name" required maxlength="128" value="{{ $watchlist['setting']->payload['name'] ?? '' }}"></label>
-        <label class="check"><input type="checkbox" name="confirm_dedicated" value="1" required><span>This list is dedicated to this strategy and separate from my personal watchlists.</span></label>
-        <button class="btn btn-secondary" type="submit">Save strategy watchlist</button>
+        @php($configured = ($watchlist['setting'] ?? null) ? App\Services\PaperTrading\StrategyWatchlists::lists($watchlist['setting']) : [])
+        @for($i = 0; $i < 5; $i++)
+            <div class="inline-fields">
+                <label class="field">Robinhood list name<input name="lists[{{ $i }}][name]" maxlength="128" value="{{ $configured[$i]['name'] ?? '' }}"></label>
+                <label class="field">Role<select name="lists[{{ $i }}][role]">
+                    <option value="nominate" @selected(($configured[$i]['role'] ?? 'nominate') === 'nominate')>Nominate for evaluation</option>
+                    <option value="data_only" @selected(($configured[$i]['role'] ?? null) === 'data_only')>Data only (warm-up)</option>
+                </select></label>
+            </div>
+        @endfor
+        <label class="check"><input type="checkbox" name="confirm_dedicated" value="1" required><span>These lists are dedicated to this strategy and separate from my personal watchlists.</span></label>
+        <button class="btn btn-secondary" type="submit">Save strategy watchlists</button>
     </form>
-    <p class="note">More than 75 items rejects the entire read. Failed reads retain the last valid membership for less than 30 minutes. Removed symbols receive no new entries; position exits and risk checks operate independently. Saving a list requires a fresh read and does not enable intake.</p>
+    <p class="note">Nominating lists put symbols up for deterministic evaluation; data-only lists only collect history and profiles in advance. More than 75 items across nominating lists, or across data-only lists, rejects the entire read; so does a failed read of any list. Failed reads retain the last valid membership for less than 30 minutes. Removed symbols receive no new entries; position exits and risk checks operate independently. Saving a list requires a fresh read and does not enable intake.</p>
 </x-panel>
 <x-panel title="Applied paper plan and virtual cash" subtitle="Simulation only. These balances are not brokerage funds. Offline synthetic fills are separate from AI proposals and broker activity." icon="wallet">
     @if($paper)

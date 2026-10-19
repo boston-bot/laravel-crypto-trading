@@ -53,10 +53,14 @@ class ControlCenterController extends Controller
     public function watchlist(Request $request, StrategyWatchlists $watchlists)
     {
         $data = $request->validate(['base_version' => ['required', 'integer', 'min:0'], 'request_id' => ['required', 'uuid'],
-            'name' => ['required', 'string', 'max:128'], 'confirm_dedicated' => ['accepted']]);
-        $watchlists->configure($this->connection($request), $request->user()->id, (int) $data['base_version'], $data['request_id'], $data['name']);
+            'name' => ['required_without:lists', 'nullable', 'string', 'max:128'], 'lists' => ['required_without:name', 'array', 'max:5'],
+            'lists.*.name' => ['nullable', 'string', 'max:128'], 'lists.*.role' => ['nullable', 'string'], 'confirm_dedicated' => ['accepted']]);
+        // Blank rows are ignored; the service validates names, roles and the nominating-list requirement.
+        $lists = isset($data['lists']) ? array_values(array_filter($data['lists'], fn ($list) => trim((string) ($list['name'] ?? '')) !== '')) : $data['name'];
+        abort_if($lists === [], 422, 'Enter at least one list.');
+        $watchlists->configure($this->connection($request), $request->user()->id, (int) $data['base_version'], $data['request_id'], $lists);
 
-        return redirect()->route('mcp.dashboard', ['page' => 'control'])->with('monitor_status', 'Dedicated strategy watchlist saved. Intake requires separate configuration enablement.');
+        return redirect()->route('mcp.dashboard', ['page' => 'control'])->with('monitor_status', 'Strategy watchlists saved. Intake requires separate configuration enablement.');
     }
 
     public function apply(Request $request, PaperPolicies $policies, int $version)

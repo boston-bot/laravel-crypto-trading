@@ -17,11 +17,9 @@ final class SymbolUniverse
     public function candidates(McpConnection $connection, CarbonImmutable $cutoff): array
     {
         $membership = app(StrategyWatchlists::class)->nominations($connection, $cutoff);
-        $symbols = $membership['fresh'] ? array_column(array_filter($membership['revision']->payload['members'], fn ($m) => $m['skip_reason'] === null), 'symbol') : [];
-        $symbols = array_values(array_unique($symbols));
-        sort($symbols);
 
-        return $symbols;
+        // Nominating lists only; data-only (warm-up) members never become entry candidates.
+        return $membership['fresh'] ? StrategyWatchlists::symbols(array_filter($membership['revision']->payload['members'], fn ($m) => $m['skip_reason'] === null), 'nominate') : [];
     }
 
     public function reads(McpConnection $connection, CarbonImmutable $cutoff): array
@@ -40,7 +38,9 @@ final class SymbolUniverse
             $held = [...$held, ...Holding::where('snapshot_id', $snapshot->id)->whereNotNull('symbol')->get()
                 ->filter(fn ($p) => Decimal::from($p->quantity)->compareTo(Decimal::from('0')) !== 0)->pluck('symbol')->all()];
         }
-        $symbols = array_values(array_unique([...(config('paper.rule_eligibility_enabled') ? $this->candidates($connection, $cutoff) : []), ...$held]));
+        // Data-only (warm-up) lists are collected so a symbol promoted to a nominating list already has data.
+        $warmup = config('paper.rule_eligibility_enabled') ? app(StrategyWatchlists::class)->nominations($connection, $cutoff)['data_symbols'] : [];
+        $symbols = array_values(array_unique([...(config('paper.rule_eligibility_enabled') ? $this->candidates($connection, $cutoff) : []), ...$warmup, ...$held]));
         sort($symbols);
 
         return $symbols;

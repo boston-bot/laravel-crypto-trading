@@ -28,6 +28,19 @@ final class RobinhoodWatchlists
         return $this->gateway->within($connection, fn (): array => $this->read($connection, $name, $binding, $generation));
     }
 
+    /** Several named lists over one broker session. Any failure fails the whole set; callers never see a partial set. */
+    public function namedMany(McpConnection $connection, array $names): array
+    {
+        return $this->gateway->within($connection, function () use ($connection, $names): array {
+            $results = [];
+            foreach ($names as $name) {
+                $results[$name] = $this->named($connection, $name);
+            }
+
+            return $results;
+        });
+    }
+
     private function read(McpConnection $connection, string $name, string $binding, int $generation): array
     {
         $lists = $this->gateway->read($connection, Operation::Watchlists);

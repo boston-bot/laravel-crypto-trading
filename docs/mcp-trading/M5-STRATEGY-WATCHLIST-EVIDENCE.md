@@ -37,3 +37,29 @@ No deployment, runtime migration, configuration enablement, dedicated-list selec
 The gate exposes entry nominations for the future deterministic engine; it is not wired into the superseded AI handoff. Existing execution v2's fixed allowlist, fees and position cap remain unchanged. No strategy entry engine exists yet, so this is not evidence of automatic decisions or complete M5 acceptance. Full classification/tradability/action/price/liquidity/spread/history eligibility, market data/profiles, signal-based handoff, external-order review, realistic costs and fractional execution support remain open. Quiet-alert verification depends on existing verified calendar records. Browser visual review, populated watchlist backup/restore and actual dedicated-list connectivity remain untested.
 
 Next within M5: external-order detection/review and rule-based eligibility, followed by the documented market-data/profile/signal work. M6 remains unstarted and unauthorized.
+
+## Multiple lists with roles (October 19)
+
+The owner's ChatGPT tasks maintain three Robinhood lists: "Core candidates", "Growth opportunities" and "Awaiting price or evidence". The owner defined Growth opportunities as researched candidates to evaluate for a trade now, subject to fresh valuation, earnings, position-size, exposure and technical checks; membership alone is not a buy signal.
+
+A settings version now holds up to five named lists, each with role `nominate` or `data_only`. A single nominating list keeps the original payload shape, so earlier versions still work. Validation:
+- names are unique, case-insensitive
+- "On Watch" is refused in any position
+- at least one list must nominate
+- roles come from a closed set
+
+Reading and membership:
+- **One read.** All lists are read in one broker session (`RobinhoodWatchlists::namedMany`) and stored in one immutable revision. Each member is tagged with its list and role, and the revision keeps every list's ID.
+- **All or nothing.** A failed read of any list records a failed read and no revision, so a failed Core read can never look like an emptied Core list.
+- **Cap.** The 75-item cap applies separately to nominating and to data-only items (skipped items count).
+- **Identity.** Each list's identity is pinned per settings version.
+- **Nominations.** These come only from nominating lists; a symbol on both a nominating and a data-only list nominates.
+- **Warm-up.** Data-only symbols are reported separately and added to the selected data universe (collection, SEC classification, references, profiles). They never pass the eligibility membership check.
+
+The Control Center form offers five rows (list name and role) and ignores blank ones.
+
+Verification:
+- **New tests:** `StrategyWatchlistsTest` gained 4 (roles and warm-up, moves between lists, any-list failure, per-role caps at 75/76, per-list identity pinning, validation, form save and display); `RuleEligibilityTest` gained 1 (data-only symbols enter the data universe but fail membership).
+- **Full SQLite:** **464 passed / 3,330 assertions, 31 PostgreSQL-only skips**.
+- **Full PostgreSQL:** **494 passed / 3,617 assertions, 1 existing skip**.
+- **Migration:** none; settings and revisions keep encrypted payloads.

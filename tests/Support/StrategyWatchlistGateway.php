@@ -20,6 +20,12 @@ class StrategyWatchlistGateway implements BrokerGateway
 
     public string $listId = 'fixture-list';
 
+    /** Optional several lists: name => ['id' => list id, 'members' => [...]]. Empty uses the single list above. */
+    public array $lists = [];
+
+    /** Fail only reads of this list name (null with $fail = true fails everything). */
+    public ?string $failList = null;
+
     public bool $fail = false;
 
     public int $calls = 0;
@@ -34,13 +40,19 @@ class StrategyWatchlistGateway implements BrokerGateway
     public function read(McpConnection $connection, Operation $operation, array $filters = []): ReadResult
     {
         $this->calls++;
-        if ($this->fail) {
+        if ($this->fail && $this->failList === null) {
             throw new ReadFailure(ReadError::Transport);
         }
+        $lists = $this->lists ?: ['Strategy Candidates' => ['id' => $this->listId, 'members' => $this->members]];
         if ($operation === Operation::Watchlists) {
-            $rows = [['id' => $this->listId, 'name' => 'Strategy Candidates', 'owner_type' => 'user', 'item_count' => count($this->members)]];
+            $rows = array_map(fn ($name, $list) => ['id' => $list['id'], 'name' => $name, 'owner_type' => 'user', 'item_count' => count($list['members'])], array_keys($lists), $lists);
         } elseif ($operation === Operation::WatchlistItems) {
-            $rows = array_map(fn ($m) => $m + ['list_id' => $this->listId], $this->members);
+            $name = array_search($filters['list_id'], array_column($lists, 'id', null), true);
+            $name = array_keys($lists)[$name];
+            if ($this->fail && $this->failList === $name) {
+                throw new ReadFailure(ReadError::Transport);
+            }
+            $rows = array_map(fn ($m) => $m + ['list_id' => $filters['list_id']], $lists[$name]['members']);
             ($this->during) && ($this->during)();
         } else {
             throw new \LogicException('Unexpected broker operation.');

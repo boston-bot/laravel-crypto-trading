@@ -38,7 +38,8 @@ Owner direction that still applies: long-only, multi-day to multi-week positions
 
 ## Watchlist intake
 
-- **Source.** One dedicated Robinhood watchlist, named in a versioned owner setting and separate from personal lists such as "On Watch". It is read with the existing read-only tools (`get_watchlists`, `get_watchlist_items`) through `RobinhoodWatchlists`. The app never edits watchlists.
+- **Lists and roles (owner decision, October 19).** The owner's ChatGPT tasks maintain three lists and move symbols between them. "Core candidates" and "Growth opportunities" (researched candidates to evaluate for a trade now) **nominate**; "Awaiting price or evidence" is **data-only**: its symbols get history and profiles collected in advance but never nominate. Membership is never a buy signal. Every configured list is read in one session into one revision; any failed list fails the whole read. The 75-item cap applies separately to nominating and to data-only lists. Each list's identity is pinned per settings version.
+- **Source.** Originally one dedicated Robinhood watchlist (now up to five, with roles), named in a versioned owner setting and separate from personal lists such as "On Watch". It is read with the existing read-only tools (`get_watchlists`, `get_watchlist_items`) through `RobinhoodWatchlists`. The app never edits watchlists.
 - **Cadence.** Every 5 minutes, with a separate default-off enablement flag.
 - **Revisions.** Each successful read becomes an immutable revision: members with their object types, a hash, and the retrieval time. Robinhood supplies no source time for watchlists, so the retrieval time is the only time. Each successful read, including an unchanged hash, retains a new revision with its own retrieval time, as required by AGENTS.md. The hash and original change time distinguish successful revalidation from membership churn.
 - **Cap.** A list with more than 75 items is rejected as a whole and raises an incident.
@@ -191,7 +192,7 @@ No paid LLM API runs in this application. The earlier $100 target / $150 maximum
 
 | Item | Safe behavior until resolved |
 |---|---|
-| Name of the dedicated Robinhood watchlist | No intake |
+| Save the three lists and roles in the Control Center | No intake |
 | ChatGPT tasks set up so they cannot place trades, if Robinhood allows it | External-order detection still pauses entries |
 | Daily-history source and any cost | Resolved in source October 19: Alpaca, existing keys, no subscription; awaits deployment |
 | Earnings-date source | Resolved in source October 19: Robinhood `get_earnings_calendar` ([evidence](M5-EARNINGS-EVIDENCE.md)); awaits deployment |
