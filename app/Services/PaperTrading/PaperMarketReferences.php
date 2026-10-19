@@ -49,15 +49,22 @@ final class PaperMarketReferences
                 $requests[$symbol][$kind] = Uuid::uuid5(Uuid::NAMESPACE_URL, 'market-reference:'.$requestId.':'.$kind.':'.$symbol)->toString();
             }
         }
+        // The strategy benchmark's history is always read with the universe; it needs no listing of its own here.
+        $benchmark = StrategyParameters::DEFAULTS['benchmark_symbol'];
+        if (! isset($requests[$benchmark])) {
+            $requests[$benchmark]['daily_history'] = Uuid::uuid5(Uuid::NAMESPACE_URL, 'market-reference:'.$requestId.':daily_history:'.$benchmark)->toString();
+        }
         $ids = $requests === [] ? [] : array_merge(...array_map('array_values', array_values($requests)));
         $existing = MarketReferenceRead::where('mcp_connection_id', $connection->id)->where('scope', $scope)->whereIn('request_id', $ids)->get()->keyBy('request_id');
-        $missingHistory = array_values(array_filter($symbols, fn ($s) => ! isset($existing[$requests[$s]['daily_history']])));
+        $missingHistory = array_values(array_filter(array_keys($requests), fn ($s) => ! isset($existing[$requests[$s]['daily_history']])));
         // Network reads happen outside any transaction; each result is recorded under a fresh authorization check.
         $history = $missingHistory === [] ? [] : $this->bars->readMany($missingHistory, CarbonImmutable::now());
         $rows = collect();
-        foreach ($symbols as $symbol) {
-            $rows->push($existing[$requests[$symbol]['daily_history']] ?? $this->record($connection, $actor, $symbol, 'daily_history', $requests[$symbol]['daily_history'], $history[$symbol]));
-            $rows->push($existing[$requests[$symbol]['listing']] ?? $this->record($connection, $actor, $symbol, 'listing', $requests[$symbol]['listing'], $this->listings->read($symbol)));
+        foreach ($requests as $symbol => $kinds) {
+            $rows->push($existing[$kinds['daily_history']] ?? $this->record($connection, $actor, (string) $symbol, 'daily_history', $kinds['daily_history'], $history[$symbol]));
+            if (isset($kinds['listing'])) {
+                $rows->push($existing[$kinds['listing']] ?? $this->record($connection, $actor, (string) $symbol, 'listing', $kinds['listing'], $this->listings->read((string) $symbol)));
+            }
         }
 
         return $rows;
@@ -90,21 +97,33 @@ final class PaperMarketReferences
      */
     public function history(McpConnection $connection, string $symbol, CarbonImmutable $cutoff): array
     {
-        $read = $this->latest($connection, $symbol, 'daily_history', $cutoff);
+        $verified = $this->verifiedHistory($connection, $symbol, $cutoff);
+        $read = $verified['read'];
         if (! $read) {
-            return ['verified' => false, 'reason' => 'daily_history_missing'];
-        }
-        if ($read->retrieved_at->lt($cutoff->subHours(max(1, (int) config('alpaca_data.history_max_age_hours'))))) {
-            return ['verified' => false, 'reason' => 'daily_history_stale', 'read_id' => $read->id];
+            return ['verified' => false, 'reason' => $verified['reason']] + ($verified['read_id'] ? ['read_id' => $verified['read_id']] : []);
         }
         $facts = $read->payload['facts'];
-        // A symbol with no recent bars (halted, delisted or remapped) cannot use an old window as current history.
-        if (CarbonImmutable::parse($facts['last_session'])->lt(CarbonImmutable::parse($read->payload['end'])->subDays(10))) {
-            return ['verified' => false, 'reason' => 'daily_history_not_current', 'read_id' => $read->id];
-        }
 
         return ['verified' => true, 'sessions' => $facts['sessions'], 'average_dollar_volume_20' => $facts['average_dollar_volume_20'],
             'last_session' => $facts['last_session'], 'read_id' => $read->id, 'contract' => $read->contract];
+    }
+
+    /** @return array{read: ?MarketReferenceRead, reason: ?string, read_id: ?int} the stored history read the rules may use */
+    public function verifiedHistory(McpConnection $connection, string $symbol, CarbonImmutable $cutoff): array
+    {
+        $read = $this->latest($connection, $symbol, 'daily_history', $cutoff);
+        if (! $read) {
+            return ['read' => null, 'reason' => 'daily_history_missing', 'read_id' => null];
+        }
+        if ($read->retrieved_at->lt($cutoff->subHours(max(1, (int) config('alpaca_data.history_max_age_hours'))))) {
+            return ['read' => null, 'reason' => 'daily_history_stale', 'read_id' => $read->id];
+        }
+        // A symbol with no recent bars (halted, delisted or remapped) cannot use an old window as current history.
+        if (CarbonImmutable::parse($read->payload['facts']['last_session'])->lt(CarbonImmutable::parse($read->payload['end'])->subDays(10))) {
+            return ['read' => null, 'reason' => 'daily_history_not_current', 'read_id' => $read->id];
+        }
+
+        return ['read' => $read, 'reason' => null, 'read_id' => $read->id];
     }
 
     /** Listing evidence: pass, a known failure (OTC, inactive, non-equity) or unknown. */

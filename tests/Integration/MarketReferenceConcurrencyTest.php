@@ -10,10 +10,19 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 use Tests\Support\ExecutionFixture as E;
+use Tests\Support\IntegrationCleanup;
 use Tests\TestCase;
 
 class MarketReferenceConcurrencyTest extends TestCase
 {
+    private ?int $fixture = null;
+
+    protected function tearDown(): void
+    {
+        IntegrationCleanup::connection($this->fixture);
+        parent::tearDown();
+    }
+
     protected function setUp(): void
     {
         if (getenv('DB_CONNECTION') !== 'pgsql_test') {
@@ -61,11 +70,12 @@ class MarketReferenceConcurrencyTest extends TestCase
     public function test_duplicate_reference_workers_record_one_immutable_row_per_kind_and_states_are_constrained(): void
     {
         [$connection] = E::seed();
+        $this->fixture = $connection->id;
         $ids = $this->race($connection, (string) Str::uuid(), 3);
         $this->assertCount(1, array_unique($ids));
-        $rows = MarketReferenceRead::orderBy('id')->get();
-        $this->assertSame([[$rows[0]->id.','.$rows[1]->id]], [array_values(array_unique($ids))]);
-        $this->assertSame([['DEMO', 'daily_history', 'complete'], ['DEMO', 'listing', 'complete']], $rows->map(fn ($r) => [$r->symbol, $r->kind, $r->status])->all());
+        $rows = MarketReferenceRead::where('mcp_connection_id', $connection->id)->orderBy('id')->get();
+        $this->assertSame([[$rows[0]->id.','.$rows[1]->id.','.$rows[2]->id]], [array_values(array_unique($ids))]);
+        $this->assertSame([['DEMO', 'daily_history', 'complete'], ['DEMO', 'listing', 'complete'], ['SPY', 'daily_history', 'complete']], $rows->map(fn ($r) => [$r->symbol, $r->kind, $r->status])->all());
         $this->assertSame('mcp_trading', DB::selectOne("SELECT schemaname FROM pg_tables WHERE tablename = 'mcp_market_reference_reads'")->schemaname);
         $this->expectException(QueryException::class);
         DB::table('mcp_market_reference_reads')->insert(['mcp_connection_id' => $connection->id, 'scope' => $rows[0]->scope, 'request_id' => (string) Str::uuid(),

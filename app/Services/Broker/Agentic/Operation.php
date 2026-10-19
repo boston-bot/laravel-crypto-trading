@@ -17,6 +17,7 @@ enum Operation: string
     case PriceBook = 'price_book';
     case Watchlists = 'watchlists';
     case WatchlistItems = 'watchlist_items';
+    case EarningsCalendar = 'earnings_calendar';
     case CashFlows = 'cash_flows';
     case History = 'history';
     case Calendar = 'calendar';

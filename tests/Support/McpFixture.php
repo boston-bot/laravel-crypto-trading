@@ -78,6 +78,7 @@ final class McpFixture
             Operation::PriceBook => ['symbol', 'book_bid', 'book_ask', 'book_bid_quantity', 'book_ask_quantity', 'book_quantity_unit'],
             Operation::Watchlists => ['id', 'name', 'owner_type', 'item_count'],
             Operation::WatchlistItems => ['id', 'object_type', 'symbol'],
+            Operation::EarningsCalendar => ['id', 'symbol', 'fiscal_year', 'fiscal_quarter', 'report_date'],
             Operation::CashFlows => ['id', 'account_id', 'amount'],
             Operation::History => ['account_id', 'equity'],
             Operation::Calendar => ['date', 'session_status'],

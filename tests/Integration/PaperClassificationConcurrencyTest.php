@@ -10,10 +10,19 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 use Tests\Support\ExecutionFixture as E;
+use Tests\Support\IntegrationCleanup;
 use Tests\TestCase;
 
 class PaperClassificationConcurrencyTest extends TestCase
 {
+    private ?int $fixture = null;
+
+    protected function tearDown(): void
+    {
+        IntegrationCleanup::connection($this->fixture);
+        parent::tearDown();
+    }
+
     protected function setUp(): void
     {
         if (getenv('DB_CONNECTION') !== 'pgsql_test') {
@@ -61,9 +70,10 @@ class PaperClassificationConcurrencyTest extends TestCase
     public function test_duplicate_classification_workers_record_one_immutable_row_and_states_are_constrained(): void
     {
         [$connection] = E::seed();
+        $this->fixture = $connection->id;
         $ids = $this->race($connection, (string) Str::uuid(), 3);
         $this->assertCount(1, array_unique($ids));
-        $row = InstrumentClassification::sole();
+        $row = InstrumentClassification::where('mcp_connection_id', $connection->id)->sole();
         $this->assertSame([(string) $row->id, 'complete', 'registered_fund_ncen'], [$ids[0], $row->status, $row->basis]);
         $this->assertSame('mcp_trading', DB::selectOne("SELECT schemaname FROM pg_tables WHERE tablename = 'mcp_paper_instrument_classifications'")->schemaname);
         $this->expectException(QueryException::class);

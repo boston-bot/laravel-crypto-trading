@@ -2,6 +2,8 @@
 
 return [
     'rule_eligibility_enabled' => filter_var(env('MCP_RULE_ELIGIBILITY_ENABLED', false), FILTER_VALIDATE_BOOL),
+    // Daily profiles and playbook assignment from stored history. Local computation only; never an entry permission.
+    'symbol_profiles_enabled' => filter_var(env('MCP_SYMBOL_PROFILES_ENABLED', false), FILTER_VALIDATE_BOOL),
     'watchlist_intake_enabled' => filter_var(env('MCP_STRATEGY_WATCHLIST_ENABLED', false), FILTER_VALIDATE_BOOL),
     'market_collection_enabled' => filter_var(env('MCP_PAPER_MARKET_COLLECTION_ENABLED', false), FILTER_VALIDATE_BOOL),
     'corporate_actions_enabled' => filter_var(env('MCP_PAPER_ACTIONS_ENABLED', false), FILTER_VALIDATE_BOOL),

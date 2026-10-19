@@ -35,6 +35,23 @@ final class AlpacaReferenceFixture
         return array_reverse($rows);
     }
 
+    /**
+     * Raw weekday bars for the given closes (in cents, oldest first) ending the New York day before $asOf.
+     * Each bar spans its close ± $halfRangeCents.
+     */
+    public static function series(array $closeCents, int $halfRangeCents = 50, ?CarbonImmutable $asOf = null): array
+    {
+        $rows = self::bars(count($closeCents), asOf: $asOf);
+        $money = fn (int $cents) => intdiv($cents, 100).'.'.str_pad((string) ($cents % 100), 2, '0', STR_PAD_LEFT);
+        foreach ($closeCents as $i => $cents) {
+            $row = json_decode($rows[$i], true);
+            $rows[$i] = sprintf('{"c":%s,"h":%s,"l":%s,"n":1200,"o":%s,"t":"%s","v":500000,"vw":%s}', $money($cents), $money($cents + $halfRangeCents),
+                $money($cents - $halfRangeCents), $money($cents), $row['t'], $money($cents));
+        }
+
+        return $rows;
+    }
+
     /** @param array<string, list<string>> $bars symbol => raw bar objects */
     public static function body(array $bars, ?string $next = null): string
     {

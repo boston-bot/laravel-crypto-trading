@@ -21,4 +21,9 @@ return [
     // A daily refresh keeps history current; older reads are unknown, not reused.
     'history_max_age_hours' => 30,
     'listing_max_age_days' => 7,
+
+    // XNYS session calendar from the same account host. Separately default-off: it drives every session-aware loop.
+    'calendar_enabled' => filter_var(env('ALPACA_CALENDAR_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'calendar_lookback_days' => 7,
+    'calendar_lookahead_days' => 60,
 ];

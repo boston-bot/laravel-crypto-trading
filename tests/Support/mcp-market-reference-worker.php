@@ -18,7 +18,7 @@ TestDatabaseGuard::check($database->getDriverName(), $database->getDatabaseName(
 CarbonImmutable::setTestNow(CarbonImmutable::parse($argv[3]));
 Carbon::setTestNow(CarbonImmutable::parse($argv[3]));
 AlpacaReferenceFixture::enable();
-AlpacaReferenceFixture::fake(fn () => AlpacaReferenceFixture::body(['DEMO' => AlpacaReferenceFixture::bars(260)]), ['DEMO' => AlpacaReferenceFixture::asset('DEMO')]); // Synthetic provider responses; stray requests are rejected.
+AlpacaReferenceFixture::fake(fn () => AlpacaReferenceFixture::body(['DEMO' => AlpacaReferenceFixture::bars(260), 'SPY' => AlpacaReferenceFixture::bars(260)]), ['DEMO' => AlpacaReferenceFixture::asset('DEMO')]); // Synthetic provider responses; stray requests are rejected.
 $connection = McpConnection::findOrFail((int) $argv[1]);
 config(['mcp.operator_emails' => [User::findOrFail($connection->user_id)->email]]);
 echo app(PaperMarketReferences::class)->collect($connection, $connection->user_id, [], $argv[2])->pluck('id')->implode(',');

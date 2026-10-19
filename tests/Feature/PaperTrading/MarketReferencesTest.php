@@ -165,7 +165,9 @@ class MarketReferencesTest extends TestCase
         R::fake(fn () => R::body(['ALFA' => R::bars(260, '100.25', '500001'), 'DEMO' => R::bars(19)]), ['ALFA' => R::asset('ALFA'), 'DEMO' => R::asset('DEMO', 'OTC')]);
         $request = (string) Str::uuid();
         $rows = app(PaperMarketReferences::class)->collect($this->connection, $this->connection->user_id, [], $request);
-        $this->assertCount(4, $rows);
+        // Two kinds per universe symbol, plus the benchmark's history (absent from this body, so recorded incomplete).
+        $this->assertCount(5, $rows);
+        $this->assertSame(['SPY', 'daily_history', 'incomplete', 'no_bars_returned'], [$rows[4]->symbol, $rows[4]->kind, $rows[4]->status, $rows[4]->reason]);
         $history = $rows->first(fn ($row) => $row->symbol === 'ALFA' && $row->kind === 'daily_history');
         $this->assertSame(['complete', 'daily_history_recorded', DailyBars::CONTRACT], [$history->status, $history->reason, $history->contract]);
         $this->assertSame(['sessions' => 260, 'first_session' => '2025-10-20', 'last_session' => '2026-10-16', 'average_dollar_volume_20' => '50125100.25',
@@ -192,7 +194,7 @@ class MarketReferencesTest extends TestCase
         $this->travel(1)->hours();
         R::fake(fn () => R::body([]), ['ALFA' => 503]);
         $rows = app(PaperMarketReferences::class)->collect($this->connection, $this->connection->user_id, ['ALFA'], (string) Str::uuid());
-        $this->assertSame([['incomplete', 'no_bars_returned'], ['incomplete', 'http_failure']], $rows->map(fn ($row) => [$row->status, $row->reason])->all());
+        $this->assertSame([['incomplete', 'no_bars_returned'], ['incomplete', 'http_failure'], ['incomplete', 'no_bars_returned']], $rows->map(fn ($row) => [$row->status, $row->reason])->all());
         $references = app(PaperMarketReferences::class);
         $this->assertTrue($references->history($this->connection, 'ALFA', CarbonImmutable::now())['verified']);
         $this->assertSame('pass', $references->listing($this->connection, 'ALFA', CarbonImmutable::now())['status']);
@@ -251,11 +253,12 @@ class MarketReferencesTest extends TestCase
         }
         Http::assertNothingSent();
         R::enable();
-        $this->assertSame(4, app(PaperMarketReferences::class)->tick());
-        $this->assertSame(4, app(PaperMarketReferences::class)->tick());
-        $this->assertSame(4, MarketReferenceRead::count());
+        $this->assertSame(5, app(PaperMarketReferences::class)->tick());
+        $this->assertSame(5, app(PaperMarketReferences::class)->tick());
+        $this->assertSame(5, MarketReferenceRead::count());
+        $this->assertSame(1, MarketReferenceRead::where('symbol', 'SPY')->count());
         $this->artisan('mcp:market-reference', ['--account' => $this->connection->id, '--symbol' => ['ALFA']])
             ->expectsOutputToContain('"kind":"listing"')->assertSuccessful();
-        $this->artisan('mcp:market-reference', ['--scheduled' => true])->expectsOutputToContain('Recorded market reference reads: 4')->assertSuccessful();
+        $this->artisan('mcp:market-reference', ['--scheduled' => true])->expectsOutputToContain('Recorded market reference reads: 5')->assertSuccessful();
     }
 }

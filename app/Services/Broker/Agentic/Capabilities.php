@@ -85,6 +85,9 @@ final class Capabilities
             if (in_array($operation, ['watchlists', 'watchlist_items'], true) && ! config('robinhood_mcp.watchlists_enabled')) {
                 continue;
             }
+            if ($operation === 'earnings_calendar' && ! config('robinhood_mcp.earnings_enabled')) {
+                continue;
+            }
             if (($profile['reviewed_read_only'] ?? false) && (($tools[$profile['tool']]['fingerprint'] ?? null) !== ($profile['fingerprint'] ?? null) ||
                 (isset($profile['semantic_fingerprint']) && ($tools[$profile['tool']]['semantic_fingerprint'] ?? null) !== $profile['semantic_fingerprint']))) {
                 $changed = true;
@@ -111,6 +114,9 @@ final class Capabilities
             throw new ReadFailure(ReadError::Disabled);
         }
         if (in_array($operation, [Operation::Watchlists, Operation::WatchlistItems], true) && ! config('robinhood_mcp.watchlists_enabled')) {
+            throw new ReadFailure(ReadError::Disabled);
+        }
+        if ($operation === Operation::EarningsCalendar && ! config('robinhood_mcp.earnings_enabled')) {
             throw new ReadFailure(ReadError::Disabled);
         }
         $profile = config('robinhood_mcp.operations.'.$operation->value);

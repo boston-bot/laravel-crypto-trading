@@ -5,6 +5,7 @@ return [
     'reference_data_enabled' => filter_var(env('ROBINHOOD_MCP_REFERENCE_DATA_ENABLED', false), FILTER_VALIDATE_BOOL),
     'execution_inputs_enabled' => filter_var(env('ROBINHOOD_MCP_EXECUTION_INPUTS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'watchlists_enabled' => filter_var(env('ROBINHOOD_MCP_WATCHLISTS_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'earnings_enabled' => filter_var(env('ROBINHOOD_MCP_EARNINGS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'client_id' => env('ROBINHOOD_MCP_CLIENT_ID'),
     'redirect_uri' => env('ROBINHOOD_MCP_REDIRECT_URI'),
     'max_pages' => 20,
@@ -63,6 +64,15 @@ return [
             'filters' => ['list_id' => 'list_id'], 'required_filter' => 'list_id',
             'records' => 'data.items', 'pagination' => ['kind' => 'single'],
             'normalizer' => 'robinhood_v1', 'coverage' => 'authorized_user_watchlist_items',
+        ],
+        // Reviewed October 19, 2026 from the app-owned catalog's full metadata and one bounded owner-run read.
+        // Market-wide (all names when no filter), up to 31 days, one row per company-quarter. Not account-scoped.
+        'earnings_calendar' => [
+            'tool' => 'get_earnings_calendar', 'reviewed_read_only' => true,
+            'fingerprint' => 'b0e03b8395d0b0c8818e9085edffe8816254b752e005466e9d161967b3fa443b',
+            'arguments' => ['days' => 31], 'filters' => ['start_date' => 'start_date'], 'required_filter' => 'start_date',
+            'records' => 'data.results', 'pagination' => ['kind' => 'single'], 'normalizer' => 'robinhood_v1',
+            'coverage' => 'market_wide_earnings_calendar_all_names_31_days',
         ],
         // Reviewed against the app-authorized catalog on October 16, 2026.
         'accounts' => [

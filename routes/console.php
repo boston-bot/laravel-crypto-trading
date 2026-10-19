@@ -15,9 +15,12 @@ use App\Jobs\SyncRobinhoodOrdersJob;
 use App\Jobs\SyncRobinhoodPositionsJob;
 use App\Models\McpConnection;
 use App\Models\User;
+use App\Services\Monitoring\MarketCalendarSync;
 use App\Services\Monitoring\MonitoringScheduler;
 use App\Services\PaperTrading\DecisionScheduler;
+use App\Services\PaperTrading\EarningsCalendar;
 use App\Services\PaperTrading\StrategyWatchlists;
+use App\Services\PaperTrading\SymbolProfiles;
 use App\Services\Research\ResearchScheduler;
 use App\Services\Research\ResearchSummaries;
 use App\Support\Mcp\DatabaseReadiness;
@@ -25,6 +28,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
+use Illuminate\Support\Str;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -171,9 +175,79 @@ if (config('sec_edgar.enabled') && config('paper.market_collection_enabled')) {
     Schedule::command('mcp:instrument-classification --scheduled')->dailyAt('06:20')->timezone('America/New_York')->withoutOverlapping(60);
 }
 
+Artisan::command('mcp:market-calendar', function (): int {
+    if (! config('alpaca_data.enabled') || ! config('alpaca_data.calendar_enabled')) {
+        $this->error('Market calendar reads are disabled.');
+
+        return 1;
+    }
+    $outcome = app(MarketCalendarSync::class)->sync();
+    $this->line(json_encode($outcome, JSON_THROW_ON_ERROR));
+
+    return $outcome['error'] === null && $outcome['conflicts'] === [] ? 0 : 1;
+})->purpose('Refresh stored XNYS sessions from a complete read-only provider calendar; conflicting sessions are reported, not overwritten');
+
+// Session data expires after seven days; a daily refresh keeps the next sixty days known.
+if (config('alpaca_data.enabled') && config('alpaca_data.calendar_enabled')) {
+    Schedule::command('mcp:market-calendar')->dailyAt('06:10')->timezone('America/New_York')->withoutOverlapping(30);
+}
+
 // Listing and split-adjusted daily history refresh once a day, after overnight provider updates and before the open.
 if (config('alpaca_data.enabled') && config('alpaca_data.reference_enabled') && config('paper.market_collection_enabled')) {
     Schedule::command('mcp:market-reference --scheduled')->dailyAt('06:40')->timezone('America/New_York')->withoutOverlapping(60);
+}
+
+Artisan::command('mcp:symbol-profiles {--account= : Local operator-owned connection ID} {--symbol=* : Symbols in the selected universe; default all} {--scheduled}', function (): int {
+    if ($this->option('scheduled')) {
+        $this->line('Recorded symbol profiles: '.app(SymbolProfiles::class)->tick());
+
+        return 0;
+    }
+    $operators = User::whereIn('email', config('mcp.operator_emails'))->pluck('id');
+    $connection = McpConnection::whereIn('user_id', $operators)->whereKey($this->option('account'))->whereNotNull('bound_account_id')->first();
+    if (! $connection || ! config('paper.symbol_profiles_enabled')) {
+        $this->error($connection ? 'Symbol profiles are disabled.' : 'Select an operator-owned bound connection.');
+
+        return 1;
+    }
+    foreach (app(SymbolProfiles::class)->record($connection, $connection->user_id, $this->option('symbol'), (string) Str::uuid()) as $profile) {
+        // Facts only; indicator values and history stay in the encrypted record.
+        $this->line(json_encode(['symbol' => $profile->symbol, 'session_date' => $profile->session_date?->toDateString(), 'status' => $profile->status,
+            'setup' => $profile->setup, 'reason' => $profile->reason, 'entry_blockers' => $profile->payload['entry_blockers'] ?? [],
+            'levels' => $profile->payload['levels'] ?? null], JSON_THROW_ON_ERROR));
+    }
+
+    return 0;
+})->purpose('Record daily symbol profiles and playbook assignments from stored history; no network, order or policy change');
+
+Artisan::command('mcp:earnings-calendar {--account= : Local operator-owned connection ID} {--scheduled}', function (): int {
+    if ($this->option('scheduled')) {
+        $this->line('Recorded earnings calendars: '.app(EarningsCalendar::class)->tick());
+
+        return 0;
+    }
+    $operators = User::whereIn('email', config('mcp.operator_emails'))->pluck('id');
+    $connection = McpConnection::whereIn('user_id', $operators)->whereKey($this->option('account'))->whereNotNull('bound_account_id')->first();
+    if (! $connection || ! config('robinhood_mcp.earnings_enabled')) {
+        $this->error($connection ? 'Earnings calendar reads are disabled.' : 'Select an operator-owned bound connection.');
+
+        return 1;
+    }
+    $read = app(EarningsCalendar::class)->collect($connection, $connection->user_id, (string) Str::uuid());
+    $this->line(json_encode(['status' => $read->status, 'reason' => $read->reason, 'start_date' => $read->start_date->toDateString(),
+        'days' => $read->days, 'events' => $read->event_count, 'retrieved_at' => $read->retrieved_at->toIso8601String()], JSON_THROW_ON_ERROR));
+
+    return $read->status === 'complete' ? 0 : 1;
+})->purpose('Record the read-only market-wide Robinhood earnings calendar (31 days); no order, account or policy change');
+
+// Earnings dates refresh before the 06:50 profiles, which apply the entry blackout.
+if (config('robinhood_mcp.earnings_enabled') && config('paper.market_collection_enabled')) {
+    Schedule::command('mcp:earnings-calendar --scheduled')->dailyAt('06:30')->timezone('America/New_York')->withoutOverlapping(30);
+}
+
+// Profiles follow the 06:40 reference refresh; they read stored history only.
+if (config('paper.symbol_profiles_enabled')) {
+    Schedule::command('mcp:symbol-profiles --scheduled')->dailyAt('06:50')->timezone('America/New_York')->withoutOverlapping(30);
 }
 
 if (config('paper.decisions_enabled')) {

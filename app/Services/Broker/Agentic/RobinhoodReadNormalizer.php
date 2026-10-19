@@ -41,8 +41,28 @@ final class RobinhoodReadNormalizer
                 'owner_type' => $row['owner_type'] ?? null, 'item_count' => $row['item_count'] ?? null],
             Operation::WatchlistItems => ['id' => $row['object_id'] ?? null, 'object_type' => $row['object_type'] ?? null,
                 'symbol' => $row['symbol'] ?? null],
+            Operation::EarningsCalendar => self::earnings($row),
             default => throw new ReadFailure(ReadError::Unsupported),
         };
+    }
+
+    /** One company-quarter report event. Unknown timing values, malformed dates or quarters refuse the whole read. */
+    private static function earnings(array $row): array
+    {
+        $report = $row['report'] ?? null;
+        $eps = $row['eps'] ?? null;
+        if (! is_string($row['symbol'] ?? null) || ! is_int($row['year'] ?? null) || $row['year'] < 1990 || $row['year'] > 2100
+            || ! is_int($row['quarter'] ?? null) || $row['quarter'] < 1 || $row['quarter'] > 4 || ! is_array($eps)
+            || ($report !== null && (! is_array($report) || ! is_string($report['date'] ?? null) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $report['date'])
+                || ! in_array($report['timing'] ?? null, ['am', 'pm', null], true) || ! is_bool($report['verified'] ?? null)))) {
+            throw new ReadFailure(ReadError::Malformed);
+        }
+
+        // Company-quarter-date identity. Two dates for one company both count and the earliest governs the blackout;
+        // an exact repeat of the same event is ambiguous and refuses the read.
+        return ['id' => $row['symbol'].':'.$row['year'].':Q'.$row['quarter'].':'.($report['date'] ?? 'unscheduled'), 'symbol' => $row['symbol'], 'fiscal_year' => $row['year'],
+            'fiscal_quarter' => $row['quarter'], 'eps_estimate' => $eps['estimate'] ?? null, 'eps_actual' => $eps['actual'] ?? null,
+            'report_date' => $report['date'] ?? null, 'report_timing' => $report['timing'] ?? null, 'report_verified' => $report['verified'] ?? null];
     }
 
     private static function classification(array $row): array

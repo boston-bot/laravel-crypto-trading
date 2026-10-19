@@ -121,7 +121,10 @@ final class RobinhoodGateway implements BrokerGateway
                 Arr::set($arguments, $profile['filters']['symbol'], $symbols);
             }
             foreach ($filters as $key => $value) {
-                if (! in_array($key, ['symbol', 'instrument_id', 'order_id', 'list_id'], true) || ! isset($profile['filters'][$key]) || ! is_string($value) || $value === '' || strlen($value) > 128) {
+                if (! in_array($key, ['symbol', 'instrument_id', 'order_id', 'list_id', 'start_date'], true) || ! isset($profile['filters'][$key]) || ! is_string($value) || $value === '' || strlen($value) > 128) {
+                    throw new ReadFailure(ReadError::Malformed);
+                }
+                if ($key === 'start_date' && ! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $value)) {
                     throw new ReadFailure(ReadError::Malformed);
                 }
                 Arr::set($arguments, $profile['filters'][$key], in_array($key, $profile['array_filters'] ?? [], true) ? [$value] : $value);

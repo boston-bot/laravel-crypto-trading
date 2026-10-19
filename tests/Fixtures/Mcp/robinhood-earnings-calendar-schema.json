@@ -1,0 +1,126 @@
+{
+  "reviewed_on": "2026-10-19",
+  "scope": "Functional schema only (descriptions stripped as stored by the app). No responses, identifiers or credentials.",
+  "tool": {
+    "name": "get_earnings_calendar",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "start_date": {
+          "type": "string"
+        },
+        "days": {
+          "type": "integer"
+        },
+        "filter": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "results": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": [
+                  "null",
+                  "object"
+                ],
+                "properties": {
+                  "symbol": {
+                    "type": "string"
+                  },
+                  "year": {
+                    "type": "integer"
+                  },
+                  "quarter": {
+                    "type": "integer"
+                  },
+                  "eps": {
+                    "type": "object",
+                    "properties": {
+                      "estimate": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      },
+                      "actual": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "estimate",
+                      "actual"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "report": {
+                    "type": [
+                      "null",
+                      "object"
+                    ],
+                    "properties": {
+                      "date": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      },
+                      "timing": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      },
+                      "verified": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "date",
+                      "timing",
+                      "verified"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "symbol",
+                  "year",
+                  "quarter",
+                  "eps",
+                  "report"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "results"
+          ],
+          "additionalProperties": false
+        },
+        "guide": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "data",
+        "guide"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
