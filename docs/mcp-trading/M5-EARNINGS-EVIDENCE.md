@@ -37,7 +37,7 @@ The five real sample rows pass the pinned output schema, the new normalizer and 
 - a boolean confirmation flag
 - exact EPS decimals
 
-Any other value refuses the whole calendar. Events are keyed by company, fiscal quarter and report date: two dates for one company are both kept, and an exact repeated event refuses the read. The live sample had four symbols with two events in 7 days, so keying by company-quarter alone could have refused every real read.
+Any other value refuses the whole calendar. Events are keyed by company, fiscal quarter and report date; two dates for one company are both kept, and the earliest decides the blackout. Repeats of the same key are passed to `EarningsCalendar`, which merges them to the cautious side (see "First live run" below).
 
 **Records.** `EarningsCalendar::collect` stores one immutable encrypted market-wide record per request in `mcp_earnings_calendar_reads`: start date, days, status, reason, event count and normalized events. Broker guide text is never stored. The network read happens outside transactions, and the record is written under a fresh operator, binding and authorization check. A failed read is stored `incomplete` and never hides or extends the last complete calendar. `php artisan mcp:earnings-calendar --account=<id>` runs a read; `--scheduled` is the idempotent daily refresh, at 06:30 New York when `ROBINHOOD_MCP_EARNINGS_ENABLED` and `MCP_PAPER_MARKET_COLLECTION_ENABLED` are on.
 
@@ -50,18 +50,33 @@ Any other value refuses the whole calendar. Events are keyed by company, fiscal 
 
 **Profiles.** When the earnings gate is on, profiles take this result. `earnings_date_unknown` is replaced by no blocker (`pass`), `earnings_blackout` (`blocked`), or stays `earnings_date_unknown` (unknown). The calculator version is now `swing_profile_v2`, and the earnings read ID is part of each profile's fingerprint evidence. Exit timing ("last session before a known report") can use `next_report` in the later signal step.
 
+## First live run and the merge rule
+
+After deployment, the first runtime read (2026-10-19 14:55 UTC, owner-run) was recorded `incomplete` (`incomplete_pagination`). It failed closed: profiles stayed `earnings_date_unknown`. An owner-run read-only diagnostic of the same 31-day window found 4,875 rows, no null or unscheduled rows, and 207 repeated company-quarter-date keys. 102 were identical copies; 105 conflicted, always on the same date, in EPS estimate, timing (`am` versus unknown) or confirmation. Examples: HON had two estimates, one confirmed and one tentative; TTE had `am` and unknown timing.
+
+Refusing the calendar on repeats would therefore fail every day. The profile now hands repeats to `EarningsCalendar` (`repeated_records = caller_merges`; every other profile keeps the gateway's duplicate refusal), which merges each group into one event:
+- **Timing:** the shared value, otherwise unknown (the blackout's worst case).
+- **Confirmed:** only if every copy is confirmed.
+- **Estimate:** the shared value, otherwise unknown.
+- **Actual:** the shared value, otherwise unknown, so the event is still treated as not yet reported and keeps blocking.
+
+Each record stores the raw row count, repeated events, conflicting events and a per-event source count. Malformed rows still refuse the whole calendar.
+
+The same investigation exposed a test-only clock issue. The gateway stamped reads with PHP's wall clock instead of Laravel's, so tests frozen at 14:00 UTC failed once the real time passed 14:00. Reads now use Laravel's clock, which is identical in production.
+
 ## Verification
 
 | Check | Result |
 |---|---|
-| Full SQLite | **458 passed / 3,299 assertions, 31 PostgreSQL-only skips** |
-| Full PostgreSQL | **488 passed / 3,586 assertions, 1 existing PHP-FPM environment skip** |
+| Full SQLite (after the merge rule) | **459 passed / 3,302 assertions, 31 PostgreSQL-only skips** |
+| Full PostgreSQL (after the merge rule) | **489 passed / 3,589 assertions, 1 existing PHP-FPM environment skip** |
 | `composer validate`, Pint, `git diff --check` | Passed |
 | Real sample contract check (offline) | Output schema valid; five rows normalized |
 
-`EarningsCalendarTest` (6 tests / 55 assertions) covers:
+`EarningsCalendarTest` (7 tests / 58 assertions) covers:
 - the pinned fingerprint against the schema fixture, the exact arguments, encrypted immutable storage, and no other tools called
-- five malformed or ambiguous row cases refusing the read, while two dates for one company keep the earliest
+- four malformed row cases refusing the read, while two dates for one company keep the earliest
+- conservative merging of identical and conflicting repeats, including a partially reported event that still blocks
 - blackout by trading sessions across a weekend, with tentative and untimed reports, already-reported and same-day reports, and unscheduled and absent symbols
 - missing, point-in-time, stale and calendar-unknown cases, and a failed refresh
 - gates, operator scope, idempotency and the command
@@ -71,7 +86,7 @@ The calculator and profile suites were updated for the new parameter.
 
 ## Limits
 
-- **No end-to-end live read through the new code.** The new code was not run against the live server (the development app has no broker connection, and runtime reads need the owner); the contract comes from the owner-run review. The first runtime refresh will show whether real responses ever contain exact repeated events, which would be recorded as `incomplete`, failing closed.
+- **Merge rule not yet confirmed live:** the first deployed read failed closed on repeated events. The merge rule needs redeployment and one more live read to confirm a `complete` record.
 - **Coverage is Robinhood's.** "All names" is the provider's statement: a missing symbol is treated as nothing scheduled within the window, the documented meaning. ETFs normally have no earnings events.
 - **Exits not built yet:** exits before a report and signal-time rechecks belong to the signal step.
 - **Not used yet:** `get_earnings_results` (per-ticker history) and `get_equity_historicals`.

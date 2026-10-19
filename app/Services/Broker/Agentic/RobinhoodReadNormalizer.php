@@ -59,7 +59,7 @@ final class RobinhoodReadNormalizer
         }
 
         // Company-quarter-date identity. Two dates for one company both count and the earliest governs the blackout;
-        // an exact repeat of the same event is ambiguous and refuses the read.
+        // repeats of the same identity are merged conservatively by EarningsCalendar.
         return ['id' => $row['symbol'].':'.$row['year'].':Q'.$row['quarter'].':'.($report['date'] ?? 'unscheduled'), 'symbol' => $row['symbol'], 'fiscal_year' => $row['year'],
             'fiscal_quarter' => $row['quarter'], 'eps_estimate' => $eps['estimate'] ?? null, 'eps_actual' => $eps['actual'] ?? null,
             'report_date' => $report['date'] ?? null, 'report_timing' => $report['timing'] ?? null, 'report_verified' => $report['verified'] ?? null];

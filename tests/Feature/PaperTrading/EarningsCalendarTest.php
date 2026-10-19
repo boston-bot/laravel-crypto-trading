@@ -84,7 +84,7 @@ class EarningsCalendarTest extends TestCase
             fn ($params) => $this->assertSame(['days' => 31, 'start_date' => '2026-10-19'], $params['arguments']));
         $read = $this->collect();
         $this->assertSame(['complete', 'earnings_calendar_recorded', 2, '2026-10-19', 31], [$read->status, $read->reason, $read->event_count, $read->start_date->toDateString(), $read->days]);
-        $this->assertSame(['ALFA', 2026, 3, '2026-10-21', 'am', false, '1.250000', null], $read->payload['events'][0]);
+        $this->assertSame(['ALFA', 2026, 3, '2026-10-21', 'am', false, '1.250000', null, 1], $read->payload['events'][0]);
         $this->assertSame('0.280000', $read->payload['events'][1][7]);
         $this->assertArrayNotHasKey('guide', $read->payload);
         $this->assertStringNotContainsString('ALFA', DB::table('mcp_earnings_calendar_reads')->value('payload'));
@@ -96,7 +96,6 @@ class EarningsCalendarTest extends TestCase
     public function test_ambiguous_or_malformed_rows_refuse_the_whole_calendar(): void
     {
         $cases = [
-            'repeated event' => [$this->event('ALFA', '2026-10-21'), $this->event('ALFA', '2026-10-21', 'am')],
             'null row' => [$this->event('ALFA', '2026-10-21'), null],
             'unreviewed timing' => [$this->event('ALFA', '2026-10-21', 'midday')],
             'malformed date' => [$this->event('ALFA', '21/10/2026')],
@@ -113,6 +112,25 @@ class EarningsCalendarTest extends TestCase
         $this->fake([$this->event('ALFA', '2026-11-10', quarter: 4), $this->event('ALFA', '2026-10-30'), $this->event('ALFA', '2026-10-22', verified: false)]);
         $this->assertSame('complete', $this->collect()->status);
         $this->assertSame(['blocked', '2026-10-22'], [$this->blackout('ALFA')['status'], $this->blackout('ALFA')['next_report']['date']]);
+    }
+
+    public function test_repeated_events_merge_to_the_cautious_side_instead_of_refusing_the_calendar(): void
+    {
+        $confirmed = $this->event('HONX', '2026-10-22', 'am');
+        $tentative = array_replace_recursive($this->event('HONX', '2026-10-22', null, false), ['eps' => ['estimate' => '2.710000']]);
+        $copy = $this->event('COPY', '2026-11-02');
+        $reported = $this->event('MIXD', '2026-10-19', 'am', true, '0.500000');
+        $this->fake([$confirmed, $tentative, $copy, $copy, $reported, $this->event('MIXD', '2026-10-19', 'am')]);
+        $read = $this->collect();
+        $this->assertSame(['complete', 3, 6, 3, 2], [$read->status, $read->event_count, $read->payload['rows'], $read->payload['repeated_events'], $read->payload['conflicting_events']]);
+        $events = array_column($read->payload['events'], null, 0);
+        // Timing and estimate disagree: unknown. One copy is tentative: not confirmed.
+        $this->assertSame(['HONX', 2026, 3, '2026-10-22', null, false, null, null, 2], $events['HONX']);
+        $this->assertSame(['COPY', 2026, 3, '2026-11-02', 'pm', true, '1.250000', null, 2], $events['COPY']);
+        // Only one copy has an actual: the event is still treated as not yet reported, so it blocks entries today.
+        $this->assertNull($events['MIXD'][7]);
+        $this->assertSame('blocked', $this->blackout('MIXD')['status']);
+        $this->assertSame(['blocked', null], [$this->blackout('HONX')['status'], $this->blackout('HONX')['next_report']['timing']]);
     }
 
     public function test_blackout_counts_trading_sessions_and_treats_tentative_or_untimed_reports_as_real(): void

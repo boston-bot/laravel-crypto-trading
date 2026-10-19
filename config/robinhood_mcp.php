@@ -73,6 +73,9 @@ return [
             'arguments' => ['days' => 31], 'filters' => ['start_date' => 'start_date'], 'required_filter' => 'start_date',
             'records' => 'data.results', 'pagination' => ['kind' => 'single'], 'normalizer' => 'robinhood_v1',
             'coverage' => 'market_wide_earnings_calendar_all_names_31_days',
+            // The live 31-day calendar repeats about 4% of company-quarter-date events, often with differing estimates,
+            // timing or confirmation. EarningsCalendar merges them conservatively instead of refusing the calendar.
+            'repeated_records' => 'caller_merges',
         ],
         // Reviewed against the app-authorized catalog on October 16, 2026.
         'accounts' => [

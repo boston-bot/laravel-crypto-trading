@@ -101,7 +101,7 @@ final class RobinhoodGateway implements BrokerGateway
         $cursor = null;
         $seen = [];
         $pages = 0;
-        $retrieved = new DateTimeImmutable;
+        $retrieved = now()->toDateTimeImmutable();
         try {
             if ($shared) {
                 [$session, $manifest] = $this->scopedSession($connection);
@@ -233,7 +233,8 @@ final class RobinhoodGateway implements BrokerGateway
                         throw new ReadFailure(ReadError::AccountMismatch);
                     }
                     $id = $record->fields['id'] ?? (isset($record->fields['symbol']) ? $record->fields['symbol'].':'.($record->fields['position_type'] ?? '') : null);
-                    if ($id !== null) {
+                    // A reviewed profile may hand repeated records to its caller, which must merge them explicitly.
+                    if ($id !== null && ($profile['repeated_records'] ?? null) !== 'caller_merges') {
                         if (isset($seen['record:'.$id])) {
                             throw new ReadFailure(ReadError::Incomplete);
                         }
@@ -273,7 +274,7 @@ final class RobinhoodGateway implements BrokerGateway
                 throw new ReadFailure(ReadError::AccountMismatch);
             }
 
-            return new ReadResult(TrustedHttp::RESOURCE, new DateTimeImmutable, $records, true, null, null, $pages, $profile['coverage'] ?? 'configured_operation');
+            return new ReadResult(TrustedHttp::RESOURCE, now()->toDateTimeImmutable(), $records, true, null, null, $pages, $profile['coverage'] ?? 'configured_operation');
         } catch (ReadFailure $failure) {
             $this->recordError($connection, $failure);
             if ($failure->reason === ReadError::RateLimited) {

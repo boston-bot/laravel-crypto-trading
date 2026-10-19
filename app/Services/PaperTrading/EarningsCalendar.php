@@ -50,13 +50,24 @@ final class EarningsCalendar
             if ($result->source !== TrustedHttp::RESOURCE || ! $result->complete || $result->continuation !== null) {
                 throw new ReadFailure($result->incompleteReason ?? ReadError::Incomplete);
             }
+            $groups = [];
             foreach ($result->records as $record) {
                 if ($record->operation !== Operation::EarningsCalendar) {
                     throw new ReadFailure(ReadError::Malformed);
                 }
                 $f = $record->fields;
-                $read['events'][] = [$f['symbol'], $f['fiscal_year'], $f['fiscal_quarter'], $f['report_date'], $f['report_timing'], $f['report_verified'],
+                $groups[$f['id']][] = [$f['symbol'], $f['fiscal_year'], $f['fiscal_quarter'], $f['report_date'], $f['report_timing'], $f['report_verified'],
                     isset($f['eps_estimate']) ? (string) $f['eps_estimate'] : null, isset($f['eps_actual']) ? (string) $f['eps_actual'] : null];
+            }
+            $read['rows'] = count($result->records);
+            $read['repeated_events'] = 0;
+            $read['conflicting_events'] = 0;
+            foreach ($groups as $rows) {
+                $read['events'][] = self::merge($rows);
+                if (count($rows) > 1) {
+                    $read['repeated_events']++;
+                    $read['conflicting_events'] += count(array_unique(array_map('serialize', $rows))) > 1 ? 1 : 0;
+                }
             }
             $read['complete'] = true;
         } catch (ReadFailure $failure) {
@@ -79,6 +90,22 @@ final class EarningsCalendar
                 'payload' => $read + ['mode' => 'paper_reference_evidence', 'broker_executable' => false],
                 'retrieved_at' => CarbonImmutable::parse($read['retrieved_at']), 'recorded_at' => now()]);
         });
+    }
+
+    /**
+     * One event from repeats sharing company, quarter and report date. Disagreements resolve to the cautious side:
+     * unknown timing, unconfirmed, unknown estimate, and not yet reported unless every copy agrees on the actual.
+     */
+    public static function merge(array $rows): array
+    {
+        $field = function (int $index) use ($rows) {
+            $values = array_unique(array_map(fn ($row) => serialize($row[$index]), $rows));
+
+            return count($values) === 1 ? $rows[0][$index] : null;
+        };
+
+        return [$rows[0][0], $rows[0][1], $rows[0][2], $rows[0][3], $field(4),
+            ! in_array(false, array_map(fn ($row) => $row[5] === true, $rows), true), $field(6), $field(7), count($rows)];
     }
 
     /** Daily idempotent refresh for each bound operator connection. */
@@ -132,7 +159,7 @@ final class EarningsCalendar
             return ['status' => 'unavailable', 'reason' => 'earnings_window_too_short', 'read_id' => $read->id];
         }
         $next = null;
-        foreach ($read->payload['events'] as [$eventSymbol, $year, $quarter, $date, $timing, $verified, $estimate, $actual]) {
+        foreach ($read->payload['events'] as [$eventSymbol, $year, $quarter, $date, $timing, $verified, , $actual]) {
             // An event is upcoming until it reports an actual EPS; today's report counts even if timed before the open.
             if ($eventSymbol !== $symbol || $date === null || $actual !== null || $date < $today->toDateString()) {
                 continue;
