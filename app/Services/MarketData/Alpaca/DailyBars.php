@@ -29,7 +29,7 @@ final class DailyBars
     public function readMany(array $symbols, CarbonImmutable $asOf, ?int $lookbackDays = null): array
     {
         $end = $asOf->setTimezone('America/New_York')->startOfDay()->subDay();
-        $start = $end->subDays(max(1, min(2200, $lookbackDays ?? (int) config('alpaca_data.history_lookback_days'))));
+        $start = $end->subDays(max(1, min(2400, $lookbackDays ?? (int) config('alpaca_data.history_lookback_days'))));
         $base = ['provider' => self::URL, 'contract' => self::CONTRACT, 'feed' => 'sip', 'adjustment' => 'split', 'timeframe' => '1Day',
             'start' => $start->toDateString(), 'end' => $end->toDateString(), 'retrieved_at' => null, 'complete' => false, 'error' => null,
             'bars' => [], 'requests' => 0];

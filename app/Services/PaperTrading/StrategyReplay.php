@@ -15,7 +15,7 @@ use Brick\Math\RoundingMode;
  */
 final class StrategyReplay
 {
-    public const VERSION = 'daily_replay_v1';
+    public const VERSION = 'daily_replay_v2';
 
     /** Bars per profile, matching the live 400-calendar-day history window (about 275 sessions). */
     public const LIVE_WINDOW = 275;
@@ -26,7 +26,7 @@ final class StrategyReplay
      * @param  array<string, list<array>>  $bars  symbol => [date, o, h, l, c, v, vw, n] oldest first
      * @param  list<array>  $benchmark  benchmark bars; its dates are the replay's trading sessions
      */
-    public function run(array $bars, array $benchmark, array $p, array $settings, string $equity): array
+    public function run(array $bars, array $benchmark, array $p, array $settings, string $equity, ?string $startDate = null, ?string $endDate = null): array
     {
         ksort($bars);
         $dates = array_column($benchmark, 0);
@@ -61,6 +61,10 @@ final class StrategyReplay
         };
         for ($i = $first; $i < count($dates); $i++) {
             [$date, $prev] = [$dates[$i], $dates[$i - 1]];
+            // Earlier bars only warm the profiles; they never create positions or performance.
+            if (($startDate !== null && $date < $startDate) || ($endDate !== null && $date > $endDate)) {
+                continue;
+            }
             $bench = array_slice($benchmark, max(0, $i - self::LIVE_WINDOW), min($i, self::LIVE_WINDOW));
             $profiles = [];
             foreach ($bars as $symbol => $series) {
@@ -68,8 +72,13 @@ final class StrategyReplay
                 $profiles[$symbol] = $at === null ? null
                     : $this->profiles->compute(array_slice($series, max(0, $at - self::LIVE_WINDOW + 1), min($at + 1, self::LIVE_WINDOW)), $bench, $p, ['status' => 'pass', 'reason' => 'not_reconstructed_in_replay']);
             }
-            $equityNow = $this->mark($cash, $positions, $lastClose);
-            // Exits first, at the open, then intraday stops.
+            $marks = $lastClose;
+            foreach ($bars as $symbol => $series) {
+                if (isset($index[$symbol][$date])) {
+                    $marks[$symbol] = $series[$index[$symbol][$date]][1];
+                }
+            }
+            // Only opening exits have known precedence over this session's entries.
             foreach ($positions as $symbol => $position) {
                 $bar = isset($index[$symbol][$date]) ? $bars[$symbol][$index[$symbol][$date]] : null;
                 if ($bar === null) {
@@ -77,61 +86,76 @@ final class StrategyReplay
                 }
                 $profile = ($profiles[$symbol]['status'] ?? null) === 'complete' ? $profiles[$symbol] : null;
                 $atOpen = $this->rules->exit($bar[1], $position + ['latched_exit_signal_id' => null], $profile, ['status' => 'pass'], $p);
-                $stop = Decimal::from($position['initial_stop'])->compareTo(Decimal::from($position['trailing_stop'])) >= 0 ? $position['initial_stop'] : $position['trailing_stop'];
-                [$price, $reason] = $atOpen['status'] === 'signal' ? [$bar[1], $atOpen['reason']]
-                    : (Decimal::from($bar[3])->compareTo(Decimal::from($stop)) <= 0 ? [$stop, 'intraday_stop_hit'] : [null, null]);
-                if ($price !== null) {
-                    $sell($symbol, $position, $price, $reason, $date, $i);
+                if ($atOpen['status'] === 'signal') {
+                    $sell($symbol, $position, $bar[1], $atOpen['reason'], $date, $i);
                     unset($positions[$symbol]);
                 }
             }
             if (in_array('market_filter_off', $profiles[array_key_first($profiles)]['entry_blockers'] ?? [], true)) {
                 $counts['market_filter_off_days']++;
             }
-            foreach ($bars as $symbol => $series) {
-                $profile = $profiles[$symbol];
-                $bar = isset($index[$symbol][$date]) ? $series[$index[$symbol][$date]] : null;
-                if (($profile['status'] ?? null) !== 'complete' || ! in_array($profile['setup'], ['breakout', 'pullback'], true) || $bar === null) {
-                    continue;
-                }
-                $counts['setups']++;
-                if (isset($positions[$symbol]) || in_array('market_filter_off', $profile['entry_blockers'], true)
-                    || (isset($lastExit[$symbol]) && $i - $lastExit[$symbol] < $p['cooldown_sessions'])) {
-                    continue;
-                }
-                if (count($positions) >= $settings['max_open_positions']) {
-                    $counts['skipped_capacity']++;
+            // Opening entries precede intraday crossings. Daily bars cannot order intraday events:
+            // retain all positions and their cash usage until every entry has been considered.
+            foreach ([true, false] as $opening) {
+                foreach ($bars as $symbol => $series) {
+                    $profile = $profiles[$symbol];
+                    $bar = isset($index[$symbol][$date]) ? $series[$index[$symbol][$date]] : null;
+                    if (($profile['status'] ?? null) !== 'complete' || ! in_array($profile['setup'], ['breakout', 'pullback'], true) || $bar === null) {
+                        continue;
+                    }
+                    $trigger = Decimal::from($profile['levels']['trigger']);
+                    if ((Decimal::from($bar[1])->compareTo($trigger) > 0) !== $opening) {
+                        continue;
+                    }
+                    $counts['setups']++;
+                    if (isset($positions[$symbol]) || in_array('market_filter_off', $profile['entry_blockers'], true)
+                        || (isset($lastExit[$symbol]) && $i - $lastExit[$symbol] < $p['cooldown_sessions'])) {
+                        continue;
+                    }
+                    if (count($positions) >= $settings['max_open_positions']) {
+                        $counts['skipped_capacity']++;
 
-                    continue;
-                }
-                // The first tradable price above the trigger: the open after a gap, otherwise one cent through it.
-                $trigger = Decimal::from($profile['levels']['trigger']);
-                $price = Decimal::from($bar[1])->compareTo($trigger) > 0 ? Decimal::from($bar[1])
-                    : (Decimal::from($bar[2])->compareTo($trigger) > 0 ? $trigger->plus(Decimal::from('0.01')) : null);
-                $signal = $price === null ? null : $this->rules->entry($profile, (string) $price, $p);
-                if (($signal['status'] ?? null) !== 'signal') {
-                    $counts['skipped_chase_or_no_cross']++;
+                        continue;
+                    }
+                    // The first tradable price above the trigger: the open after a gap, otherwise one cent through it.
+                    $price = Decimal::from($bar[1])->compareTo($trigger) > 0 ? Decimal::from($bar[1])
+                        : (Decimal::from($bar[2])->compareTo($trigger) > 0 ? $trigger->plus(Decimal::from('0.01')) : null);
+                    $signal = $price === null ? null : $this->rules->entry($profile, (string) $price, $p);
+                    if (($signal['status'] ?? null) !== 'signal') {
+                        $counts['skipped_chase_or_no_cross']++;
 
-                    continue;
-                }
-                $fill = $price->multipliedBy(Decimal::from('1')->plus($this->bps($settings['slippage_bps'])))->rounded(4, RoundingMode::UP);
-                $stop = $fill->minus(Decimal::from($profile['indicators']['atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
-                $size = $this->sizer->calculate($equityNow, $cash, $fill, $stop, $settings);
-                $quantity = Decimal::from($size['quantity']);
-                if ($quantity->compareTo($zero) <= 0) {
-                    $counts['skipped_zero_size']++;
+                        continue;
+                    }
+                    $fill = $price->multipliedBy(Decimal::from('1')->plus($this->bps($settings['slippage_bps'])))->rounded(4, RoundingMode::UP);
+                    $stop = $fill->minus(Decimal::from($profile['indicators']['atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
+                    // Reflect opening gaps, realized opening losses and fees from preceding entries.
+                    // Intraday marks are unknown; retain opening marks and each new position's fill.
+                    $size = $this->sizer->calculate($this->mark($cash, $positions, $marks), $cash, $fill, $stop, $settings);
+                    $quantity = Decimal::from($size['quantity']);
+                    if ($quantity->compareTo($zero) <= 0) {
+                        $counts['skipped_zero_size']++;
 
+                        continue;
+                    }
+                    $fee = $this->costs->fee($settings['cost_schedule'], 'BUY', $quantity, $fill);
+                    $cash = $cash->minus($quantity->multipliedBy($fill))->minus($fee);
+                    $positions[$symbol] = ['quantity' => (string) $quantity, 'entry_price' => (string) $fill, 'entry_atr' => $profile['indicators']['atr'],
+                        'initial_stop' => (string) $stop, 'trailing_stop' => (string) $stop, 'sessions_held' => 0, 'progressed' => false,
+                        'entry_date' => $date, 'setup' => $profile['setup'], 'buy_fee' => (string) $fee];
+                    $marks[$symbol] = (string) $fill;
+                    $counts['entries']++;
+                }
+            }
+            foreach ($positions as $symbol => $position) {
+                if (! isset($index[$symbol][$date])) {
                     continue;
                 }
-                $fee = $this->costs->fee($settings['cost_schedule'], 'BUY', $quantity, $fill);
-                $cash = $cash->minus($quantity->multipliedBy($fill))->minus($fee);
-                $positions[$symbol] = ['quantity' => (string) $quantity, 'entry_price' => (string) $fill, 'entry_atr' => $profile['indicators']['atr'],
-                    'initial_stop' => (string) $stop, 'trailing_stop' => (string) $stop, 'sessions_held' => 0, 'progressed' => false,
-                    'entry_date' => $date, 'setup' => $profile['setup'], 'buy_fee' => (string) $fee];
-                $counts['entries']++;
-                // Daily bars cannot order the low against the entry; assume the worse case and stop out the same day.
+                $bar = $bars[$symbol][$index[$symbol][$date]];
+                $stop = Decimal::from($position['initial_stop'])->compareTo(Decimal::from($position['trailing_stop'])) >= 0
+                    ? Decimal::from($position['initial_stop']) : Decimal::from($position['trailing_stop']);
+                // The entry-day low may precede the entry; retain the adverse stop-out assumption.
                 if (Decimal::from($bar[3])->compareTo($stop) <= 0) {
-                    $sell($symbol, $positions[$symbol], (string) $stop, 'entry_day_stop_assumed', $date, $i);
+                    $sell($symbol, $position, (string) $stop, $position['entry_date'] === $date ? 'entry_day_stop_assumed' : 'intraday_stop_hit', $date, $i);
                     unset($positions[$symbol]);
                 }
             }
@@ -170,7 +194,8 @@ final class StrategyReplay
             'benchmarks' => $this->benchmarks($bars, $benchmark, $curve[0][0] ?? null, $curve[array_key_last($curve)][0] ?? null),
             'trades' => $trades, 'equity_curve' => $curve,
             'limitations' => ['daily_bars_approximate_five_minute_triggers_and_stops', 'earnings_blackout_not_reconstructed', 'opening_delay_not_modeled',
-                'current_watchlist_applied_to_past_selection_bias', 'no_intraday_quotes_or_book_liquidity', 'whole_share_limit_orders_per_reviewed_broker_contract']];
+                'current_watchlist_applied_to_past_selection_bias', 'no_intraday_quotes_or_book_liquidity', 'whole_share_limit_orders_per_reviewed_broker_contract',
+                'intraday_exit_cash_and_capacity_unavailable_until_next_session', 'intraday_sizing_uses_opening_marks_and_new_entry_fills']];
     }
 
     private function mark(Decimal $cash, array $positions, array $closes): Decimal

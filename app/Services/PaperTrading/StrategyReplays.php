@@ -34,6 +34,9 @@ final class StrategyReplays
             return $repeat;
         }
         $now = CarbonImmutable::now();
+        $today = $now->setTimezone('America/New_York')->startOfDay();
+        $start = $today->subYearsNoOverflow($years);
+        $end = $today->subDay();
         // Default universe: today's nominating watchlist symbols, the ones the strategy could enter.
         $symbols = $symbols === [] ? app(SymbolUniverse::class)->candidates($connection, $now) : array_values(array_unique($symbols));
         $parameters = SignalParameters::current();
@@ -41,7 +44,8 @@ final class StrategyReplays
         $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', $scope)->first();
         $applied = $portfolio ? SignalExecutionPolicies::current($portfolio) : null;
         $settings = ($applied?->payload ?? SignalExecutionPolicies::DEFAULTS) + ['cost_schedule' => TradingCosts::reviewed()];
-        $reads = $symbols === [] ? [] : $this->bars->readMany([...array_diff($symbols, [$benchmark]), $benchmark], $now, $years * 365 + 400);
+        $lookback = (int) $start->diffInDays($end) + 400;
+        $reads = $symbols === [] ? [] : $this->bars->readMany([...array_diff($symbols, [$benchmark]), $benchmark], $now, $lookback);
         $bars = [];
         $excluded = [];
         $fingerprints = [];
@@ -58,7 +62,8 @@ final class StrategyReplays
         }
         ksort($fingerprints);
         $input = ['replay' => StrategyReplay::VERSION, 'profile' => ProfileCalculator::VERSION, 'rules' => SignalRules::VERSION,
-            'parameters' => $parameters['hash'], 'settings' => $settings, 'equity' => $equity, 'bars' => $fingerprints, 'as_of' => $now->toDateString()];
+            'parameters' => $parameters['hash'], 'settings' => $settings, 'equity' => $equity, 'bars' => $fingerprints, 'as_of' => $today->toDateString(),
+            'window' => ['start' => $start->toDateString(), 'end' => $end->toDateString()]];
         $fingerprint = hash('sha256', json_encode($input, JSON_THROW_ON_ERROR));
         $result = null;
         $reason = match (true) {
@@ -68,8 +73,8 @@ final class StrategyReplays
             default => null,
         };
         if ($reason === null) {
-            $result = $this->engine->run($bars, $reads[$benchmark]['bars'], $parameters['values'], $settings, $equity);
-            $reason = $result['sessions'] > 0 ? 'retrospective_replay_recorded' : 'history_shorter_than_warmup';
+            $result = $this->engine->run($bars, $reads[$benchmark]['bars'], $parameters['values'], $settings, $equity, $start->toDateString(), $end->toDateString());
+            $reason = $result['sessions'] > 0 ? 'retrospective_replay_recorded' : 'no_sessions_with_sufficient_warmup_in_requested_window';
         }
         $complete = $reason === 'retrospective_replay_recorded';
 

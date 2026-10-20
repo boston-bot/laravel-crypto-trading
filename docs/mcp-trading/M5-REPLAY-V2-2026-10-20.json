@@ -1,0 +1,258 @@
+{
+    "label": "retrospective_daily_replay_not_forward_results",
+    "replay_version": "daily_replay_v2",
+    "as_of": "2026-10-20T20:02:32.925979Z",
+    "requested_window": {
+        "start": "2023-10-20",
+        "end": "2026-10-19"
+    },
+    "universe": {
+        "selection": "latest_stored_nominating_watchlist_revision",
+        "revision_id": 314,
+        "revision_hash": "cf206da5416fbb56fb0951f3abbdbeb3cec8dec27d27e77f0e039ae6e0e2a500",
+        "retrieved_at": "2026-10-20T19:56:04.000000Z",
+        "symbols": [
+            "ADBE",
+            "AMAT",
+            "AVGO",
+            "AVUV",
+            "BKNG",
+            "BRK.B",
+            "HD",
+            "INTU",
+            "JNJ",
+            "JPM",
+            "LIN",
+            "MA",
+            "MSFT",
+            "NVDA",
+            "PEP",
+            "RSP",
+            "SCHD",
+            "UBER",
+            "VEA",
+            "VTI",
+            "VTV",
+            "VWO",
+            "VXUS"
+        ]
+    },
+    "benchmark": "SPY",
+    "parameters": {
+        "version": "swing_signal_parameters_v1",
+        "values": {
+            "benchmark_symbol": "SPY",
+            "market_filter_sma_sessions": 200,
+            "fast_sma_sessions": 50,
+            "slow_sma_sessions": 200,
+            "relative_strength_sessions": 126,
+            "atr_sessions": 14,
+            "max_atr_pct": "6",
+            "ema_sessions": 20,
+            "pullback_max_atr_from_ema": "1",
+            "breakout_range_sessions": 20,
+            "breakout_max_range_atr": "3",
+            "max_chase_atr": "0.5",
+            "initial_stop_atr": "2",
+            "trailing_stop_atr": "3",
+            "earnings_blackout_sessions": 5,
+            "entry_delay_minutes": 15,
+            "time_exit_sessions": 20,
+            "cooldown_sessions": 5
+        },
+        "hash": "7f305b77cd773b0f9ac8df8f351586b611f5c73d1bfeff0cc4312627bae5fd5c"
+    },
+    "settings": {
+        "risk_per_trade_pct": "1",
+        "max_position_pct": "20",
+        "max_open_positions": 8,
+        "slippage_bps": "1",
+        "limit_offset_bps": "5",
+        "quote_max_age_seconds": 20,
+        "allow_fractional": false,
+        "cost_schedule": {
+            "version": "rh_listed_equity_2026q4_v1",
+            "reviewed_on": "2026-10-19",
+            "effective_from": "2026-10-01",
+            "effective_through": "2026-12-31",
+            "commission_per_share": "0",
+            "sec_per_million": "20.60",
+            "sec_waiver_notional": "500",
+            "taf_per_share": "0",
+            "taf_waiver_shares": "50",
+            "taf_max_per_execution": "9.79",
+            "cat_per_share": "0.000003",
+            "cat_minimum_charge": "0.01",
+            "rounding_policy": "per_simulated_execution_sec_up_other_half_up_v1",
+            "sources": [
+                "https:\/\/robinhood.com\/us\/en\/support\/articles\/trading-fees-on-robinhood\/",
+                "https:\/\/www.sec.gov\/rules-regulations\/fee-rate-advisories\/2026-2",
+                "https:\/\/www.finra.org\/rules-guidance\/rule-filings\/sr-finra-2026-021"
+            ]
+        }
+    },
+    "settings_source": "signal_execution_defaults_not_an_applied_policy",
+    "source_file_hashes": {
+        "PaperTrading\/StrategyReplay": "83528c88cc9ac92661e221eb57fff8dca107397dc1baeac9e44d0e36ba865370",
+        "PaperTrading\/ProfileCalculator": "1ea896aea6871bb0bac7fd564cb99a3e7258286d50ec50db98451b848902f7a0",
+        "PaperTrading\/SignalRules": "c2a33ef1929849ddcc02bf2bc3fd55126d1aed5068e5d97e2a1bd22688099cd2",
+        "PaperTrading\/RiskSizer": "d9a02fd0dbc9df63ac5bce90441fd0b116d268e682abec0dbb609b67cac67173",
+        "PaperTrading\/TradingCosts": "637ecc6fd44ebfac5460af2649cc3a398fc88327fd612f573a34527a0686c7fc",
+        "PaperTrading\/SignalParameters": "9ccf1b3be22e205afdbe6910904d671ebf7580fedc977ef3b1494b82937e906e",
+        "PaperTrading\/StrategyParameters": "9fb00d4ccdffd09e630fdd777ca7e12d3a98bae503336427ad6884dc8680fd7d",
+        "MarketData\/Alpaca\/DailyBars": "9fd5336ac897acff835171c10c7fb07c34485dd9ae6bc3c0396295ba0068c463"
+    },
+    "snapshot_sha256": "021715a0fd478d2ab1d4cea7e9800db2ae45c1c4245f6002b1f766a23cc4cb80",
+    "data": {
+        "provider": "https:\/\/data.alpaca.markets\/v2\/stocks\/bars",
+        "contract": "alpaca_bars_v2_1day_sip_split_v1",
+        "feed": "sip",
+        "adjustment": "split",
+        "retrieved_at_min": "2026-10-20T20:02:35.090130Z",
+        "retrieved_at_max": "2026-10-20T20:02:35.090130Z",
+        "complete_symbols": 24,
+        "bars_per_symbol": 1027,
+        "provider_requests": 3,
+        "fetch_seconds": 2.288683875
+    },
+    "runs": {
+        "500": {
+            "artifact_sha256": "63b595024163f6053740593dc1a1ea8b0176ea245f9f0047091fd9114c9f1560",
+            "runtime_seconds": 34.379289125,
+            "start": "2023-10-20",
+            "end": "2026-10-19",
+            "sessions": 751,
+            "initial_equity": "500",
+            "final_equity": "525.74",
+            "stats": {
+                "closed_trades": 41,
+                "wins": 18,
+                "losses": 23,
+                "hit_rate_pct": "43.90",
+                "average_win_pct": "6.2764",
+                "average_loss_pct": "-2.6607",
+                "profit_factor": "1.5130",
+                "total_return_pct": "5.1480",
+                "max_drawdown_pct": "6.1421",
+                "exposure_pct": "46.21"
+            },
+            "counts": {
+                "setups": 2114,
+                "entries": 41,
+                "skipped_zero_size": 728,
+                "skipped_capacity": 0,
+                "skipped_chase_or_no_cross": 988,
+                "market_filter_off_days": 63
+            },
+            "benchmarks": {
+                "benchmark_buy_and_hold_pct": "79.9333",
+                "equal_weight_universe_pct": "78.3926"
+            },
+            "open_positions": [],
+            "exit_reasons": {
+                "intraday_stop_hit": 27,
+                "daily_close_below_fast_sma": 9,
+                "time_exit_without_progress": 1,
+                "entry_day_stop_assumed": 1,
+                "trailing_stop_hit": 3
+            },
+            "playbooks": {
+                "pullback": 40,
+                "breakout": 1
+            },
+            "limitations": [
+                "daily_bars_approximate_five_minute_triggers_and_stops",
+                "earnings_blackout_not_reconstructed",
+                "opening_delay_not_modeled",
+                "current_watchlist_applied_to_past_selection_bias",
+                "no_intraday_quotes_or_book_liquidity",
+                "whole_share_limit_orders_per_reviewed_broker_contract",
+                "intraday_exit_cash_and_capacity_unavailable_until_next_session",
+                "intraday_sizing_uses_opening_marks_and_new_entry_fills"
+            ],
+            "checks": {
+                "trade_count_conservation": true,
+                "exact_decimal_final_equity_conservation": true,
+                "closed_trades_within_requested_window": true
+            }
+        },
+        "10000": {
+            "artifact_sha256": "fd00fda0065f0842e1f12259f66ce3c070b1cc95f39672afac681c46e78d3d19",
+            "runtime_seconds": 34.535909125,
+            "start": "2023-10-20",
+            "end": "2026-10-19",
+            "sessions": 751,
+            "initial_equity": "10000",
+            "final_equity": "12421.68",
+            "stats": {
+                "closed_trades": 182,
+                "wins": 70,
+                "losses": 112,
+                "hit_rate_pct": "38.46",
+                "average_win_pct": "7.1646",
+                "average_loss_pct": "-3.1156",
+                "profit_factor": "1.3894",
+                "total_return_pct": "24.2168",
+                "max_drawdown_pct": "10.4486",
+                "exposure_pct": "88.81"
+            },
+            "counts": {
+                "setups": 2114,
+                "entries": 184,
+                "skipped_zero_size": 65,
+                "skipped_capacity": 14,
+                "skipped_chase_or_no_cross": 377,
+                "market_filter_off_days": 63
+            },
+            "benchmarks": {
+                "benchmark_buy_and_hold_pct": "79.9333",
+                "equal_weight_universe_pct": "78.3926"
+            },
+            "open_positions": {
+                "MSFT": {
+                    "quantity": "4",
+                    "entry_price": "494.4495",
+                    "entry_date": "2026-09-10",
+                    "setup": "pullback"
+                },
+                "MA": {
+                    "quantity": "4",
+                    "entry_price": "581.6582",
+                    "entry_date": "2026-10-09",
+                    "setup": "pullback"
+                }
+            },
+            "exit_reasons": {
+                "daily_close_below_fast_sma": 61,
+                "intraday_stop_hit": 94,
+                "trailing_stop_hit": 14,
+                "time_exit_without_progress": 3,
+                "initial_stop_hit": 9,
+                "entry_day_stop_assumed": 1
+            },
+            "playbooks": {
+                "pullback": 176,
+                "breakout": 6
+            },
+            "limitations": [
+                "daily_bars_approximate_five_minute_triggers_and_stops",
+                "earnings_blackout_not_reconstructed",
+                "opening_delay_not_modeled",
+                "current_watchlist_applied_to_past_selection_bias",
+                "no_intraday_quotes_or_book_liquidity",
+                "whole_share_limit_orders_per_reviewed_broker_contract",
+                "intraday_exit_cash_and_capacity_unavailable_until_next_session",
+                "intraday_sizing_uses_opening_marks_and_new_entry_fills"
+            ],
+            "checks": {
+                "trade_count_conservation": true,
+                "exact_decimal_final_equity_conservation": true,
+                "closed_trades_within_requested_window": true
+            }
+        }
+    },
+    "benchmark_max_drawdown_pct": "18.9989",
+    "benchmark_costs_or_dividends_modeled": false,
+    "historical_fee_rates_reconstructed": false,
+    "database_writes": false
+}

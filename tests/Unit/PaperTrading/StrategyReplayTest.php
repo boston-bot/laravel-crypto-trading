@@ -53,6 +53,76 @@ class StrategyReplayTest extends TestCase
         return app(StrategyReplay::class)->run(['BRKO' => $this->bars($rows)], $spy ?? $this->benchmark(count($rows)), SignalParameters::current()['values'], $settings, $equity);
     }
 
+    private function universeReplay(array $rows, int $maxOpen = 1): array
+    {
+        return app(StrategyReplay::class)->run(array_map($this->bars(...), $rows), $this->benchmark(count(reset($rows))), SignalParameters::current()['values'],
+            ['risk_per_trade_pct' => '1', 'max_position_pct' => '20', 'max_open_positions' => $maxOpen, 'slippage_bps' => '1', 'cost_schedule' => TradingCosts::reviewed()], '10000');
+    }
+
+    public function test_intraday_exits_cannot_fund_or_free_capacity_for_that_sessions_entries(): void
+    {
+        foreach ([10120, 10080] as $secondOpen) { // Opening and intraday candidates must both wait.
+            $a = [...$this->base(), [10080, 10150, 10050, 10140], [10080, 10100, 9800, 10050], [10050, 10100, 10000, 10050]];
+            $b = [...$this->base(), [10060, 10110, 10010, 10060], [$secondOpen, 10150, 10050, 10140], [10160, 10180, 10100, 10170]];
+            $result = $this->universeReplay(['AAAA' => $a, 'BBBB' => $b]);
+            $this->assertSame('intraday_stop_hit', $result['trades'][0]['reason']);
+            $this->assertSame('2025-09-10', $result['open_positions']['BBBB']['entry_date']);
+            $this->assertGreaterThan(0, $result['counts']['skipped_capacity']);
+        }
+    }
+
+    public function test_entry_day_stops_do_not_recycle_cash_or_capacity_to_other_candidates(): void
+    {
+        $a = [...$this->base(), [10080, 10150, 9800, 9850]];
+        $b = [...$this->base(), [10080, 10150, 10050, 10140]];
+        $result = $this->universeReplay(['AAAA' => $a, 'BBBB' => $b]);
+        $this->assertSame(1, $result['counts']['entries']);
+        $this->assertSame('entry_day_stop_assumed', $result['trades'][0]['reason']);
+        $this->assertSame([], $result['open_positions']);
+    }
+
+    public function test_intraday_sale_proceeds_are_unavailable_even_when_position_slots_remain(): void
+    {
+        $held = [...$this->base(), [10080, 10150, 10050, 10140], [10080, 10150, 10050, 10140], [10140, 10180, 10100, 10170]];
+        $stopped = $held;
+        $stopped[251] = [10080, 10100, 9800, 10050];
+        $expensive = [...$this->base(), [10060, 10110, 10010, 10060], [10120, 10150, 10050, 10140], [10160, 10180, 10100, 10170]];
+        $expensive = array_map(fn ($row) => array_map(fn ($cents) => $cents * 10, $row), $expensive);
+        // Five 19-share positions leave less cash than one share of ZZZZ; only AAAA stops out.
+        $result = $this->universeReplay(['AAAA' => $stopped, 'BBBB' => $held, 'CCCC' => $held, 'DDDD' => $held, 'EEEE' => $held, 'ZZZZ' => $expensive], 8);
+        $this->assertSame('2025-09-10', $result['open_positions']['ZZZZ']['entry_date']);
+        $this->assertGreaterThan(0, $result['counts']['skipped_zero_size']);
+    }
+
+    public function test_opening_entries_take_capacity_before_alphabetically_earlier_intraday_entries(): void
+    {
+        $intraday = [...$this->base(), [10080, 10150, 10050, 10140]];
+        $opening = [...$this->base(), [10120, 10150, 10050, 10140]];
+        $result = $this->universeReplay(['AAAA' => $intraday, 'ZZZZ' => $opening]);
+        $this->assertSame(['ZZZZ'], array_keys($result['open_positions']));
+    }
+
+    public function test_opening_gap_losses_reduce_equity_before_sizing_replacement_entries(): void
+    {
+        $a = [...$this->base(), [10080, 10150, 10050, 10140], [5000, 5100, 4900, 5000]];
+        $b = [...$this->base(), [10060, 10110, 10010, 10060], [10120, 10150, 10050, 10140]];
+        $result = $this->universeReplay(['AAAA' => $a, 'BBBB' => $b]);
+        $this->assertSame('initial_stop_hit', $result['trades'][0]['reason']);
+        // Equity after the gap sale and fees is $9,028.6012. Its 20% cap buys 17 shares, not 19.
+        $this->assertSame('17', $result['open_positions']['BBBB']['quantity']);
+        $this->assertSame('2025-09-09', $result['open_positions']['BBBB']['entry_date']);
+    }
+
+    public function test_warmup_and_post_window_bars_do_not_trade_or_enter_performance(): void
+    {
+        $rows = [...$this->base(), [10080, 10150, 10050, 10140], [10060, 10110, 10010, 10060], [10060, 10110, 10010, 10060], [10080, 10200, 9800, 9850]];
+        $settings = ['risk_per_trade_pct' => '1', 'max_position_pct' => '20', 'max_open_positions' => 8, 'slippage_bps' => '1', 'cost_schedule' => TradingCosts::reviewed()];
+        $result = app(StrategyReplay::class)->run(['BRKO' => $this->bars($rows)], $this->benchmark(count($rows)), SignalParameters::current()['values'], $settings, '10000', '2025-09-09', '2025-09-10');
+        $this->assertSame(['2025-09-09', '2025-09-10', 2], [$result['start'], $result['end'], $result['sessions']]);
+        $this->assertSame([0, [], [], '10000.00'], [$result['counts']['entries'], $result['trades'], $result['open_positions'], $result['final_equity']]);
+        $this->assertSame(['2025-09-09', '2025-09-10'], array_column($result['equity_curve'], 0));
+    }
+
     public function test_breakout_enters_the_session_after_its_setup_and_exits_on_the_live_trailing_stop(): void
     {
         $rows = $this->base();

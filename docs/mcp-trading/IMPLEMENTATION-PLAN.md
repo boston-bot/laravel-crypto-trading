@@ -8,6 +8,8 @@ Status: proposed implementation baseline, October 16, 2026. Read [the index](REA
 
 October 19 deployment checkpoint: the owner deployed `80225da`; signal and risk/cost/handoff migrations `000023`/`000024` are applied and health checks passed. Their gates remain disabled and the signal execution policy remains unapplied. The next source increment adds default-off [opening valuations and batched collection](M5-OPENING-AND-BATCH-COLLECTION-EVIDENCE.md), pending migration `000025` and deployment. Fractional LIMIT contract verification, historical replay/parameter validation, measured live data cadence and controlled forward paper evaluation remain M5 work; live order handoff remains unimplemented.
 
+October 20 replay review follow-up: `daily_replay_v2` corrects intraday exit ordering, opening-loss sizing and requested-window boundaries. Historical v1 return/sensitivity figures are superseded. The authorized corrected real-data rerun over 2023-10-20–2026-10-19 (23 current nominated symbols, 751 sessions) returned +5.1480% at $500 and +24.2168% at $10,000, against SPY price buy-and-hold +79.9333%. Parameters remain unchanged; daily-bar/selection-bias limitations and forward-paper acceptance remain. No policy change or forward-paper/live activation follows from this replay. [Replay evidence](M5-REPLAY-FRACTIONAL-CADENCE-EVIDENCE.md).
+
 ## 1. Product objective and release boundaries
 
 Build an always-on local application that maintains reliable portfolio state, monitors investment theses and operational failures, organizes research, and eventually manages bounded execution. Optimize for auditability, dependable follow-through, and useful decisions rather than trade frequency.

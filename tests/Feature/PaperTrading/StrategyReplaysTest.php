@@ -59,6 +59,7 @@ class StrategyReplaysTest extends TestCase
         $this->assertSame('retrospective_daily_replay_not_forward_results', $run->payload['label']);
         $this->assertSame(['ALFA'], $run->payload['symbols']);
         $this->assertSame('signal_execution_defaults', $run->payload['settings_source']);
+        $this->assertSame(['start' => '2023-10-19', 'end' => '2026-10-18'], $run->payload['input']['window']);
         $this->assertNotNull($run->start_date);
         $this->assertGreaterThan(0, $run->payload['result']['sessions']);
         $this->assertContains('earnings_blackout_not_reconstructed', $run->payload['result']['limitations']);
@@ -73,6 +74,54 @@ class StrategyReplaysTest extends TestCase
         $this->assertSame($run->input_fingerprint, $this->replay()->input_fingerprint);
         $this->expectException(\LogicException::class);
         $run->update(['reason' => 'changed']);
+    }
+
+    public function test_requested_years_exclude_warmup_from_returns_trades_and_benchmarks(): void
+    {
+        $series = R::series(range(5000, 5569));
+        R::fake(function ($query) use ($series) {
+            $withinRequest = array_values(array_filter($series, function ($raw) use ($query) {
+                $date = substr(json_decode($raw, true)['t'], 0, 10);
+
+                return $date >= $query['start'] && $date <= $query['end'];
+            }));
+
+            return R::body(['ALFA' => $withinRequest, 'SPY' => $withinRequest]);
+        });
+        $run = app(StrategyReplays::class)->run($this->connection, $this->connection->user_id, (string) Str::uuid(), 1, '10000', ['ALFA']);
+        $this->assertSame('complete', $run->status);
+        $this->assertSame(['start' => '2025-10-19', 'end' => '2026-10-18'], $run->payload['input']['window']);
+        $this->assertSame('2025-10-20', $run->start_date->toDateString()); // First session after Sunday.
+        $this->assertSame('2026-10-16', $run->end_date->toDateString());
+        $this->assertCount(260, $run->payload['result']['equity_curve']);
+        $this->assertSame('4.8776', $run->payload['result']['benchmarks']['benchmark_buy_and_hold_pct']);
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'start=2024-09-14'));
+    }
+
+    public function test_window_uses_new_york_dates_and_keeps_all_five_years_of_warmup(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-19T00:30:00Z')); // Still October 18 in New York.
+        $this->fake();
+        $run = app(StrategyReplays::class)->run($this->connection, $this->connection->user_id, (string) Str::uuid(), 5, '10000', ['ALFA']);
+        $this->assertSame(['start' => '2021-10-18', 'end' => '2026-10-17'], $run->payload['input']['window']);
+        $this->assertSame('2026-10-18', $run->payload['input']['as_of']);
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'start=2020-09-13') && str_contains($request->url(), 'end=2026-10-17'));
+    }
+
+    public function test_a_window_without_replay_sessions_is_incomplete_and_retries_do_not_write_again(): void
+    {
+        $old = R::series(range(5000, 5259), asOf: CarbonImmutable::parse('2025-10-01T14:00:00Z'));
+        R::fake(fn ($query) => R::body(['ALFA' => $old, 'SPY' => $old]));
+        $request = (string) Str::uuid();
+        $service = app(StrategyReplays::class);
+        $run = $service->run($this->connection, $this->connection->user_id, $request, 1, '10000', ['ALFA']);
+        $this->assertSame(['incomplete', 'no_sessions_with_sufficient_warmup_in_requested_window', null, null],
+            [$run->status, $run->reason, $run->start_date, $run->end_date]);
+        $this->assertSame([], $run->payload['result']['equity_curve']);
+        $sent = count(Http::recorded());
+        $this->assertSame($run->id, $service->run($this->connection, $this->connection->user_id, $request, 1, '10000', ['ALFA'])->id);
+        $this->assertSame(1, StrategyReplayRun::count());
+        $this->assertCount($sent, Http::recorded());
     }
 
     public function test_missing_benchmark_history_is_recorded_incomplete_never_a_result(): void
