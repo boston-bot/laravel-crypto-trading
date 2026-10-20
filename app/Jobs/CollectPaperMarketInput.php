@@ -39,7 +39,7 @@ class CollectPaperMarketInput implements ShouldBeUnique, ShouldQueue
 
     public function handle(PaperMarketInputs $inputs): void
     {
-        if (! config('paper.market_collection_enabled') || ! config('paper.market_inputs_enabled') ||
+        if (config('paper.batch_collection_enabled') || ! config('paper.market_collection_enabled') || ! config('paper.market_inputs_enabled') ||
             CarbonImmutable::parse($this->scheduledAt)->lt(now()->subMinutes(5)) || CarbonImmutable::parse($this->scheduledAt)->isFuture()) {
             return;
         }

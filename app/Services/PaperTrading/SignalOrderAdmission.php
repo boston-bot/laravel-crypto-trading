@@ -13,6 +13,7 @@ use App\Models\PaperTrading\SimulationPosition;
 use App\Models\PaperTrading\StrategyCycle;
 use App\Models\PaperTrading\StrategySignal;
 use App\Services\Monitoring\AccountScope;
+use App\Services\Monitoring\MarketCalendar;
 use App\Support\Mcp\Decimal;
 use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
@@ -84,6 +85,14 @@ final class SignalOrderAdmission
             return 'verified_session_baseline_unavailable';
         }
         if (! $existing) {
+            $session = app(MarketCalendar::class)->at(CarbonImmutable::now());
+            if ($session['status'] !== 'regular') {
+                return 'outside_verified_session';
+            }
+            $baseline = app(PaperSessionValuations::class)->resolve($connection, $portfolio, $session, $order->id);
+            if (! $baseline || Decimal::from($baseline['equity'])->compareTo(Decimal::from($order->assumptions['session_open_equity'])) !== 0) {
+                return 'verified_session_baseline_unavailable_or_changed';
+            }
             $snapshot = Snapshot::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->where('status', 'complete')
                 ->whereIn('run_id', Run::where('mcp_connection_id', $connection->id)->where('auth_generation', $connection->auth_generation)->select('id'))->latest('publication_version')->first();
             if (! $snapshot || $snapshot->retrieved_at->isFuture() || $snapshot->retrieved_at->lte(CarbonImmutable::now()->subMinutes(5))) {

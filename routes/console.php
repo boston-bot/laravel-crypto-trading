@@ -17,6 +17,7 @@ use App\Models\McpConnection;
 use App\Models\User;
 use App\Services\Monitoring\MarketCalendarSync;
 use App\Services\Monitoring\MonitoringScheduler;
+use App\Services\PaperTrading\BatchMarketInputCollector;
 use App\Services\PaperTrading\DecisionScheduler;
 use App\Services\PaperTrading\EarningsCalendar;
 use App\Services\PaperTrading\StrategyWatchlists;
@@ -145,7 +146,7 @@ Artisan::command('mcp:paper-decisions {--once} {--sync : Process the current win
 })->purpose('Bounded non-executable paper proposals; requires explicit enablement, applied policy and reviewed AI configuration');
 
 if (config('paper.market_collection_enabled') && config('paper.market_inputs_enabled')) {
-    Schedule::command('mcp:paper-collect --once --scheduled')->everyFiveMinutes()->withoutOverlapping(10);
+    Schedule::command(config('paper.batch_collection_enabled') ? 'mcp:market-cycle --once --scheduled' : 'mcp:paper-collect --once --scheduled')->everyFiveMinutes()->withoutOverlapping(10);
 }
 
 Artisan::command('mcp:strategy-watchlist {--once} {--account= : Local connection ID}', function (): int {
@@ -270,6 +271,18 @@ if (config('operations.enabled')) {
     Schedule::command('mcp:backup')->dailyAt('02:30')->timezone('America/Chicago')->withoutOverlapping();
     Schedule::command('mcp:restore-drill')->monthlyOn(1, '03:30')->timezone('America/Chicago')->withoutOverlapping();
 }
+
+Artisan::command('mcp:market-cycle {--once} {--scheduled} {--account= : Local connection ID}', function (): int {
+    if (! $this->option('once') || ($this->option('account') !== null && ! ctype_digit($this->option('account')))) {
+        $this->error('Use --once and an optional numeric --account.');
+
+        return 1;
+    }
+    $result = app(BatchMarketInputCollector::class)->tick($this->option('account') === null ? null : (int) $this->option('account'), (bool) $this->option('scheduled'));
+    $this->line(json_encode($result, JSON_THROW_ON_ERROR));
+
+    return 0;
+})->purpose('Read-only batched quote and exact-symbol evidence collection; separate default-off gate, no signals or orders');
 
 if (! config('mcp.legacy_schedules_enabled')) {
     return;

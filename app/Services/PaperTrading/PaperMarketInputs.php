@@ -8,8 +8,10 @@ use App\Models\PaperTrading\Portfolio;
 use App\Models\User;
 use App\Services\Broker\Agentic\BrokerGateway;
 use App\Services\Broker\Agentic\Operation;
+use App\Services\Broker\Agentic\QuoteBatch;
 use App\Services\Broker\Agentic\ReadError;
 use App\Services\Broker\Agentic\ReadFailure;
+use App\Services\Broker\Agentic\ReadResult;
 use App\Services\Broker\Agentic\TrustedHttp;
 use App\Services\MarketData\Alpaca\CorporateActions;
 use App\Services\Monitoring\AccountScope;
@@ -17,6 +19,7 @@ use App\Support\Mcp\Decimal;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Ramsey\Uuid\Uuid;
 
 /** Only reviewed adapter fields establish facts. Research text and model metadata cannot grant eligibility. */
 final class PaperMarketInputs
@@ -40,8 +43,59 @@ final class PaperMarketInputs
         return $this->record($connection, $actor, $symbol, $requestId, 'broker_read', $payload, $source, $retrieved, $reason);
     }
 
+    /** One shared MCP session; quotes batched, other contracts remain exact-symbol reads. */
+    public function collectMany(McpConnection $connection, int $actor, array $symbols, string $requestId, callable $beforeRead): array
+    {
+        Validator::make(['symbols' => $symbols, 'request_id' => $requestId], [
+            'symbols' => ['required', 'array', 'min:1', 'max:250'], 'symbols.*' => ['required', 'string', 'distinct', 'regex:/^[A-Z][A-Z0-9.-]{0,15}$/D'],
+            'request_id' => ['required', 'uuid'],
+        ])->validate();
+        abort_unless(config('paper.batch_collection_enabled') && config('paper.market_inputs_enabled'), 409, 'Batch collection is disabled.');
+        $current = $this->authorize($connection, $actor);
+        abort_unless($current->account_role === 'agentic_monitoring', 409, 'Select the agentic account.');
+        $allowed = app(SymbolUniverse::class)->reads($connection, CarbonImmutable::now());
+        abort_if(array_diff($symbols, $allowed), 422, 'Collect current watchlist symbols or holdings only.');
+        $rows = [];
+        $size = max(1, min(25, (int) config('paper.market_batch_symbols', 5)));
+        $this->broker->within($connection, function () use ($connection, $actor, $symbols, $requestId, $beforeRead, $size, &$rows) {
+            foreach (array_chunk($symbols, $size) as $chunk) {
+                $pending = [];
+                foreach ($chunk as $symbol) {
+                    $key = Uuid::uuid5($requestId, $symbol)->toString();
+                    if ($repeat = $this->repeat($connection, $symbol, $key)) {
+                        $rows[$symbol] = $repeat;
+                    } else {
+                        $pending[$symbol] = $key;
+                    }
+                }
+                if (! $pending) {
+                    continue;
+                }
+                try {
+                    $beforeRead();
+                } catch (ReadFailure) {
+                    break;
+                }
+                $batch = QuoteBatch::read($this->broker, $connection, array_keys($pending), $beforeRead);
+                foreach ($pending as $symbol => $key) {
+                    // On a deadline or rate limit, leave unattempted symbols unknown instead of flooding the provider.
+                    try {
+                        $beforeRead();
+                    } catch (ReadFailure) {
+                        break 2;
+                    }
+                    $quote = $batch['quotes'][$symbol] ?? new ReadResult(TrustedHttp::RESOURCE, CarbonImmutable::now(), [], false);
+                    [$payload, $source, $retrieved, $reason] = $this->gather($connection, $symbol, $quote, $beforeRead);
+                    $rows[$symbol] = $this->record($connection, $actor, $symbol, $key, 'broker_read', $payload, $source, $retrieved, $reason);
+                }
+            }
+        });
+
+        return $rows;
+    }
+
     /** @return array{0: array, 1: ?CarbonImmutable, 2: CarbonImmutable, 3: string} */
-    private function gather(McpConnection $connection, string $symbol): array
+    private function gather(McpConnection $connection, string $symbol, ?ReadResult $quote = null, ?callable $beforeRead = null): array
     {
         $payload = ['provider' => TrustedHttp::RESOURCE, 'complete' => false, 'instrument' => null,
             'quote' => ['symbol' => $symbol, 'bid' => null, 'ask' => null, 'bid_as_of' => null, 'ask_as_of' => null,
@@ -53,7 +107,10 @@ final class PaperMarketInputs
         $reason = 'execution_fields_unreviewed';
         try {
             foreach ([Operation::Quotes, Operation::Instruments] as $operation) {
-                $read = $this->broker->read($connection, $operation, ['symbol' => $symbol]);
+                if ($beforeRead) {
+                    $beforeRead();
+                }
+                $read = $operation === Operation::Quotes && $quote !== null ? $quote : $this->broker->read($connection, $operation, ['symbol' => $symbol]);
                 if ($read->source !== TrustedHttp::RESOURCE || ! $read->complete || $read->continuation !== null || count($read->records) !== 1 ||
                     $read->records[0]->operation !== $operation || ($read->records[0]->fields['symbol'] ?? null) !== $symbol) {
                     throw new ReadFailure(ReadError::Incomplete);
@@ -83,7 +140,7 @@ final class PaperMarketInputs
         }
 
         if (config('robinhood_mcp.execution_inputs_enabled')) {
-            $payload['execution_reads'] = $this->executionReads($connection, $symbol);
+            $payload['execution_reads'] = $this->executionReads($connection, $symbol, [Operation::Tradability, Operation::PriceBook], $beforeRead);
             foreach ($payload['execution_reads'] as $evidence) {
                 if (isset($evidence['retrieved_at'])) {
                     $retrieved = $retrieved->max(CarbonImmutable::parse($evidence['retrieved_at']));
@@ -101,7 +158,7 @@ final class PaperMarketInputs
         }
 
         if (config('robinhood_mcp.reference_data_enabled')) {
-            $payload['reference_reads'] = $this->executionReads($connection, $symbol, [Operation::Classification, Operation::Dividends]);
+            $payload['reference_reads'] = $this->executionReads($connection, $symbol, [Operation::Classification, Operation::Dividends], $beforeRead);
             foreach ($payload['reference_reads'] as $entry) {
                 if (isset($entry['retrieved_at'])) {
                     $retrieved = $retrieved->max(CarbonImmutable::parse($entry['retrieved_at']));
@@ -112,7 +169,15 @@ final class PaperMarketInputs
             // This subset cannot establish leverage/inverse exclusion, complete actions or execution permission.
         }
 
-        if (config('alpaca_data.enabled')) {
+        $withinBudget = true;
+        try {
+            if ($beforeRead) {
+                $beforeRead();
+            }
+        } catch (ReadFailure) {
+            $withinBudget = false;
+        }
+        if (config('alpaca_data.enabled') && $withinBudget) {
             $day = CarbonImmutable::now('America/New_York')->startOfDay();
             $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->first();
             $start = $day->subDays(min(180, max(0, (int) config('alpaca_data.lookback_days'))));
@@ -132,13 +197,16 @@ final class PaperMarketInputs
     }
 
     /** Optional, separately gated evidence. Never promote broker tradability to strategy eligibility. */
-    private function executionReads(McpConnection $connection, string $symbol, array $operations = [Operation::Tradability, Operation::PriceBook]): array
+    private function executionReads(McpConnection $connection, string $symbol, array $operations = [Operation::Tradability, Operation::PriceBook], ?callable $beforeRead = null): array
     {
         $evidence = [];
         foreach ($operations as $operation) {
             $entry = ['provider' => TrustedHttp::RESOURCE, 'complete' => false, 'source_as_of' => null,
                 'retrieved_at' => null, 'fields' => null, 'error' => null];
             try {
+                if ($beforeRead) {
+                    $beforeRead();
+                }
                 $read = $this->broker->read($connection, $operation, ['symbol' => $symbol]);
                 $entry['retrieved_at'] = CarbonImmutable::instance($read->retrievedAt)->toIso8601String();
                 if ($read->source !== TrustedHttp::RESOURCE || ! $read->complete || $read->continuation !== null || count($read->records) !== 1 ||

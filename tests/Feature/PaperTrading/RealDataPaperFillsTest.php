@@ -189,7 +189,8 @@ class RealDataPaperFillsTest extends TestCase
 
     public function test_real_data_path_rejects_synthetic_observations_and_fractional_quantities(): void
     {
-        $this->execution = E::apply($this->connection, ['allow_fractional' => true, 'allow_fractional_limit' => true]);
+        // Robinhood supports fractional quantities only on market orders, so a fractional limit still fails here.
+        $this->execution = E::apply($this->connection, ['allow_fractional' => true, 'allow_fractional_limit' => false]);
         $fractional = $this->submit(['quantity' => '0.5']);
         $this->assertSame('rejected', $fractional->status);
         $order = $this->submit();

@@ -18,7 +18,7 @@ final class MarketInputCollector
 {
     public function tick(bool $foreground = false, ?int $account = null, int $limit = 5, bool $scheduled = false): int
     {
-        if (! config('paper.market_collection_enabled') || ! config('paper.market_inputs_enabled')) {
+        if (config('paper.batch_collection_enabled') || ! config('paper.market_collection_enabled') || ! config('paper.market_inputs_enabled')) {
             return 0;
         }
         $now = CarbonImmutable::now();

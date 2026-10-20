@@ -11,19 +11,19 @@ use App\Models\McpConnection;
 final class QuoteBatch
 {
     /** @return array{quotes: array<string, ReadResult>, failures: array<string, string>} */
-    public static function read(BrokerGateway $gateway, McpConnection $connection, array $symbols): array
+    public static function read(BrokerGateway $gateway, McpConnection $connection, array $symbols, ?callable $beforeRead = null): array
     {
         $size = max(1, (int) config('robinhood_mcp.operations.quotes.max_batch_symbols', 1));
         $quotes = [];
         $failures = [];
         foreach (array_chunk(array_values(array_unique($symbols)), $size) as $chunk) {
             try {
-                $found = self::split(self::fetch($gateway, $connection, $chunk), $chunk);
+                $found = self::split(self::fetch($gateway, $connection, $chunk, $beforeRead), $chunk);
             } catch (ReadFailure $failure) {
                 if (count($chunk) > 1 && in_array($failure->reason, [ReadError::Incomplete, ReadError::Malformed], true)) {
                     foreach ($chunk as $symbol) {
                         try {
-                            $quotes += self::split(self::fetch($gateway, $connection, [$symbol]), [$symbol]);
+                            $quotes += self::split(self::fetch($gateway, $connection, [$symbol], $beforeRead), [$symbol]);
                             if (! isset($quotes[$symbol])) {
                                 $failures[$symbol] = 'incomplete_quote';
                             }
@@ -49,8 +49,11 @@ final class QuoteBatch
         return ['quotes' => $quotes, 'failures' => $failures];
     }
 
-    private static function fetch(BrokerGateway $gateway, McpConnection $connection, array $chunk): ReadResult
+    private static function fetch(BrokerGateway $gateway, McpConnection $connection, array $chunk, ?callable $beforeRead): ReadResult
     {
+        if ($beforeRead) {
+            $beforeRead();
+        }
         $read = $gateway->read($connection, Operation::Quotes, count($chunk) === 1 ? ['symbol' => $chunk[0]] : ['symbols' => $chunk]);
         if (! $read->complete || $read->continuation !== null) {
             throw new ReadFailure($read->incompleteReason ?? ReadError::Incomplete);

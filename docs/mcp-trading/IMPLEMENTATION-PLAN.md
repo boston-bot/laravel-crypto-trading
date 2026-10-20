@@ -6,7 +6,7 @@ Current application update, October 18: authenticated Control Center forms appli
 
 Status: proposed implementation baseline, October 16, 2026. Read [the index](README.md) for owner decisions and [the checklist](DEVELOPMENT-CHECKLIST.md) for work sequencing.
 
-October 19 source update: the M5 stored-data signal engine is implemented and default-off, with no runtime deployment. A subsequent source increment adds a separately gated [signal paper handoff, risk sizing and dated costs](M5-SIGNAL-PAPER-HANDOFF-EVIDENCE.md); live order handoff remains unimplemented. [Signal evidence](M5-STRATEGY-SIGNALS-EVIDENCE.md) defines the exact scope and remaining M5 work.
+October 19 deployment checkpoint: the owner deployed `80225da`; signal and risk/cost/handoff migrations `000023`/`000024` are applied and health checks passed. Their gates remain disabled and the signal execution policy remains unapplied. The next source increment adds default-off [opening valuations and batched collection](M5-OPENING-AND-BATCH-COLLECTION-EVIDENCE.md), pending migration `000025` and deployment. Fractional LIMIT contract verification, historical replay/parameter validation, measured live data cadence and controlled forward paper evaluation remain M5 work; live order handoff remains unimplemented.
 
 ## 1. Product objective and release boundaries
 

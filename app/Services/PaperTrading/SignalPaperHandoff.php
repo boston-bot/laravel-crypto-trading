@@ -3,7 +3,6 @@
 namespace App\Services\PaperTrading;
 
 use App\Models\McpConnection;
-use App\Models\PaperTrading\CashEntry;
 use App\Models\PaperTrading\Portfolio;
 use App\Models\PaperTrading\SignalOrderHandoff;
 use App\Models\PaperTrading\SimulationOrder;
@@ -120,7 +119,7 @@ final class SignalPaperHandoff
                     $size = app(RiskSizer::class)->calculate($equity, $cash, $bound, $stop, $settings, $capacity['sleeve_notional']);
                     $quantity = Decimal::from($size['quantity']);
                     $evidence['sizing'] = $size + ['equity' => (string) $equity, 'cash_available' => (string) $cash, 'price_bound' => (string) $bound];
-                    $baseline = $this->baseline($portfolio, $session, $positions);
+                    $baseline = $this->baseline($portfolio, $session);
                     if ($baseline === null) {
                         throw new DecisionFailure('verified_session_baseline_unavailable', 'unavailable');
                     }
@@ -152,19 +151,10 @@ final class SignalPaperHandoff
         });
     }
 
-    private function baseline(Portfolio $portfolio, array $session, $positions): ?array
+    private function baseline(Portfolio $portfolio, array $session): ?array
     {
-        $prior = SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('side', 'BUY')->where('accepted_at', '>=', CarbonImmutable::parse($session['opens_at']))
-            ->where('status', '!=', 'rejected')->orderBy('id')->get()->first(fn ($order) => isset($order->intent['strategy_signal_id']));
-        if ($prior) {
-            return ['equity' => $prior->assumptions['session_open_equity'], 'kind' => 'prior_verified_signal_order', 'order_id' => $prior->id];
-        }
-        if (app(PaperIncome::class)->receivable($portfolio)->compareTo(Decimal::from('0')) > 0 ||
-            $positions->contains(fn ($p) => Decimal::from($p->quantity)->compareTo(Decimal::from('0')) > 0) ||
-            CashEntry::where('paper_portfolio_id', $portfolio->id)->where('recorded_at', '>=', CarbonImmutable::parse($session['opens_at']))->where('kind', '!=', 'opening_balance')->exists()) {
-            return null;
-        }
+        $connection = McpConnection::findOrFail($portfolio->mcp_connection_id);
 
-        return ['equity' => $portfolio->cash, 'kind' => 'unchanged_cash_only_ledger'];
+        return app(PaperSessionValuations::class)->resolve($connection, $portfolio, $session);
     }
 }

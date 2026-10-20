@@ -24,6 +24,9 @@ final class SignalPaperCycle
             if (! $portfolio || ! RuleEligibilityPolicies::current($portfolio)) {
                 continue;
             }
+            if (config('paper.session_valuations_enabled')) {
+                app(PaperSessionValuations::class)->capture($connection, $connection->user_id);
+            }
             // Validation releases obsolete reservations before market inputs are required, including closed sessions.
             foreach (SimulationOrder::where('paper_portfolio_id', $portfolio->id)->whereIn('status', ['open', 'partial'])->orderBy('id')->get() as $order) {
                 if (isset($order->intent['strategy_signal_id'])) {

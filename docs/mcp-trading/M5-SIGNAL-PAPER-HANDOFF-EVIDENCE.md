@@ -1,5 +1,7 @@
 # M5 signal sizing, dated costs and paper handoff
 
+**Later deployment checkpoint, October 19:** owner deployment `80225da` and applied migrations `000023`/`000024` were verified with healthy readiness/doctor checks. Signals, signal handoff and paper fills remain disabled; no signal execution policy is applied. The original source-only verification below is historical. Subsequent opening-valuation/batched-collection source work is [recorded separately](M5-OPENING-AND-BATCH-COLLECTION-EVIDENCE.md), pending deployment and migration `000025`.
+
 October 19, 2026. Source implementation only, stacked on the undeployed signal-engine increment. No runtime deployment, migration, setting application, enablement, real broker/provider request or order occurred. M5 remains partial; M6 remains unstarted. The public fee-source review below was read-only internet research, not an account read.
 
 ## Behavior

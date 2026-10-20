@@ -7,6 +7,7 @@ use App\Models\PaperTrading\ExecutionVersion;
 use App\Models\PaperTrading\PolicyApplication;
 use App\Models\PaperTrading\Portfolio;
 use App\Models\User;
+use App\Services\Broker\Agentic\RobinhoodOrderContract;
 use App\Services\Monitoring\AccountScope;
 use App\Support\Mcp\Decimal;
 use Illuminate\Support\Facades\DB;
@@ -70,6 +71,10 @@ final class ExecutionPolicies
         }
         if ($payload['allow_fractional_limit'] === true && $payload['allow_fractional'] !== true) {
             throw ValidationException::withMessages(['allow_fractional_limit' => 'Fractional limits require fractional shares to be allowed.']);
+        }
+        // Earlier applied versions stay immutable; new versions cannot request what the broker does not support.
+        if ($payload['allow_fractional_limit'] === true && ! RobinhoodOrderContract::allowsFractional('limit')) {
+            throw ValidationException::withMessages(['allow_fractional_limit' => 'Robinhood allows fractional quantities only on regular-hours market orders; fractional limit orders are unsupported.']);
         }
 
         return $payload;

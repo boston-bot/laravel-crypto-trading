@@ -31,6 +31,21 @@ final class SymbolUniverse
         if (! RuleEligibilityPolicies::current($portfolio, $cutoff)) {
             return ExecutionPolicies::current($portfolio)?->payload['allowed_symbols'] ?? [];
         }
+        $held = $this->holdings($connection, $cutoff);
+        // Data-only (warm-up) lists are collected so a symbol promoted to a nominating list already has data.
+        $warmup = config('paper.rule_eligibility_enabled') ? app(StrategyWatchlists::class)->nominations($connection, $cutoff)['data_symbols'] : [];
+        $symbols = array_values(array_unique([...(config('paper.rule_eligibility_enabled') ? $this->candidates($connection, $cutoff) : []), ...$warmup, ...$held]));
+        sort($symbols);
+
+        return $symbols;
+    }
+
+    public function holdings(McpConnection $connection, CarbonImmutable $cutoff): array
+    {
+        $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->first();
+        if (! $portfolio) {
+            return [];
+        }
         $held = SimulationPosition::where('paper_portfolio_id', $portfolio->id)->get()->filter(fn ($p) => Decimal::from($p->quantity)->compareTo(Decimal::from('0')) > 0)->pluck('symbol')->all();
         $snapshot = Snapshot::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->where('status', 'complete')
             ->where('published_at', '<=', $cutoff->utc()->format('Y-m-d H:i:s.u'))->latest('publication_version')->first();
@@ -38,11 +53,7 @@ final class SymbolUniverse
             $held = [...$held, ...Holding::where('snapshot_id', $snapshot->id)->whereNotNull('symbol')->get()
                 ->filter(fn ($p) => Decimal::from($p->quantity)->compareTo(Decimal::from('0')) !== 0)->pluck('symbol')->all()];
         }
-        // Data-only (warm-up) lists are collected so a symbol promoted to a nominating list already has data.
-        $warmup = config('paper.rule_eligibility_enabled') ? app(StrategyWatchlists::class)->nominations($connection, $cutoff)['data_symbols'] : [];
-        $symbols = array_values(array_unique([...(config('paper.rule_eligibility_enabled') ? $this->candidates($connection, $cutoff) : []), ...$warmup, ...$held]));
-        sort($symbols);
 
-        return $symbols;
+        return array_values(array_unique($held));
     }
 }

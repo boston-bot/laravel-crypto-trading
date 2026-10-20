@@ -1,5 +1,7 @@
 # M5 deterministic strategy signals
 
+**Later deployment checkpoint, October 19:** owner deployment `80225da` and applied migrations `000023`/`000024` were verified with healthy readiness/doctor checks. Signals, signal handoff and paper fills remain disabled; no signal execution policy is applied. The original source-only verification below is historical. Subsequent opening-valuation/batched-collection source work is [recorded separately](M5-OPENING-AND-BATCH-COLLECTION-EVIDENCE.md), pending deployment and migration `000025`.
+
 October 19, 2026. Source implementation only; not deployed, migrated or enabled in runtime. M5 remains partial and M6 unstarted. This increment records paper strategy evidence; it creates no orders, fills, reservations or brokerage mutations and makes no model calls.
 
 ## Delivered behavior

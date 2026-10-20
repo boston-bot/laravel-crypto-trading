@@ -13,7 +13,7 @@ Owner decisions, October 18:
 | Costs | Model realistic costs instead of the 1% per-fill fee |
 | Sizing | Fractional shares; maximum position about 20% of paper equity |
 
-Runtime state is unchanged by these decisions. Applied execution v2 still holds the 44-symbol allowlist, the 1% fee and the 90% maximum position. The owner applies replacement versions through the Control Center once the code supports the new settings. Read-only market collection is on; AI, paper orders/fills, action accounting, live writes and legacy schedules are off. [Deployment evidence](M5-DEPLOYMENT-EVIDENCE.md#applied-owner-settings-verification).
+October 19 runtime checkpoint: the owner deployed `80225da`, including the deterministic signals and risk/cost/paper handoff code and migrations `000023`/`000024`. The rule eligibility policy replaces the fixed list for candidate assessment, and external-order detection and paper action accounting are enabled. The signal execution policy remains unapplied; signals, paper fills/handoff, AI and live writes remain off, with $500 cash and no paper positions. A subsequent source increment adds first-minute bid opening valuations and batched collection behind separate default-off gates; its migration `000025` is pending deployment. [Current evidence and limits](M5-OPENING-AND-BATCH-COLLECTION-EVIDENCE.md).
 
 ## Roles and data flow
 
@@ -63,7 +63,7 @@ This replaces the fixed `allowed_symbols` list, with the 75-symbol cap applying 
 
 ## Market data
 
-- **Quotes every 5 minutes.** Read quotes for all watchlist symbols plus holdings in batches, within one MCP session per cycle. `get_equity_quotes` already accepts a list of symbols; the gateway needs to send more than one, and the batch limit must be checked. Cache the tool catalog per session and store it only when it changes. Respect `Retry-After`.
+- **Quotes every 5 minutes.** Read quotes for all watchlist symbols plus holdings in batches, within one MCP session per cycle. `get_equity_quotes` accepts a list of symbols; the source batch collector now uses bounded chunks of five (local ceiling 25), with exact-symbol enrichment and a shared session. Its separate gate is still off. `mcp:cadence-report` measures a session from stored records; the October 19 baseline under the older rotating collector was a median 45-minute per-symbol refresh, so full-universe cadence must be measured after the batch collector is enabled ([evidence](M5-REPLAY-FRACTIONAL-CADENCE-EVIDENCE.md)). Cache the tool catalog per session and store it only when it changes. Respect `Retry-After`.
 - **Daily history.** Profiles need at least one year (252 sessions) of split-adjusted daily bars per symbol and for SPY, refreshed after each close and backfilled when a symbol joins. Done in source October 19: split-adjusted SIP daily bars and US-listing evidence from Alpaca ([evidence](M5-MARKET-REFERENCE-EVIDENCE.md)). Originally: the app had no reviewed daily-bar source. Alpaca's market-data API is the leading candidate, since the owner's keys already work for corporate actions. Verify the feed, history depth, adjustments, rate limits and terms first. No subscription is authorized by this document.
 - **Earnings dates.** Done in source October 19 from Robinhood's market-wide calendar ([evidence](M5-EARNINGS-EVIDENCE.md)). Originally: the Robinhood catalog advertised earnings data without a reviewed mapping. Review it or select another source. An unknown earnings date blocks new entries.
 - **Order-time freshness.** The handoff reads a fresh quote immediately before creating an order. The 20-second quote-age limit applies to that read.
@@ -100,7 +100,7 @@ Each profile is versioned with an input fingerprint.
 
 Exit orders are repriced each cycle while the exit condition holds, until filled or the session ends.
 
-**Sizing.** Quantity = (paper equity × risk per trade) ÷ (entry − initial stop). It is capped by the 20% maximum position, available cash after estimated costs, and the maximum number of open positions. Fractional quantities are used only where the instrument's fractional support and the fractional limit-order rules are verified. Until then quantities are whole shares, and a trade that sizes to zero is recorded as skipped.
+**Sizing.** Quantity = (paper equity × risk per trade) ÷ (entry − initial stop). It is capped by the 20% maximum position, available cash after estimated costs, and the maximum number of open positions. Robinhood's reviewed agentic order contract allows fractional quantities only on regular-hours market orders (up to 6 decimals, $1 minimum); fractional limit orders are unsupported, so new execution settings cannot request them. Quantities stay whole shares on limit orders, and a trade that sizes to zero is recorded as skipped, unless the owner adopts guarded fractional market orders ([evidence](M5-REPLAY-FRACTIONAL-CADENCE-EVIDENCE.md)).
 
 **Costs.** These replace the 1% per-fill fee:
 - the broker's actual stock/ETF commission (Robinhood's is $0; verify against its current fee schedule)
@@ -143,7 +143,7 @@ These are versioned owner settings, editable in the Control Center within bounds
 
 ## Signals and handoff
 
-October 19 source update: the independently default-off signal runner now records deterministic entry/exit evaluations from stored inputs, with atomic five-minute cycles and authenticated history. A later October 19 source increment connects a separate default-off signal paper handoff with explicit risk/cost settings; it is not deployed or activated. For `swing_signals_v1`, stop multiples and the progress threshold pin ATR at the opening signal; trailing levels never decrease, including after revised history, and triggered exits latch until the episode closes. Exits require an actual paper fill linked to the opening signal; broker/legacy holdings are not automatically adopted. [Implementation, verification and remaining limits](M5-STRATEGY-SIGNALS-EVIDENCE.md).
+October 19 source update: the independently default-off signal runner now records deterministic entry/exit evaluations from stored inputs, with atomic five-minute cycles and authenticated history. The owner deployed its separate default-off signal paper handoff with explicit risk/cost settings at `80225da`; it remains inactive. For `swing_signals_v1`, stop multiples and the progress threshold pin ATR at the opening signal; trailing levels never decrease, including after revised history, and triggered exits latch until the episode closes. Exits require an actual paper fill linked to the opening signal; broker/legacy holdings are not automatically adopted. [Implementation, verification and remaining limits](M5-STRATEGY-SIGNALS-EVIDENCE.md).
 
 - A signal records symbol, side, playbook, rule and parameter versions, watchlist revision, profile version, an input fingerprint (stored observation IDs and times) and the cutoff. It is unique per symbol, rule and cycle, so restarts and duplicate workers cannot double-signal.
 - Only data stored locally before the cutoff counts. Stale or missing inputs produce an `unavailable` result with a reason, never a signal from a guessed value.
@@ -172,7 +172,7 @@ Use exact decimals, atomic reservations and unique logical signal/order/fill key
 
 Inputs must have been available locally by the evaluation cutoff, not merely carry an earlier publication timestamp. Evaluate hypothetical fills only on observations available after order acceptance; data used to produce a signal cannot also prove a later fill. Broker fills and paper fills remain separate on every report.
 
-**Replay.** Once daily history is stored, replay the strategy over it to check the starting parameters before forward paper trading. Daily bars only approximate 5-minute triggers and fills, so use conservative assumptions and label replay results separately from forward results.
+**Replay.** Once daily history is stored, replay the strategy over it to check the starting parameters before forward paper trading. Daily bars only approximate 5-minute triggers and fills, so use conservative assumptions and label replay results separately from forward results. `mcp:strategy-replay` (`daily_replay_v1`) does this. Its first real run (2023-07 to 2026-10, 25 nominating symbols) returned +4.64% at $500 and +26.35% at $10,000 against SPY buy-and-hold +72.32%; the starting parameters were not changed ([evidence](M5-REPLAY-FRACTIONAL-CADENCE-EVIDENCE.md)).
 
 **Forward paper evaluation.** Report results after costs, drawdowns, hit rate, average win and loss, holding periods, turnover, skipped and unavailable evaluations, and watchlist churn. Attribute every result to playbook, rule and parameter versions. Compare against buying and holding SPY, and against an equal-weight portfolio of the eligible watchlist. Judge only after at least 30 closed trades. A short profitable sample is not evidence of an edge and cannot enable live mode.
 
@@ -182,7 +182,7 @@ No paid LLM API runs in this application. The earlier $100 target / $150 maximum
 
 ## Implementation order
 
-1. **Broker read efficiency.** One MCP session per cycle, cached tool catalog, batched quotes, `Retry-After` in collection, throttles on broker-read web routes, and no row lock held during the token-refresh request. Source done October 18, not deployed ([evidence](M5-BROKER-READ-EFFICIENCY-EVIDENCE.md)).
+1. **Broker read efficiency.** One MCP session per cycle, cached tool catalog, batched quotes, `Retry-After` in collection, throttles on broker-read web routes, and no row lock held during the token-refresh request. Source done October 18 and included in the verified October 19 deployment; live full-universe cadence is still unverified ([evidence](M5-BROKER-READ-EFFICIENCY-EVIDENCE.md)).
 2. **Watchlist intake and eligibility.** Dedicated list, revisions, cap, failed-read grace, removal handling, external-order detection, and code eligibility replacing the fixed allowlist.
 3. **Market data.** Batched 5-minute quotes, a reviewed daily-history source, an earnings-date source, and calendar automation or expiry alerts.
 4. **Profiles, playbooks and replay.** Daily profiles, the market filter and playbook assignment; replay over stored history to check the starting parameters.
@@ -194,12 +194,12 @@ No paid LLM API runs in this application. The earlier $100 target / $150 maximum
 
 | Item | Safe behavior until resolved |
 |---|---|
-| Save the three lists and roles in the Control Center | No intake |
+| Save the three lists and roles in the Control Center | Resolved in runtime: two nominating roles and one data-only role |
 | ChatGPT tasks set up so they cannot place trades, if Robinhood allows it | External-order detection still pauses entries |
-| Daily-history source and any cost | Resolved in source October 19: Alpaca, existing keys, no subscription; awaits deployment |
-| Earnings-date source | Resolved in source October 19: Robinhood `get_earnings_calendar` ([evidence](M5-EARNINGS-EVIDENCE.md)); awaits deployment |
-| Fractional and fractional limit-order support verified | Whole shares; zero-size trades skipped |
-| Current commission and regulatory fee rates verified | Costs labeled unverified in reports |
+| Daily-history source and any cost | Deployed: Alpaca using existing keys; no new feed added by opening valuations |
+| Earnings-date source | Deployed: Robinhood `get_earnings_calendar` ([evidence](M5-EARNINGS-EVIDENCE.md)) |
+| Fractional support verified: market orders in regular hours only; fractional limits unsupported (October 19) | Whole shares on limit orders; zero-size trades skipped; guarded fractional market orders need an owner decision |
+| Current commission and regulatory fee rates verified | Dated Q4 2026 preset implemented/deployed; owner signal-policy application remains outstanding |
 | Starting parameters confirmed by the owner after replay | Values stay versioned starting points |
 
 ## Required failure tests

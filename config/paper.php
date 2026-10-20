@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'batch_collection_enabled' => filter_var(env('MCP_PAPER_BATCH_COLLECTION_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'session_valuations_enabled' => filter_var(env('MCP_PAPER_SESSION_VALUATIONS_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'market_cycle_budget_seconds' => 240,
+    'market_batch_symbols' => 5,
     'signal_handoff_enabled' => filter_var(env('MCP_SIGNAL_PAPER_HANDOFF_ENABLED', false), FILTER_VALIDATE_BOOL),
     'signals_enabled' => filter_var(env('MCP_STRATEGY_SIGNALS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'rule_eligibility_enabled' => filter_var(env('MCP_RULE_ELIGIBILITY_ENABLED', false), FILTER_VALIDATE_BOOL),

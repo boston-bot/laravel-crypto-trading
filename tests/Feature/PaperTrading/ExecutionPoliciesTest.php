@@ -5,6 +5,7 @@ namespace Tests\Feature\PaperTrading;
 use App\Models\PaperTrading\ExecutionVersion;
 use App\Models\PaperTrading\SimulationOrder;
 use App\Models\User;
+use App\Services\Broker\Agentic\RobinhoodOrderContract;
 use App\Services\Monitoring\AccountScope;
 use App\Services\PaperTrading\ExecutionPolicies;
 use Carbon\CarbonImmutable;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Tests\Support\ExecutionFixture as E;
 use Tests\Support\SimulationFixture as F;
 use Tests\TestCase;
@@ -135,5 +137,23 @@ class ExecutionPoliciesTest extends TestCase
         $this->post('/mcp/paper/execution', $this->form(['execution_json' => json_encode(E::payload(['fee_bps' => '100', 'fee_per_share' => '0']))]))->assertRedirect();
         $this->assertSame('100', ExecutionVersion::sole()->payload['fee_bps']);
         $this->assertStringNotContainsString('fee_bps', DB::table('mcp_paper_execution_versions')->sole()->payload);
+    }
+
+    public function test_new_settings_cannot_request_fractional_limits_the_reviewed_broker_contract_does_not_support(): void
+    {
+        $policies = app(ExecutionPolicies::class);
+        $this->assertTrue(RobinhoodOrderContract::allowsFractional('market'));
+        $this->assertFalse(RobinhoodOrderContract::allowsFractional('limit'));
+        $this->assertFalse(RobinhoodOrderContract::allowsFractional('market', 'extended_hours'));
+        $this->assertTrue($policies->validate(E::payload(['allow_fractional' => true, 'allow_fractional_limit' => false]), true)['allow_fractional']);
+        try {
+            $policies->validate(E::payload(['allow_fractional' => true, 'allow_fractional_limit' => true]), true);
+            $this->fail();
+        } catch (ValidationException $error) {
+            $this->assertStringContainsString('fractional limit orders are unsupported', $error->errors()['allow_fractional_limit'][0]);
+        }
+        $this->actingAs($this->user);
+        $this->postJson('/mcp/paper/execution', $this->form(['execution_json' => json_encode(E::payload(['allow_fractional' => true, 'allow_fractional_limit' => true]))]))->assertUnprocessable();
+        $this->assertSame(0, ExecutionVersion::count());
     }
 }

@@ -499,3 +499,25 @@ After reviewing/applying migrations `000023` and `000024` through the separate o
 `MCP_SIGNAL_PAPER_HANDOFF_ENABLED=false` defaults off. The combined `php artisan mcp:signal-paper-cycle --once --account=<local-id>` loop requires that flag plus `MCP_STRATEGY_SIGNALS_ENABLED` and `MCP_PAPER_REAL_DATA_FILLS_ENABLED`; it processes existing paper orders first and creates new intents afterward. When all are enabled, Laravel schedules it every five minutes and suppresses the standalone signal schedule. It does not collect quotes, submit brokerage orders or activate legacy schedules/AI. Keep live brokerage writes and the superseded model handoff disabled. A current entry signal also needs an owner-applied signal policy and complete fresh observations; enabling flags cannot fill those gaps.
 
 Migration `000024` creates two tables and widens four paper timestamps without fabricating precision in old records. The fee schedule expires December 31, 2026; do not reuse it for January without a new review. New-day entries with held positions still need a future verified opening-valuation source; exits remain independent. Full-universe quote cadence, fractional support, replay and forward-evaluation activation are outstanding. [Verification, cost sources and limits](M5-SIGNAL-PAPER-HANDOFF-EVIDENCE.md).
+
+
+## Opening valuations and batched collection (source, pending deployment)
+
+October 19: the owner deployed `80225da`; read-only checks confirmed migrations `000023`/`000024`, healthy `/ready` and doctor, $500 cash/no paper positions, no applied signal execution policy and all signal/paper execution/AI/live-write gates off. This supersedes the pending-deployment statements in the preceding signal sections. No runtime setting was changed during this follow-up.
+
+The next source release adds additive migration `2026_10_19_000025_create_mcp_paper_session_valuations.php` (one encrypted evidence table, no backfill). Use the existing separate schema-owner migration/deployment procedure. Its two independent flags default false:
+
+```dotenv
+MCP_PAPER_BATCH_COLLECTION_ENABLED=false
+MCP_PAPER_SESSION_VALUATIONS_ENABLED=false
+```
+
+Once deployed and deliberately configured, batch collection also requires the existing market collection/input flags. `php artisan mcp:market-cycle --once --account=<local-connection-id>` makes read-only provider requests, processes holdings first, batches quotes and reuses a session for exact-symbol evidence. Counts include observations reused on a same-window retry. The scheduler selects this command instead of the old five-symbol collector when the batch flag is enabled; old queued collection jobs skip. It uses five-minute regular-session/hourly off-session cadence, a 240-second processing budget and broker backoff. One in-flight request can finish after the deadline. No signal, fill or order is created by this command.
+
+With opening valuations enabled, the batch collector and combined paper cycle attempt capture before fills. A held paper portfolio needs stored bid source/retrieval times inside the first minute of the verified exchange session, current account authorization, clear observed actions and unchanged accounting since the open. Evidence may be captured later only if the ledger has stayed unchanged. It values paper cash plus held shares at those bids; this is an opening-minute liquidation reference, not an official auction price. Missing/late evidence blocks new-day buys. Previously captured evidence stays immutable after trades. Cash-only inception and verified same-session baselines remain supported; exits do not need an entry baseline.
+
+Keep paper fills/handoff and AI/live execution disabled while cadence, fractional LIMIT support, replay and forward paper readiness remain unverified. Enabling collection or valuations does not enable those paths. [Detailed evidence and limitations](M5-OPENING-AND-BATCH-COLLECTION-EVIDENCE.md).
+
+### Replay and cadence reports (M5 source, not deployed)
+
+Requires additive migration `2026_10_19_000026` (one table). `php artisan mcp:strategy-replay --account=<local-connection-id> [--years=3] [--equity=500]` records a retrospective daily replay of the live rules over Alpaca's split-adjusted history for today's nominating watchlist symbols; it needs the Alpaca reference reads enabled, takes about a minute for 25 symbols, and never changes orders, the paper ledger or settings. Results are labeled retrospective and are not forward performance. `php artisan mcp:cadence-report --account=<local-connection-id> [--date=YYYY-MM-DD]` measures a regular session's collection, quote age and strategy-cycle cadence from stored records (read-only). Robinhood's agentic order contract allows fractional quantities only on regular-hours market orders, so new execution settings cannot request fractional limit orders. [Evidence](M5-REPLAY-FRACTIONAL-CADENCE-EVIDENCE.md).
