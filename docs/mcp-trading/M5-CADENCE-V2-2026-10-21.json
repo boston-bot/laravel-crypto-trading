@@ -1,0 +1,95 @@
+{
+  "version": "stored_cadence_v2",
+  "date": "2026-10-21",
+  "status": "measured",
+  "as_of": "2026-10-21T16:19:20.690485Z",
+  "session": {
+    "opens_at": "2026-10-21T13:30:00+00:00",
+    "closes_at": "2026-10-21T20:00:00+00:00",
+    "phase": "in_progress",
+    "expected_slots": 78,
+    "elapsed_slots": 33,
+    "remaining_slots": 45
+  },
+  "collection": {
+    "observations": 1024,
+    "symbols": 32,
+    "slots_with_reads": 32,
+    "slot_coverage_pct": 41,
+    "elapsed_slots_with_reads": 31,
+    "elapsed_slot_coverage_pct": 93.9,
+    "symbols_per_slot": {
+      "count": 32,
+      "p50": 32,
+      "p95": 32,
+      "max": 32
+    },
+    "observations_per_slot": {
+      "count": 32,
+      "p50": 32,
+      "p95": 32,
+      "max": 32
+    },
+    "slot_span_ms": {
+      "count": 32,
+      "p50": 67074,
+      "p95": 69629,
+      "max": 82221
+    },
+    "quote_age_at_retrieval_ms": {
+      "count": 1024,
+      "p50": 8390,
+      "p95": 15746,
+      "max": 41553
+    },
+    "unknown_source_time_observations": 0,
+    "invalid_time_observations": 0,
+    "refresh_interval_ms": {
+      "count": 992,
+      "p50": 321976,
+      "p95": 573007,
+      "max": 574074
+    },
+    "signal_quote_quality": {
+      "assessment": "at_recording_under_current_authorization",
+      "quote_max_age_seconds": 20,
+      "usable_observations": 1005,
+      "unusable_observations": 19,
+      "symbols_with_usable_quotes": 32,
+      "slots_with_usable_quotes": 32,
+      "elapsed_slots_with_usable_quotes": 31,
+      "elapsed_slot_coverage_pct": 93.9,
+      "refresh_interval_ms": {
+        "count": 973,
+        "p50": 322060,
+        "p95": 573118,
+        "max": 900881
+      }
+    }
+  },
+  "strategy": {
+    "cycles": 0,
+    "expected_cycles": 78,
+    "elapsed_expected_cycles": 33,
+    "elapsed_cycles": 0,
+    "cycle_lag_ms": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "signals": 0,
+    "signal_status": [],
+    "top_reasons": [],
+    "quote_age_at_evaluation_ms": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "unknown_quote_time_signals": 0,
+    "invalid_quote_time_signals": 0,
+    "within_quote_max_age_pct": null,
+    "quote_max_age_seconds": 20
+  }
+}

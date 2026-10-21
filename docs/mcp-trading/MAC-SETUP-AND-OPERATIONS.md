@@ -43,11 +43,11 @@ If using Homebrew, `brew --prefix` and `brew services list` identify the actual 
 
 ### October 21 PHP security runtime
 
-The investing application's PHP-FPM, scheduler and four queue workers now use a separate **PHP 8.5.12** source build through `~/Services/investing-ops/php/current`, a symlink to `8.5.12`. This fixes [CVE-2026-109618 / CVE-2026-109619](https://www.php.net/archive/2026.php#2026-10-21-5). The owner's `~/Downloads/php-8.5.12.tar.gz` matched SHA-256 `81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525` in [PHP's official release metadata](https://www.php.net/releases/index.php?json&version=8.5.12). Homebrew's feed still offered 8.5.11; Herd still offered 8.5.10. Neither vendor installation was overwritten. Herd's PHP server was stopped with owner approval, and the owner stopped the separate root Homebrew PHP service. Keep those older servers stopped until their vendors provide a fixed version.
+The initial October 21 emergency patch moved the investing application's PHP-FPM, scheduler and four queue workers to a separate **PHP 8.5.12** source build through `~/Services/investing-ops/php/current`, then a symlink to `8.5.12`. That build has since been replaced by the [Herd-managed investing runtime](#herd-managed-investing-runtime) below. This fixes [CVE-2026-109618 / CVE-2026-109619](https://www.php.net/archive/2026.php#2026-10-21-5). The owner's `~/Downloads/php-8.5.12.tar.gz` matched SHA-256 `81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525` in [PHP's official release metadata](https://www.php.net/releases/index.php?json&version=8.5.12). At source-build time, Homebrew's feed still offered 8.5.11 and Herd still offered 8.5.10. Neither vendor installation was overwritten by that build. Herd's PHP server was stopped with owner approval, and the owner stopped the separate root Homebrew PHP service. Keep those older servers stopped until their vendors provide a fixed version.
 
 The custom build preserves the former runtime's loaded extension set, using the installed Homebrew libraries, a separate ini/configuration directory, and the existing investing FPM pool/socket. Apache module, PEAR and DTrace builds were omitted; they are not used by this application. Build prerequisites `pkgconf`, `bison` and `re2c` were installed. Explicit Homebrew LDAP/tidy library paths corrected the first link failure. Configuration/plist backups, official release metadata, build/activation scripts and verification logs are retained privately in `~/Services/investing-ops/runtime/php-security-2026-10-21`. This is an operator-maintained build; keep its linked Homebrew dependencies available until transitioning back to a vendor runtime.
 
-Use the patched binary explicitly for operator commands; the terminal's bare `php` still resolves to the older Herd installation:
+Later on October 21, Herd offered its 8.5 update. CLI/FPM and bare terminal `php` now verify as **8.5.12** after `herd php:update 8.5 --no-interaction`. Its installed 8.6 option is **8.6.0RC3**, a preview that was not selected for this app. Herd PHP was stopped again after that update, including the 8.6 pool; the updater had restarted pools, so the stop request was reapplied. The subsequent owner-requested development restoration is recorded below. At that checkpoint the investing app still used the separate source runtime; the later consolidation below changed the `current` target to Herd adapters. The stable command path remains:
 
 ```bash
 cd ~/Services/investing-ops/app
@@ -55,7 +55,7 @@ cd ~/Services/investing-ops/app
 ~/Services/investing-ops/php/current/bin/php artisan mcp:doctor
 ```
 
-The development copies of `deploy/macos/install.sh` and `deploy/macos/deploy.sh` now prefer `$INVESTING_OPS_HOME/php/current` when present, while retaining explicit `PHP_BIN` / `PHP_FPM_BIN` overrides and the prior Homebrew fallback otherwise. A broken `current` symlink does not silently fall back. These changes have not been deployed as an application release. Until they are, supply the override when using the deployed deployment script:
+The development copies of `deploy/macos/install.sh` and `deploy/macos/deploy.sh` now prefer `$INVESTING_OPS_HOME/php/current` when present, while retaining explicit `PHP_BIN` / `PHP_FPM_BIN` overrides and the prior Homebrew fallback otherwise. A broken `current` symlink does not silently fall back. Runtime release `3f60571` includes this runtime-path preference. The explicit override also works with an older deployed deployment script:
 
 ```bash
 PHP_BIN="$HOME/Services/investing-ops/php/current/bin/php" \
@@ -67,6 +67,45 @@ Before any service reinstall with the old deployed installer, also provide `PHP_
 Verification passed on PHP 8.5.12: Composer validation and development/runtime platform requirements; PostgreSQL PHPUnit **610 tests / 4,492 assertions**, including actual FPM cold starts/recovery against `mcp_trading_test`; and **21/21** upstream OOM/request-parsing/session-upload tests. A temporary private FastCGI probe verified the serving FPM version/ini and was removed afterward. `/ready` returned HTTP 200; doctor confirmed the existing database/schema. No migrations, backfills, frontend changes, new strategy activation or brokerage mutations were performed.
 
 When official packages provide PHP 8.5.12 or a later fixed release, update and verify each vendor's actual binary before using it. Validate extensions, ini, the FPM pool and the isolated application tests; then pause/drain workers and deliberately switch the LaunchAgent executable/PATH settings, reload services and verify the serving FPM version and readiness again. Change/remove `php/current` only as part of that verified transition. The backed-up plists select vulnerable 8.5.11: they are historical recovery evidence, not a safe rollback target. Restart Herd PHP only after its own binary is patched.
+
+### Herd development restoration
+
+On October 21 the owner requested Herd again. Its default is now patched PHP **8.5.12**. The development checkout is linked as `http://laravel-crypto-trading.test` and isolated to PHP 8.5; `.env` APP_URL was updated by `herd link`. Development still uses `mcp_trading_development` / `mcp_trading`. Composer validation/platform checks passed. At this development-restoration checkpoint the investing app on port 8080 still used its separate source runtime; the later approved consolidation below switched its binaries to Herd.
+
+The former root Homebrew Nginx/DNS services initially conflicted with Herd, producing development **HTTP 502**. The owner stopped those legacy services using these Terminal commands (administrator password required):
+
+```bash
+sudo /opt/homebrew/bin/brew services stop nginx
+sudo /opt/homebrew/bin/brew services stop dnsmasq
+```
+
+Herd’s Nginx/DNS services were then started. Verification passed: `herd status` reports Nginx, DNSMasq and FPM-8.5 active with a healthy socket, development `/login` returns HTTP 200, and investing `/ready` returns HTTP 200. Those stopped Homebrew services are separate from `local.investing-ops.nginx`, which remains running. No production-runtime switch or trading activation occurred. The owner then approved using Herd’s patched PHP binaries for the existing independently supervised investing services; that completed switch is documented below.
+
+### Herd-managed investing runtime
+
+The owner-approved October 21 consolidation is complete. **Herd PHP 8.5.12 supplies the binaries for both development and the investing runtime.** The investing FPM pool, scheduler, four workers and Nginx retain their existing macOS LaunchAgents, independent of Herd’s development-site services. Stopping or starting the Herd development web server does not manage these investing LaunchAgents; keep both application configurations separate.
+
+`~/Services/investing-ops/php/current` now points to `herd-8.5`. Its `bin/php` and `sbin/php-fpm` are small shell adapters that export the dedicated application `PHPRC` / `PHP_INI_SCAN_DIR`, then execute `~/Library/Application Support/Herd/bin/php85` or `php85-fpm`. They pin the stable 8.5 family and use the actual vendor-maintained binaries, so subsequent Herd 8.5 patch updates require no new source build. The separate ini/scan directory preserves application settings without importing development tooling. The old explicit extension-directory override was removed to use the vendor default. No binaries were copied into the adapters. Do not point the investing app at the installed 8.6 RC preview.
+
+The six PHP LaunchAgent command paths and PATH continue to select `php/current`. Application `.env`, FPM pool/socket, database, credentials and trading settings were unchanged; release `3f60571` stayed deployed. Scheduled launches were disabled briefly to allow any running collection to finish, queue workers paused/drained, `current` replaced atomically, PHP services reloaded and scheduling re-enabled. Bootstrap retries account for asynchronous launchd unloads. The source-built patched `php/8.5.12` is retained inactive as a recovery option.
+
+Verification on Herd’s PHP passed Composer validation and all development/runtime platform requirements; **610 PostgreSQL PHPUnit tests / 4,493 assertions**, including actual Herd FPM cold starts, worker recycling and authentication-failure recovery; live socket binary/version/ini checks; and a graceful research-worker termination followed by automatic launchd recovery. Investing `/ready` and `/login`, and development `/login`, all returned HTTP 200. No migrations, backfills, frontend build or application release was needed. Private evidence, adapters’ configuration, prior plists/environment, process records and logs are under `runtime/php-herd-2026-10-21` (the adapters themselves live in `php/herd-8.5`).
+
+For later Herd PHP patch updates:
+
+1. Run `herd php:update 8.5` and verify both Herd binaries report the intended patched version. Keep the investing app pinned to the stable 8.5 family.
+2. From the development checkout, run Composer validation/platform checks and the isolated PostgreSQL suite. The explicit FPM override ensures the cold-start test actually runs with Herd’s differently named binary:
+
+   ```bash
+   MCP_TEST_PHP_FPM_BIN="$HOME/Services/investing-ops/php/herd-8.5/sbin/php-fpm" \
+     "$HOME/Services/investing-ops/php/herd-8.5/bin/php" \
+     vendor/bin/phpunit -c phpunit.pgsql.xml
+   ```
+
+3. Drain scheduled/queued work and reload the independently supervised investing FPM and workers. Herd’s update/restart controls manage its development pools; the investing LaunchAgents need their own reload to replace running processes. Preserve the app’s flags, pool and environment, and verify scheduling is enabled afterward.
+4. Verify the actual serving FPM binary/version and ini, worker executables, doctor, readiness and development access. Restart/recovery scripts and previous source-runtime backups are retained in the private evidence directory; use only a verified patched runtime for recovery.
+
+The FPM integration test supports `MCP_TEST_PHP_FPM_BIN` for this layout. An explicit non-executable path fails rather than silently skipping, and the selected FPM version must match the PHP CLI running the suite.
 
 ## 3. PostgreSQL: database versus schema
 

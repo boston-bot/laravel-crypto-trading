@@ -13,7 +13,7 @@ class McpCadenceReportCommand extends Command
     protected $signature = 'mcp:cadence-report {--account= : Local operator-owned connection ID} {--date= : New York session date, YYYY-MM-DD; default the latest regular session}
         {--quote-age=20 : Quote age limit in seconds to measure against}';
 
-    protected $description = 'Measure one regular session\'s collection, quote-age and strategy-cycle cadence from stored records; read-only';
+    protected $description = 'Measure session progress, collection and usable-quote cadence from stored records; read-only';
 
     public function handle(CadenceReport $report): int
     {

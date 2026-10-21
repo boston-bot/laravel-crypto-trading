@@ -13,7 +13,6 @@ use App\Models\PaperTrading\SimulationOrder;
 use App\Models\PaperTrading\StrategyCycle;
 use App\Models\PaperTrading\StrategySignal;
 use App\Models\User;
-use App\Services\Broker\Agentic\TrustedHttp;
 use App\Services\Monitoring\AccountScope;
 use App\Support\Mcp\Decimal;
 use Carbon\CarbonImmutable;
@@ -89,7 +88,7 @@ final class StrategySignals
                 $report = ['profile_valid' => (bool) $validProfile, 'position' => $position, 'eligibility' => null, 'earnings' => null];
                 $brokerHeld = $snapshot ? Holding::where('snapshot_id', $snapshot->id)->where('symbol', $symbol)->get()
                     ->contains(fn ($h) => Decimal::from($h->quantity)->compareTo(Decimal::from('0')) !== 0) : false;
-                $quote = $this->quote($input, $current, $cutoff, $execution->payload['quote_max_age_seconds']);
+                $quote = StoredStrategyQuote::read($input, $current, $cutoff, $execution->payload['quote_max_age_seconds']);
                 if ($session['status'] !== 'regular') {
                     $result = SignalRules::result($session['status'] === 'unknown' ? 'unavailable' : 'wait', 'session_'.$session['status']);
                 } elseif ($position['held']) {
@@ -150,39 +149,6 @@ final class StrategySignals
 
             return StrategySignal::where('cycle_id', $cycle->id)->orderBy('symbol')->get();
         });
-    }
-
-    private function quote($input, McpConnection $connection, CarbonImmutable $cutoff, int $age): ?array
-    {
-        if (! $input || $input->origin !== 'broker_read' || $input->recorded_at->gt($cutoff) || $input->retrieved_at->gt($cutoff) ||
-            ($input->payload['provider'] ?? null) !== TrustedHttp::RESOURCE || ($input->payload['auth_generation'] ?? null) !== $connection->auth_generation ||
-            ($input->payload['complete'] ?? false) !== true || ($input->payload['quote']['symbol'] ?? null) !== $input->symbol) {
-            return null;
-        }
-        $q = $input->payload['quote'];
-        try {
-            foreach (['retrieved_at', 'bid_as_of', 'ask_as_of'] as $timeField) {
-                if (! is_string($q[$timeField] ?? null) || ! preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/D', $q[$timeField])) {
-                    return null;
-                }
-            }
-            $retrieved = CarbonImmutable::parse($q['retrieved_at']);
-            if ($retrieved->gt($input->retrieved_at) || $retrieved->gt($cutoff) || $retrieved->lt($cutoff->subSeconds($age))) {
-                return null;
-            }
-            foreach (['bid_as_of', 'ask_as_of'] as $field) {
-                if (! is_string($q[$field] ?? null) || CarbonImmutable::parse($q[$field])->gt($retrieved) || CarbonImmutable::parse($q[$field])->lt($cutoff->subSeconds($age))) {
-                    return null;
-                }
-            }
-            if (Decimal::from($q['bid'])->compareTo(Decimal::from('0')) <= 0 || Decimal::from($q['ask'])->compareTo(Decimal::from($q['bid'])) < 0) {
-                return null;
-            }
-        } catch (\InvalidArgumentException) {
-            return null;
-        }
-
-        return array_intersect_key($q, array_flip(['bid', 'ask', 'retrieved_at', 'bid_as_of', 'ask_as_of']));
     }
 
     private function session(CarbonImmutable $cutoff): array

@@ -1,0 +1,166 @@
+[
+  {
+    "experiment_id": "a5d460e5-3953-4738-a50a-8426b98a740c",
+    "status": "complete",
+    "definition_hash": "643d6a3c4f712d722a95fe91f3e13e58a15b0a7e07f2749a6d8b6c51f62402ab",
+    "dataset_hash": "ba4911ef9725f551fd205a7de5ee92decc77e21137adc763f430f71542409b95",
+    "sessions": [
+      "2026-10-19",
+      "2026-10-20"
+    ],
+    "failed_attempts": 0,
+    "variants": {
+      "baseline": {
+        "initial_equity": "500",
+        "final_equity": "500.000000000000000000",
+        "orders": 0,
+        "fills": 0,
+        "open_positions": 0,
+        "closed_trade_net": "0",
+        "coverage": {
+          "known_quotes": 310,
+          "expected_quotes": 316
+        },
+        "assessment": "no_closed_trades_inconclusive",
+        "verification": {
+          "version": "quote_replay_accounting_v1",
+          "status": "passed",
+          "cash": "500",
+          "closed_trade_net": "0",
+          "frames_checked": 158,
+          "fills_checked": 0,
+          "closed_trades_checked": 0
+        },
+        "closed_trades": 0
+      },
+      "larger_cash": {
+        "initial_equity": "10000",
+        "final_equity": "9994.778255000000000000",
+        "orders": 1,
+        "fills": 1,
+        "open_positions": 1,
+        "closed_trade_net": "0",
+        "coverage": {
+          "known_quotes": 310,
+          "expected_quotes": 316
+        },
+        "assessment": "no_closed_trades_inconclusive",
+        "verification": {
+          "version": "quote_replay_accounting_v1",
+          "status": "passed",
+          "cash": "8782.42825500",
+          "closed_trade_net": "0",
+          "frames_checked": 158,
+          "fills_checked": 1,
+          "closed_trades_checked": 0
+        },
+        "closed_trades": 0
+      },
+      "wider_stop": {
+        "initial_equity": "500",
+        "final_equity": "500.000000000000000000",
+        "orders": 0,
+        "fills": 0,
+        "open_positions": 0,
+        "closed_trade_net": "0",
+        "coverage": {
+          "known_quotes": 310,
+          "expected_quotes": 316
+        },
+        "assessment": "no_closed_trades_inconclusive",
+        "verification": {
+          "version": "quote_replay_accounting_v1",
+          "status": "passed",
+          "cash": "500",
+          "closed_trade_net": "0",
+          "frames_checked": 158,
+          "fills_checked": 0,
+          "closed_trades_checked": 0
+        },
+        "closed_trades": 0
+      }
+    }
+  },
+  {
+    "experiment_id": "63a4fa54-71f8-4c03-b761-01d006ea45c1",
+    "status": "complete",
+    "definition_hash": "643d6a3c4f712d722a95fe91f3e13e58a15b0a7e07f2749a6d8b6c51f62402ab",
+    "dataset_hash": "05aedaed0c10b645778720934e373f9d13ab319452c3e6752a787e087b006ad4",
+    "sessions": [
+      "2026-10-19",
+      "2026-10-20"
+    ],
+    "failed_attempts": 0,
+    "variants": {
+      "baseline": {
+        "initial_equity": "500",
+        "final_equity": "500.000000000000000000",
+        "orders": 0,
+        "fills": 0,
+        "open_positions": 0,
+        "closed_trade_net": "0",
+        "coverage": {
+          "known_quotes": 310,
+          "expected_quotes": 316
+        },
+        "assessment": "no_closed_trades_inconclusive",
+        "verification": {
+          "version": "quote_replay_accounting_v1",
+          "status": "passed",
+          "cash": "500",
+          "closed_trade_net": "0",
+          "frames_checked": 158,
+          "fills_checked": 0,
+          "closed_trades_checked": 0
+        },
+        "closed_trades": 0
+      },
+      "larger_cash": {
+        "initial_equity": "10000",
+        "final_equity": "9994.778255000000000000",
+        "orders": 1,
+        "fills": 1,
+        "open_positions": 1,
+        "closed_trade_net": "0",
+        "coverage": {
+          "known_quotes": 310,
+          "expected_quotes": 316
+        },
+        "assessment": "no_closed_trades_inconclusive",
+        "verification": {
+          "version": "quote_replay_accounting_v1",
+          "status": "passed",
+          "cash": "8782.42825500",
+          "closed_trade_net": "0",
+          "frames_checked": 158,
+          "fills_checked": 1,
+          "closed_trades_checked": 0
+        },
+        "closed_trades": 0
+      },
+      "wider_stop": {
+        "initial_equity": "500",
+        "final_equity": "500.000000000000000000",
+        "orders": 0,
+        "fills": 0,
+        "open_positions": 0,
+        "closed_trade_net": "0",
+        "coverage": {
+          "known_quotes": 310,
+          "expected_quotes": 316
+        },
+        "assessment": "no_closed_trades_inconclusive",
+        "verification": {
+          "version": "quote_replay_accounting_v1",
+          "status": "passed",
+          "cash": "500",
+          "closed_trade_net": "0",
+          "frames_checked": 158,
+          "fills_checked": 0,
+          "closed_trades_checked": 0
+        },
+        "closed_trades": 0
+      }
+    }
+  }
+]

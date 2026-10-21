@@ -14,10 +14,16 @@ class FpmPostgresStartupTest extends TestCase
         if (getenv('DB_CONNECTION') !== 'pgsql_test' || PHP_OS_FAMILY !== 'Darwin') {
             $this->markTestSkipped('Requires the dedicated PostgreSQL fixture and macOS PHP-FPM.');
         }
-        $fpm = dirname(PHP_BINARY, 2).'/sbin/php-fpm';
+        $fpmOverride = getenv('MCP_TEST_PHP_FPM_BIN');
+        $fpm = $fpmOverride ?: dirname(PHP_BINARY, 2).'/sbin/php-fpm';
         if (! is_executable($fpm)) {
+            if ($fpmOverride) {
+                $this->fail('Configured MCP_TEST_PHP_FPM_BIN is not executable.');
+            }
             $this->markTestSkipped('Matching PHP-FPM executable unavailable.');
         }
+        $version = (new Process([$fpm, '-v']))->mustRun()->getOutput();
+        $this->assertStringContainsString('PHP '.PHP_VERSION.' (fpm-fcgi)', $version);
         $this->assertSame('mcp_trading_test', DB::selectOne('SELECT current_database() AS db')->db);
         $role = 'mcp_fpm_fixture_'.bin2hex(random_bytes(6));
         $password = bin2hex(random_bytes(24));
