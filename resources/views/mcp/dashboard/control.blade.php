@@ -36,6 +36,10 @@
     </x-panel>
 </div>
 
+<x-panel title="Historical strategy experiments" subtitle="Queue a run, compare variants and inspect simulated entries, exits and open positions." icon="performance">
+    <a class="btn btn-secondary" href="{{ route('mcp.experiments.index') }}">Open experiments</a>
+</x-panel>
+
 @if($errors->any())
     <x-callout tone="bad" title="Change not recorded"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></x-callout>
 @endif

@@ -621,3 +621,38 @@ Specifications accept 1–2 symbols, 2–20 consecutive completed sessions and 1
 For a new comparison after changing a parameter or rebuilding rules, add `"dataset_experiment": "<completed-experiment-uuid>"` to a new specification with identical symbols/dates. The application reuses the parent's verified observations, calculates differences against its baseline, and records changed sources. It withholds cross-experiment deltas when capital or cost/risk settings differ. Keep original experiments/releases as evidence; do not modify them.
 
 Example prompt after activation: “Start the historical experiment in `docs/mcp-trading/examples/strategy-experiment.json` and return its ID.” A later prompt: “Read experiment `<uuid>` and explain the calculated results and limitations.” The prompt selects/starts work or interprets output; the application's classes perform the processing.
+
+
+### October 21 experiment-runner deployment and activation
+
+At approximately 07:05–07:07 Central, completed the owner's deployment of `5b59abf` after the encrypted backup `mcp-trading-20261021T120418Z.dump.enc` and the failed migration attempt. The private operator-owned `0600` credential file and the verified `postgres` / `mcp_trading` schema-owner connection passed explicit-path pretend review. Only migration `2026_10_20_000027` was pending. Deployment with a command-scoped credential path applied it as **batch 12**, recached the release and recovered `/ready` successfully:
+
+```bash
+cd "$HOME/Services/investing-ops/app"
+MCP_MIGRATION_CREDENTIALS_FILE="$HOME/.config/investing-ops/migration.json" \
+  bash deploy/macos/deploy.sh 5b59abf --migrate
+```
+
+The pasted failed command did not show the credential-path setting. The inline form supplies it only for that invocation; no later `unset` is needed. No credential contents were printed or stored in Laravel configuration.
+
+Enabled **only** runtime `MCP_STRATEGY_EXPERIMENTS_ENABLED=true` and `MCP_HISTORICAL_QUOTE_REPLAY_ENABLED=true`, preserving the prior private environment in the existing `0700` private-config-backups directory with a `0600` backup. Verified all non-target environment lines stayed identical; refreshed configuration cache, signaled queue restarts and restarted FPM. Existing Alpaca data/reference/calendar and read-only batch/opening-valuation flags remain enabled. AI research/decisions, signals, handoff, real-data fills, legacy trading and brokerage writes remain disabled.
+
+Rendered and installed only `~/Library/LaunchAgents/local.investing-ops.experiments.plist` from the deployed template, then bootstrapped it in the user's GUI domain. Plist validation passed. Launchd reports a running PHP worker on `mcp_experiments` / `experiments`, one start and no exit. Existing monitoring/reconciliation services remain available. The seven-service setup now includes the idle historical experiment worker; this is no completed experiment or endurance claim.
+
+Doctor and restricted-role reads of both new tables passed; no migrations remain pending and `/ready` is healthy. Before/after checks show the same **$500 cash, $0 reserved, ledger version 1, zero paper orders/positions**, zero experiments/steps and an empty experiment queue. No trial, provider/model call, policy application, forward paper fill or brokerage action was started. Private activation evidence is in runtime `runtime/experiment-activation-2026-10-21/` (before/after redacted reports and verifier). No source/dependency/frontend change or full test rerun for activation; the source release's 599-test verification remains the applicable implementation evidence. Next: submit the predefined historical experiment and inspect its UUID report.
+
+
+### Experiment controls and trade tables (source only)
+
+After deploying this UI increment, sign in and open **Strategy research → Experiments** (`/mcp/experiments`). The previously enabled research flags and experiment worker are still required; the page does not install workers or enable settings. This increment adds no migration beyond the already deployed `000027`.
+
+1. Give the experiment a name and a specific comparison question. Enter 1–2 tickers and 2–20 consecutive completed session dates, separated by commas or whitespace.
+2. Define up to eight variants with unique IDs and simulated starting cash. Select one baseline. Optional rule overrides are restricted to the runner's existing five supported parameters; leaving a field blank retains the frozen applied setting. The initial example is editable; it is not automatically started.
+3. Select **Queue historical experiment**. The application validates and freezes the specification and queues the existing worker. Closing the page does not stop the work. Refresh results to see completed checkpoints and variants. The JSON report remains available for later prompt-based interpretation.
+4. Inspect a variant in the comparison table. A failed or interrupted run offers an explicit resume control when its lease is no longer active. Completed runs offer **New comparison with this dataset**, which prefills the original dates/tickers and source UUID. Submitting creates a new experiment and retains the original; normal frozen-data reuse checks still apply.
+
+The trade table groups simulated fills into position episodes, including partial fills/sales and later reentries. Columns are ticker/state, playbook/quantities, weighted buy price/first buy time, weighted sell price/close time, net P&L/recorded fees, exit plan/latest valid historical mark, and entry/exit reasons. Expand fill records for individual execution prices, quantities, fees and times. A partial sale has its own latest-fill time and leaves the position open. Order intents appear separately: acceptance time and limit bounds are not execution times/prices. Trades and intents paginate independently, twenty rows per page. Times are Central.
+
+There is no fixed take-profit rule, so the page does not invent a projected sell price. Open positions show recorded initial/trailing stop thresholds and the terminal valid historical bid mark. These describe the replay window; stops are triggers rather than guaranteed fill prices. Closed episodes show their actual simulated sale rather than reconstructing an unrecorded final stop. Closed P&L includes recorded fees; open marked P&L includes partial sales and the remaining bid-marked quantity, excludes hypothetical terminal sale fees, and stays unavailable if a valid terminal mark is missing.
+
+History, report and mutation routes require the authenticated financial operator and current bound account/authorization generation. CSRF and stale-context checks protect start/resume. Reading results remains available with research flags disabled, while starting/resuming still respects the runner's gates. The UI calls the same deterministic services as the CLI; it neither executes a shell command nor runs an LLM or the replay synchronously in the browser request. No forward paper ledger or brokerage permissions are changed.

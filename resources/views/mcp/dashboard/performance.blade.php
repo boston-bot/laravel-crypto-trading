@@ -1,3 +1,7 @@
+<x-panel title="Historical simulation results" subtitle="Explore experiments separately from broker-confirmed performance." icon="performance">
+    <a class="btn btn-secondary" href="{{ route('mcp.experiments.index') }}">View experiment comparisons and trades</a>
+</x-panel>
+
 <x-callout tone="warn" title="Return-dependent gates unavailable">Returns and drawdown gates unavailable: verified flow history and historical baseline are missing. Deposits are not gains. No historical, simulated, annualized or benchmark performance is inferred from current balances.</x-callout>
 
 <div class="section-head"><div><h2>Daily and weekly summaries</h2><p>Deterministic summaries of closed periods only. No AI call.</p></div></div>
