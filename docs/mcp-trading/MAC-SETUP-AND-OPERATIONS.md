@@ -41,6 +41,33 @@ Composer and Node/npm are required for dependencies and Vite assets even though 
 
 If using Homebrew, `brew --prefix` and `brew services list` identify the actual prefix and versioned service names. Apple Silicon often uses `/opt/homebrew`; Intel often uses `/usr/local`. Discover paths before writing service definitions. Commands launched by `launchd` do not inherit your interactive shell's setup.
 
+### October 21 PHP security runtime
+
+The investing application's PHP-FPM, scheduler and four queue workers now use a separate **PHP 8.5.12** source build through `~/Services/investing-ops/php/current`, a symlink to `8.5.12`. This fixes [CVE-2026-109618 / CVE-2026-109619](https://www.php.net/archive/2026.php#2026-10-21-5). The owner's `~/Downloads/php-8.5.12.tar.gz` matched SHA-256 `81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525` in [PHP's official release metadata](https://www.php.net/releases/index.php?json&version=8.5.12). Homebrew's feed still offered 8.5.11; Herd still offered 8.5.10. Neither vendor installation was overwritten. Herd's PHP server was stopped with owner approval, and the owner stopped the separate root Homebrew PHP service. Keep those older servers stopped until their vendors provide a fixed version.
+
+The custom build preserves the former runtime's loaded extension set, using the installed Homebrew libraries, a separate ini/configuration directory, and the existing investing FPM pool/socket. Apache module, PEAR and DTrace builds were omitted; they are not used by this application. Build prerequisites `pkgconf`, `bison` and `re2c` were installed. Explicit Homebrew LDAP/tidy library paths corrected the first link failure. Configuration/plist backups, official release metadata, build/activation scripts and verification logs are retained privately in `~/Services/investing-ops/runtime/php-security-2026-10-21`. This is an operator-maintained build; keep its linked Homebrew dependencies available until transitioning back to a vendor runtime.
+
+Use the patched binary explicitly for operator commands; the terminal's bare `php` still resolves to the older Herd installation:
+
+```bash
+cd ~/Services/investing-ops/app
+~/Services/investing-ops/php/current/bin/php -v
+~/Services/investing-ops/php/current/bin/php artisan mcp:doctor
+```
+
+The development copies of `deploy/macos/install.sh` and `deploy/macos/deploy.sh` now prefer `$INVESTING_OPS_HOME/php/current` when present, while retaining explicit `PHP_BIN` / `PHP_FPM_BIN` overrides and the prior Homebrew fallback otherwise. A broken `current` symlink does not silently fall back. These changes have not been deployed as an application release. Until they are, supply the override when using the deployed deployment script:
+
+```bash
+PHP_BIN="$HOME/Services/investing-ops/php/current/bin/php" \
+  deploy/macos/deploy.sh <reviewed-commit>
+```
+
+Before any service reinstall with the old deployed installer, also provide `PHP_FPM_BIN="$HOME/Services/investing-ops/php/current/sbin/php-fpm"`. Do not reinstall services merely to change PHP: the installer also renders the application pool/Nginx configuration. The October 21 switch preserved those configurations and application flags, stopped scheduled dispatches, paused/drained queue work, then reloaded the six PHP LaunchAgents with the new binary and PATH. `launchctl bootout` can complete asynchronously; bounded bootstrap retries handled that race. Nginx was left running on the same private FPM socket.
+
+Verification passed on PHP 8.5.12: Composer validation and development/runtime platform requirements; PostgreSQL PHPUnit **610 tests / 4,492 assertions**, including actual FPM cold starts/recovery against `mcp_trading_test`; and **21/21** upstream OOM/request-parsing/session-upload tests. A temporary private FastCGI probe verified the serving FPM version/ini and was removed afterward. `/ready` returned HTTP 200; doctor confirmed the existing database/schema. No migrations, backfills, frontend changes, new strategy activation or brokerage mutations were performed.
+
+When official packages provide PHP 8.5.12 or a later fixed release, update and verify each vendor's actual binary before using it. Validate extensions, ini, the FPM pool and the isolated application tests; then pause/drain workers and deliberately switch the LaunchAgent executable/PATH settings, reload services and verify the serving FPM version and readiness again. Change/remove `php/current` only as part of that verified transition. The backed-up plists select vulnerable 8.5.11: they are historical recovery evidence, not a safe rollback target. Restart Herd PHP only after its own binary is patched.
+
 ## 3. PostgreSQL: database versus schema
 
 `mcp_trading` was reported created as a **schema**. A database contains schemas. Laravel's `DB_DATABASE` must be the database containing that schema, not automatically `mcp_trading`.

@@ -9,7 +9,12 @@ BASE="${INVESTING_OPS_HOME:-$HOME/Services/investing-ops}"
 APP="$BASE/app"
 PORT="${INVESTING_OPS_PORT:-8080}"
 BREW="${HOMEBREW_PREFIX:-/opt/homebrew}"
-PHP="${PHP_BIN:-$BREW/opt/php@8.5/bin/php}"
+PHP_ROOT="$BREW/opt/php@8.5"
+# Preserve a deliberately installed security runtime on later application deployments.
+if [[ -e "$BASE/php/current" || -L "$BASE/php/current" ]]; then
+    PHP_ROOT="$BASE/php/current"
+fi
+PHP="${PHP_BIN:-$PHP_ROOT/bin/php}"
 REV="${1:?usage: deploy.sh <commit-or-branch> [--migrate]}"
 MIGRATE="${2:-}"
 DOMAIN="gui/$(id -u)"
