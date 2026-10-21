@@ -8,8 +8,16 @@
     <details @if(!empty($variant['parameters'])) open @endif>
         <summary>Rule overrides <span class="muted">· optional</span></summary>
         <div class="experiment-parameters">
-            @foreach(['initial_stop_atr' => 'Initial stop (ATR)', 'trailing_stop_atr' => 'Trailing stop (ATR)', 'max_chase_atr' => 'Maximum chase (ATR)', 'time_exit_sessions' => 'Time exit (sessions)', 'cooldown_sessions' => 'Cooldown (sessions)'] as $key => $label)
+            @foreach(['initial_stop_atr' => 'Initial stop (ATR)', 'trailing_stop_atr' => 'Trailing stop (ATR)', 'max_chase_atr' => 'Maximum chase (ATR)', 'time_exit_sessions' => 'Time exit (sessions)', 'cooldown_sessions' => 'Cooldown (sessions)', 'market_filter_sma_sessions' => 'Market filter average (sessions)'] as $key => $label)
             <label class="field">{{ $label }}<input name="variants[{{ $index }}][parameters][{{ $key }}]" value="{{ $variant['parameters'][$key] ?? '' }}" inputmode="{{ str_ends_with($key, 'sessions') ? 'numeric' : 'decimal' }}" placeholder="Default: {{ App\Services\PaperTrading\SignalParameters::current()['values'][$key] }}" maxlength="16"></label>
+            @endforeach
+            @foreach(['exit_on_fast_sma_close' => 'Sell on a close below the 50-day average', 'market_filter_required' => 'Block entries when SPY is below its average'] as $key => $label)
+            @php($chosen = isset($variant['parameters'][$key]) ? var_export(in_array($variant['parameters'][$key], [true, 'true'], true), true) : '')
+            <label class="field">{{ $label }}<select name="variants[{{ $index }}][parameters][{{ $key }}]">
+                <option value="" @selected($chosen === '')>Default: on</option>
+                <option value="true" @selected($chosen === 'true')>On</option>
+                <option value="false" @selected($chosen === 'false')>Off</option>
+            </select></label>
             @endforeach
         </div>
     </details>

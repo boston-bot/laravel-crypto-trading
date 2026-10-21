@@ -174,4 +174,20 @@ class ExperimentInterfaceTest extends TestCase
         $this->get('/mcp/experiments/'.$next->experiment_id)->assertOk()->assertSee('Comparison with the previous experiment');
         $this->assertCount($count, Http::recorded());
     }
+
+    public function test_rule_switches_are_submitted_as_typed_overrides_and_invalid_choices_are_refused(): void
+    {
+        [$c] = E::seed();
+        $this->actingAs(User::findOrFail($c->user_id));
+        $this->get('/mcp/experiments')->assertOk()->assertSee('Sell on a close below the 50-day average')->assertSee('Market filter average (sessions)');
+        $bad = $this->form($c);
+        $bad['variants'][1]['parameters']['market_filter_required'] = 'maybe';
+        $this->post('/mcp/experiments', $bad)->assertSessionHasErrors('variants.1.parameters.market_filter_required');
+        $form = $this->form($c);
+        $form['variants'][1]['parameters'] += ['exit_on_fast_sma_close' => 'false', 'market_filter_required' => '', 'market_filter_sma_sessions' => '150'];
+        $this->post('/mcp/experiments', $form)->assertRedirect();
+        $this->assertSame(['initial_stop_atr' => '3', 'exit_on_fast_sma_close' => false, 'market_filter_sma_sessions' => 150],
+            StrategyExperiment::sole()->definition['spec']['variants'][1]['parameters']);
+        Http::assertNothingSent();
+    }
 }

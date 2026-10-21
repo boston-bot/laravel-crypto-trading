@@ -101,4 +101,16 @@ class IntradayQuoteReplayTest extends TestCase
         $this->assertSame('0', $r['orders'][0]['reserved_cash']);
         $this->assertSame('10000.000000000000000000', $r['final_equity']);
     }
+
+    public function test_market_filter_switch_is_research_only_and_defaults_to_blocking(): void
+    {
+        $data = F::data();
+        $last = array_key_last($data['daily_reads']['SPY']['bars']);
+        $data['daily_reads']['SPY']['bars'][$last][4] = '200.00'; // the benchmark closes below its 200-session average
+        $blocked = $this->runScenario($data);
+        $this->assertSame([[], 'market_filter_off'], [$blocked['fills'], $blocked['events'][0]['reason']]);
+        $open = app(StrategyReplay::class)->runQuotes($data, SignalParameters::current()['values'] + ['market_filter_required' => false], F::settings(), '10000');
+        $this->assertCount(2, $open['fills']);
+        $this->assertSame('initial_stop_hit', $open['trades'][0]['reason']);
+    }
 }

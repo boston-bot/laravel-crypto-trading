@@ -10,6 +10,7 @@ use App\Services\PaperTrading\Experiments\ExperimentAccess;
 use App\Services\PaperTrading\Experiments\ExperimentDefinition;
 use App\Services\PaperTrading\Experiments\StrategyExperiments;
 use App\Services\PaperTrading\ExperimentTradeTable;
+use App\Services\PaperTrading\ResearchVariants;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
@@ -50,7 +51,7 @@ class ExperimentController extends Controller
             'symbols' => ['required', 'string', 'max:64'], 'sessions' => ['required', 'string', 'max:500'], 'baseline_index' => ['required', 'regex:/^\d{1,3}$/D'],
             'variants' => ['required', 'array', 'max:8'], 'variants.*' => ['array:id,equity,parameters'],
             'variants.*.id' => ['nullable', 'string', 'max:32'], 'variants.*.equity' => ['nullable', 'string', 'max:16'],
-            'variants.*.parameters' => ['sometimes', 'array:initial_stop_atr,trailing_stop_atr,max_chase_atr,time_exit_sessions,cooldown_sessions'],
+            'variants.*.parameters' => ['sometimes', 'array:'.implode(',', ResearchVariants::parameterKeys())],
             'variants.*.parameters.*' => ['nullable', 'string', 'max:16'], 'dataset_experiment' => ['nullable', 'uuid']]);
         $variants = [];
         $baseline = $data['variants'][$data['baseline_index']]['id'] ?? null;
@@ -59,12 +60,13 @@ class ExperimentController extends Controller
             if (empty($variant['id']) && empty($variant['equity']) && $p === []) {
                 continue;
             }
-            foreach (['time_exit_sessions', 'cooldown_sessions'] as $key) {
-                if (isset($p[$key])) {
-                    if (! preg_match('/^[1-9]\d{0,2}$/D', $p[$key])) {
-                        throw ValidationException::withMessages(['variants.'.$index.'.parameters.'.$key => 'Session counts must be whole numbers.']);
-                    }
-                    $p[$key] = (int) $p[$key];
+            foreach ($p as $key => $value) {
+                $p[$key] = ResearchVariants::typed($key, $value);
+                if (isset(ResearchVariants::SESSIONS[$key]) && ! is_int($p[$key])) {
+                    throw ValidationException::withMessages(['variants.'.$index.'.parameters.'.$key => 'Session counts must be whole numbers.']);
+                }
+                if (in_array($key, ResearchVariants::FLAGS, true) && ! is_bool($p[$key])) {
+                    throw ValidationException::withMessages(['variants.'.$index.'.parameters.'.$key => 'Choose on or off.']);
                 }
             }
             $variants[] = ['id' => $variant['id'] ?? '', 'equity' => $variant['equity'] ?? '', 'parameters' => $p];

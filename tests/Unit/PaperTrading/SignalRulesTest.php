@@ -42,4 +42,20 @@ class SignalRulesTest extends TestCase
         $this->assertSame('exit_reference_data_unavailable', $this->exit(profile: null, earnings: 'unavailable')['reason']);
         $this->assertSame('initial_stop_hit', $this->exit(profile: null, bid: '90', earnings: 'unavailable')['reason']);
     }
+
+    public function test_research_switches_default_to_live_behavior_and_never_suppress_stops(): void
+    {
+        $below = ['indicators' => ['close' => '99', 'sma_fast' => '100']];
+        $off = SignalParameters::current()['values'] + ['exit_on_fast_sma_close' => false];
+        $rules = new SignalRules;
+        $position = ['initial_stop' => '96', 'trailing_stop' => '102', 'sessions_held' => 2, 'progressed' => false];
+        $this->assertSame('holding_exit_not_triggered', $rules->exit('105', $position, $below, ['status' => 'pass'], $off)['reason']);
+        $this->assertSame('trailing_stop_hit', $rules->exit('101', $position, $below, ['status' => 'pass'], $off)['reason']);
+        $this->assertSame('daily_close_below_fast_sma', $rules->exit('105', $position, $below, ['status' => 'pass'], array_replace($off, ['exit_on_fast_sma_close' => true]))['reason']);
+        $p = SignalParameters::current()['values'];
+        $this->assertTrue(SignalRules::marketFilterBlocks(['market' => ['filter' => 'off']], $p));
+        $this->assertTrue(SignalRules::marketFilterBlocks([], $p)); // unknown market state blocks
+        $this->assertFalse(SignalRules::marketFilterBlocks(['market' => ['filter' => 'on']], $p));
+        $this->assertFalse(SignalRules::marketFilterBlocks(['market' => ['filter' => 'off']], $p + ['market_filter_required' => false]));
+    }
 }

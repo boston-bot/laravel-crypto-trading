@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\PaperTrading;
 
+use App\Services\Broker\Agentic\RobinhoodOrderContract;
 use App\Support\Mcp\Decimal;
 use Brick\Math\RoundingMode;
 
@@ -12,6 +13,10 @@ use Brick\Math\RoundingMode;
  * Each day uses only bars completed before it. It is a daily approximation of the five-minute loop, labeled as such:
  * no earnings blackout (dates are not reconstructed), no 15-minute opening delay, no intraday quotes or book
  * liquidity, and today's watchlist applied to the past (selection bias). Pure: no network, storage or model.
+ *
+ * Orders are whole-share limit orders unless settings select `fractional_market`: Robinhood's only fractional
+ * order type, a regular-hours market order. That mode sizes to 6 decimals with the $1 minimum and applies the
+ * supplied, more conservative market slippage to entries and exits.
  */
 final class StrategyReplay
 {
@@ -22,7 +27,8 @@ final class StrategyReplay
 
     public const INTRADAY_VERSION = 'intraday_quotes_v1';
 
-    public const VERSION = 'daily_replay_v2';
+    // v3: research order modes and rule switches; the defaults reproduce v2.
+    public const VERSION = 'daily_replay_v3';
 
     /** Bars per profile, matching the live 400-calendar-day history window (about 275 sessions). */
     public const LIVE_WINDOW = 275;
@@ -36,6 +42,13 @@ final class StrategyReplay
     public function run(array $bars, array $benchmark, array $p, array $settings, string $equity, ?string $startDate = null, ?string $endDate = null): array
     {
         ksort($bars);
+        $mode = $settings['order_mode'] ?? 'whole_share_limit';
+        if (! in_array($mode, ['whole_share_limit', 'fractional_market'], true) || ($mode === 'fractional_market' && ! RobinhoodOrderContract::allowsFractional('market'))) {
+            throw new \InvalidArgumentException('Unsupported replay order mode.');
+        }
+        $scale = $mode === 'fractional_market' ? RobinhoodOrderContract::FRACTIONAL_MAX_DECIMALS : 0;
+        // Market fills use their own slippage assumption for entries, exits and planned risk.
+        $settings = $mode === 'fractional_market' ? ['slippage_bps' => $settings['market_slippage_bps']] + $settings : $settings;
         $dates = array_column($benchmark, 0);
         $index = [];
         foreach ($bars as $symbol => $series) {
@@ -115,7 +128,7 @@ final class StrategyReplay
                         continue;
                     }
                     $counts['setups']++;
-                    if (isset($positions[$symbol]) || in_array('market_filter_off', $profile['entry_blockers'], true)
+                    if (isset($positions[$symbol]) || SignalRules::marketFilterBlocks($profile, $p)
                         || (isset($lastExit[$symbol]) && $i - $lastExit[$symbol] < $p['cooldown_sessions'])) {
                         continue;
                     }
@@ -137,7 +150,7 @@ final class StrategyReplay
                     $stop = $fill->minus(Decimal::from($profile['indicators']['atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
                     // Reflect opening gaps, realized opening losses and fees from preceding entries.
                     // Intraday marks are unknown; retain opening marks and each new position's fill.
-                    $size = $this->sizer->calculate($this->mark($cash, $positions, $marks), $cash, $fill, $stop, $settings);
+                    $size = $this->sizer->calculate($this->mark($cash, $positions, $marks), $cash, $fill, $stop, $settings, null, $scale);
                     $quantity = Decimal::from($size['quantity']);
                     if ($quantity->compareTo($zero) <= 0) {
                         $counts['skipped_zero_size']++;
@@ -200,8 +213,11 @@ final class StrategyReplay
             'open_positions' => array_map(fn ($p) => array_intersect_key($p, array_flip(['quantity', 'entry_price', 'entry_date', 'setup'])), $positions),
             'benchmarks' => $this->benchmarks($bars, $benchmark, $curve[0][0] ?? null, $curve[array_key_last($curve)][0] ?? null),
             'trades' => $trades, 'equity_curve' => $curve,
+            'execution' => ['order_mode' => $mode, 'quantity_scale' => $scale, 'slippage_bps' => $settings['slippage_bps']],
             'limitations' => ['daily_bars_approximate_five_minute_triggers_and_stops', 'earnings_blackout_not_reconstructed', 'opening_delay_not_modeled',
-                'current_watchlist_applied_to_past_selection_bias', 'no_intraday_quotes_or_book_liquidity', 'whole_share_limit_orders_per_reviewed_broker_contract',
+                'current_watchlist_applied_to_past_selection_bias', 'no_intraday_quotes_or_book_liquidity',
+                ...($scale === 0 ? ['whole_share_limit_orders_per_reviewed_broker_contract']
+                    : ['fractional_market_orders_regular_hours_only', 'market_order_slippage_assumed_not_measured', 'symbol_fractional_eligibility_assumed']),
                 'intraday_exit_cash_and_capacity_unavailable_until_next_session', 'intraday_sizing_uses_opening_marks_and_new_entry_fills']];
     }
 

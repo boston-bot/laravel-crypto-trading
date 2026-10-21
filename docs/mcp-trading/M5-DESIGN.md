@@ -102,7 +102,7 @@ Each profile is versioned with an input fingerprint.
 
 Exit orders are repriced each cycle while the exit condition holds, until filled or the session ends.
 
-**Sizing.** Quantity = (paper equity × risk per trade) ÷ (entry − initial stop). It is capped by the 20% maximum position, available cash after estimated costs, and the maximum number of open positions. Robinhood's reviewed agentic order contract allows fractional quantities only on regular-hours market orders (up to 6 decimals, $1 minimum); fractional limit orders are unsupported, so new execution settings cannot request them. Quantities stay whole shares on limit orders, and a trade that sizes to zero is recorded as skipped, unless the owner adopts guarded fractional market orders ([evidence](M5-REPLAY-FRACTIONAL-CADENCE-EVIDENCE.md)).
+**Sizing.** Quantity = (paper equity × risk per trade) ÷ (entry − initial stop). It is capped by the 20% maximum position, available cash after estimated costs, and the maximum number of open positions. Robinhood's reviewed agentic order contract allows fractional quantities only on regular-hours market orders (up to 6 decimals, $1 minimum); fractional limit orders are unsupported, so new execution settings cannot request them. On October 21 the owner chose fractional shares, which means guarded fractional market orders: a regular-hours market order sized to 6 decimals with the $1 minimum, sent only while a fresh ask is at or below the profile's maximum entry and within the spread limit, with its own, more conservative slippage assumption. The daily replay models this mode for research (`order_mode=fractional_market`). The forward paper path still uses whole-share limit orders until it gains market-order fills, a per-symbol fractional-eligibility source and an owner-applied settings version; a trade that sizes to zero is recorded as skipped ([fractional contract](M5-REPLAY-FRACTIONAL-CADENCE-EVIDENCE.md), [research variants](M5-RESEARCH-VARIANTS-EVIDENCE.md)).
 
 **Costs.** These replace the 1% per-fill fee:
 - the broker's actual stock/ETF commission (Robinhood's is $0; verify against its current fee schedule)
@@ -200,7 +200,7 @@ No paid LLM API runs in this application. The earlier $100 target / $150 maximum
 | ChatGPT tasks set up so they cannot place trades, if Robinhood allows it | External-order detection still pauses entries |
 | Daily-history source and any cost | Deployed: Alpaca using existing keys; no new feed added by opening valuations |
 | Earnings-date source | Deployed: Robinhood `get_earnings_calendar` ([evidence](M5-EARNINGS-EVIDENCE.md)) |
-| Fractional support verified: market orders in regular hours only; fractional limits unsupported (October 19) | Whole shares on limit orders; zero-size trades skipped; guarded fractional market orders need an owner decision |
+| Fractional support verified: market orders in regular hours only; fractional limits unsupported (October 19). Owner chose guarded fractional market orders (October 21); research mode exists | Forward paper keeps whole shares on limit orders until the market-order path, fractional eligibility and settings version exist; zero-size trades skipped |
 | Current commission and regulatory fee rates verified | Dated Q4 2026 preset implemented/deployed; owner signal-policy application remains outstanding |
 | Starting parameters confirmed by the owner after replay | Values stay versioned starting points |
 

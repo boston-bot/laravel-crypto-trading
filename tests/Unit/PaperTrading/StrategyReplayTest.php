@@ -175,4 +175,28 @@ class StrategyReplayTest extends TestCase
         $this->assertSame(0, $replay['stats']['wins']);
         $this->assertSame($replay, $this->replay($rows)); // deterministic, exact decimals
     }
+
+    public function test_fractional_market_mode_trades_small_accounts_and_research_switches_change_only_their_rule(): void
+    {
+        $rows = $this->base();
+        $rows[] = [10080, 10150, 10050, 10140];
+        $settings = ['risk_per_trade_pct' => '1', 'max_position_pct' => '20', 'max_open_positions' => 8, 'slippage_bps' => '1', 'cost_schedule' => TradingCosts::reviewed()];
+        $fractional = app(StrategyReplay::class)->run(['BRKO' => $this->bars($rows)], $this->benchmark(count($rows)), SignalParameters::current()['values'],
+            $settings + ['order_mode' => 'fractional_market', 'market_slippage_bps' => '5'], '500');
+        // 101.11 plus 5 bp market slippage, rounded up; the 20% cap on $500 buys 100 / 101.1606 shares, rounded down to 6 decimals.
+        $this->assertSame(['101.1606', '0.988527'], [$fractional['open_positions']['BRKO']['entry_price'], $fractional['open_positions']['BRKO']['quantity']]);
+        $this->assertSame(['fractional_market', 6, '5'], array_values($fractional['execution']));
+        $this->assertContains('market_order_slippage_assumed_not_measured', $fractional['limitations']);
+        $this->assertNotContains('whole_share_limit_orders_per_reviewed_broker_contract', $fractional['limitations']);
+        $this->assertSame(['whole_share_limit', 0, '1'], array_values($this->replay($rows, '500')['execution']));
+        $falling = $this->benchmark(count($rows), -10);
+        $values = SignalParameters::current()['values'];
+        $this->assertSame(0, app(StrategyReplay::class)->run(['BRKO' => $this->bars($rows)], $falling, $values, $settings, '10000')['counts']['entries']);
+        // Switching the market filter off lets the same setup enter; the market state is still counted.
+        $open = app(StrategyReplay::class)->run(['BRKO' => $this->bars($rows)], $falling, $values + ['market_filter_required' => false], $settings, '10000');
+        $this->assertSame(1, $open['counts']['entries']);
+        $this->assertGreaterThan(0, $open['counts']['market_filter_off_days']);
+        $this->expectExceptionObject(new \InvalidArgumentException('Unsupported replay order mode.'));
+        app(StrategyReplay::class)->run(['BRKO' => $this->bars($rows)], $this->benchmark(count($rows)), $values, $settings + ['order_mode' => 'fractional_limit'], '500');
+    }
 }

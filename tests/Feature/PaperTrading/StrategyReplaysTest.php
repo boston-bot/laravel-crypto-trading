@@ -154,4 +154,48 @@ class StrategyReplaysTest extends TestCase
             ->expectsOutputToContain('"status":"complete"')->assertSuccessful();
         $this->assertSame(1, StrategyReplayRun::count());
     }
+
+    public function test_research_variants_replay_the_same_history_beside_the_live_baseline(): void
+    {
+        $this->fake();
+        $run = app(StrategyReplays::class)->run($this->connection, $this->connection->user_id, (string) Str::uuid(), 3, '500', ['ALFA'], [
+            ['id' => 'fractional', 'execution' => ['order_mode' => 'fractional_market']],
+            ['id' => 'loose', 'parameters' => ['market_filter_sma_sessions' => 100, 'exit_on_fast_sma_close' => false]],
+        ]);
+        $this->assertCount(1, Http::recorded()); // one history read serves every variant
+        [$fractional, $loose] = $run->payload['variants'];
+        $this->assertSame(['fractional', ['order_mode' => 'fractional_market', 'market_slippage_bps' => '5']], [$fractional['id'], $fractional['execution']]);
+        $this->assertSame(['fractional_market', 6, '5'], array_values($fractional['result']['execution']));
+        $this->assertSame(['exit_on_fast_sma_close' => false, 'market_filter_sma_sessions' => 100], $loose['parameters']); // sorted, typed
+        $this->assertSame('whole_share_limit', $run->payload['result']['execution']['order_mode']);
+        $this->assertSame(array_map(fn ($v) => array_intersect_key($v, array_flip(['id', 'parameters', 'execution'])), $run->payload['variants']), $run->payload['input']['variants']);
+        $this->assertNotSame($fractional['parameters_hash'], $loose['parameters_hash']);
+        foreach ([
+            'baseline id' => [['id' => 'baseline']],
+            'owner risk limit' => [['id' => 'risky', 'parameters' => ['risk_per_trade_pct' => '5']]],
+            'fractional limit' => [['id' => 'limit', 'execution' => ['order_mode' => 'fractional_limit']]],
+            'slippage without market' => [['id' => 'slip', 'execution' => ['market_slippage_bps' => '5']]],
+            'restated default' => [['id' => 'same', 'parameters' => ['initial_stop_atr' => '2', 'market_filter_required' => true]]],
+            'untyped switch' => [['id' => 'text', 'parameters' => ['exit_on_fast_sma_close' => 'false']]],
+            'out of bounds' => [['id' => 'short', 'parameters' => ['market_filter_sma_sessions' => 20]]],
+            'duplicates' => [['id' => 'a', 'parameters' => ['cooldown_sessions' => 3]], ['id' => 'b', 'parameters' => ['cooldown_sessions' => 3]]],
+            'too many' => array_map(fn ($i) => ['id' => 'v'.$i, 'parameters' => ['cooldown_sessions' => $i]], range(1, 7)),
+        ] as $case => $variants) {
+            try {
+                app(StrategyReplays::class)->run($this->connection, $this->connection->user_id, (string) Str::uuid(), 3, '500', ['ALFA'], $variants);
+                $this->fail('Accepted: '.$case);
+            } catch (HttpException $error) {
+                $this->assertSame(422, $error->getStatusCode(), $case);
+            }
+        }
+        $this->assertSame(1, StrategyReplayRun::count());
+        $this->artisan('mcp:strategy-replay', ['--account' => $this->connection->id, '--symbol' => ['ALFA'],
+            '--variant' => ['fractional:order_mode=fractional_market,market_slippage_bps=10', 'loose:exit_on_fast_sma_close=false,market_filter_sma_sessions=100']])
+            ->expectsOutputToContain('"id":"loose"')->assertSuccessful();
+        $variants = StrategyReplayRun::latest('id')->first()->payload['variants'];
+        $this->assertSame([['order_mode' => 'fractional_market', 'market_slippage_bps' => '10'], ['exit_on_fast_sma_close' => false, 'market_filter_sma_sessions' => 100]],
+            [$variants[0]['execution'], $variants[1]['parameters']]);
+        $this->artisan('mcp:strategy-replay', ['--account' => $this->connection->id, '--symbol' => ['ALFA'], '--variant' => ['no colon']])->assertFailed();
+        $this->assertSame(2, StrategyReplayRun::count());
+    }
 }

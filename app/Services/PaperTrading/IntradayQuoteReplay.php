@@ -215,7 +215,7 @@ trait IntradayQuoteReplay
                         $reason = 'reentry_cooldown';
                     } elseif (($profile['status'] ?? null) !== 'complete') {
                         $reason = 'profile_unavailable';
-                    } elseif ($profile['market']['filter'] !== 'on') {
+                    } elseif (SignalRules::marketFilterBlocks($profile, $p)) {
                         $reason = 'market_filter_off';
                     } else {
                         $checks = app(EligibilityRules::class)->thresholds($q, $facts[$symbol], RuleEligibilityPolicies::DEFAULTS);

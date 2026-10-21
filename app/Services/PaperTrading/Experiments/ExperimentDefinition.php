@@ -9,11 +9,11 @@ use App\Models\PaperTrading\PolicyApplication;
 use App\Models\PaperTrading\Portfolio;
 use App\Services\Monitoring\AccountScope;
 use App\Services\PaperTrading\ProfileCalculator;
+use App\Services\PaperTrading\ResearchVariants;
 use App\Services\PaperTrading\SignalExecutionPolicies;
 use App\Services\PaperTrading\SignalParameters;
 use App\Services\PaperTrading\SignalRules;
 use App\Services\PaperTrading\TradingCosts;
-use App\Support\Mcp\Decimal;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Validator;
 
@@ -35,8 +35,6 @@ final class ExperimentDefinition
     {
         return $hashes === self::$processSources && $hashes === $this->sources();
     }
-
-    private const DECIMALS = ['initial_stop_atr' => ['1', '5'], 'trailing_stop_atr' => ['1', '8'], 'max_chase_atr' => ['0.1', '2']];
 
     public static function hash(mixed $value): string
     {
@@ -66,7 +64,7 @@ final class ExperimentDefinition
             'spec.variants.*' => ['required', 'array:id,equity,parameters'],
             'spec.variants.*.id' => ['required', 'string', 'distinct', 'regex:/^[a-z][a-z0-9_]{0,31}$/D'],
             'spec.variants.*.equity' => ['required', 'string', 'regex:/^[1-9]\d{0,8}(?:\.\d{1,2})?$/D'],
-            'spec.variants.*.parameters' => ['sometimes', 'array:initial_stop_atr,trailing_stop_atr,max_chase_atr,time_exit_sessions,cooldown_sessions'],
+            'spec.variants.*.parameters' => ['sometimes', 'array:'.implode(',', ResearchVariants::parameterKeys())],
         ])->validate();
         abort_unless(array_is_list($spec['symbols']) && array_is_list($spec['sessions']) && array_is_list($spec['variants']), 422, 'Use JSON lists.');
         $ordered = $spec['sessions'];
@@ -77,16 +75,7 @@ final class ExperimentDefinition
         }
         $seen = [];
         foreach ($spec['variants'] as &$variant) {
-            $variant['parameters'] ??= [];
-            foreach ($variant['parameters'] as $key => $value) {
-                if (isset(self::DECIMALS[$key])) {
-                    [$min, $max] = self::DECIMALS[$key];
-                    abort_unless(is_string($value) && preg_match('/^\d{1,2}(?:\.\d{1,4})?$/D', $value) &&
-                        Decimal::from($value)->compareTo(Decimal::from($min)) >= 0 && Decimal::from($value)->compareTo(Decimal::from($max)) <= 0, 422, 'Research decimal parameter outside reviewed bounds.');
-                } else {
-                    abort_unless(is_int($value) && $value >= 1 && $value <= ($key === 'time_exit_sessions' ? 60 : 20), 422, 'Research session parameter outside bounds.');
-                }
-            }
+            $variant['parameters'] = ResearchVariants::parameters($variant['parameters'] ?? []);
             $key = self::hash([$variant['equity'], $variant['parameters']]);
             abort_if(isset($seen[$key]), 422, 'Duplicate variant configuration.');
             $seen[$key] = true;
@@ -123,7 +112,7 @@ final class ExperimentDefinition
     {
         $paths = ['composer.lock', 'app/Jobs/RunStrategyExperiment.php', 'app/Models/PaperTrading/StrategyExperiment.php', 'app/Models/PaperTrading/StrategyExperimentStep.php',
             'app/Support/Mcp/Decimal.php', 'app/Support/Mcp/ExactJsonNumbers.php'];
-        foreach (['StrategyReplay', 'IntradayQuoteReplay', 'MultiSessionQuoteReplay', 'IntradayReplayInputs', 'ProfileCalculator', 'SignalRules', 'SignalParameters',
+        foreach (['StrategyReplay', 'ResearchVariants', 'IntradayQuoteReplay', 'MultiSessionQuoteReplay', 'IntradayReplayInputs', 'ProfileCalculator', 'SignalRules', 'SignalParameters',
             'StrategyParameters', 'RiskSizer', 'PaperFillPrice', 'TradingCosts', 'EligibilityRules', 'RuleEligibilityPolicies', 'PaperMarketReferences', 'SignalExecutionPolicies'] as $name) {
             $paths[] = 'app/Services/PaperTrading/'.$name.'.php';
         }

@@ -17,6 +17,12 @@ final class SignalRules
         return ['status' => $status, 'side' => $side, 'reason' => $reason, 'facts' => $facts];
     }
 
+    /** Research variants may set market_filter_required to false; live parameters never carry the key. */
+    public static function marketFilterBlocks(array $profile, array $p): bool
+    {
+        return ($p['market_filter_required'] ?? true) !== false && ($profile['market']['filter'] ?? null) !== 'on';
+    }
+
     public function entry(array $profile, string $ask, array $p): array
     {
         if ($profile['setup'] === 'none') {
@@ -63,7 +69,8 @@ final class SignalRules
         if ($price->compareTo($trail) <= 0) {
             return self::result('signal', 'trailing_stop_hit', 'SELL', $facts);
         }
-        if ($profile !== null && Decimal::from($profile['indicators']['close'])->compareTo(Decimal::from($profile['indicators']['sma_fast'])) < 0) {
+        // Research variants may switch this exit off with exit_on_fast_sma_close; live parameters never carry the key.
+        if (($p['exit_on_fast_sma_close'] ?? true) !== false && $profile !== null && Decimal::from($profile['indicators']['close'])->compareTo(Decimal::from($profile['indicators']['sma_fast'])) < 0) {
             return self::result('signal', 'daily_close_below_fast_sma', 'SELL', $facts);
         }
         if (($position['sessions_held'] ?? null) !== null && $position['sessions_held'] >= $p['time_exit_sessions'] && $position['progressed'] === false) {

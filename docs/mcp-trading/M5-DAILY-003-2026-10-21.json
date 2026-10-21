@@ -1,0 +1,1454 @@
+{
+  "label": "retrospective_daily_replay_not_forward_results",
+  "experiment": "DAILY-003",
+  "as_of": "2026-10-21",
+  "replay_version": "daily_replay_v3",
+  "universe": {
+    "selection": "DAILY-002 revision 314 nominating symbols",
+    "symbols": [
+      "ADBE",
+      "AMAT",
+      "AVGO",
+      "AVUV",
+      "BKNG",
+      "BRK.B",
+      "HD",
+      "INTU",
+      "JNJ",
+      "JPM",
+      "LIN",
+      "MA",
+      "MSFT",
+      "NVDA",
+      "PEP",
+      "RSP",
+      "SCHD",
+      "UBER",
+      "VEA",
+      "VTI",
+      "VTV",
+      "VWO",
+      "VXUS"
+    ]
+  },
+  "benchmark": "SPY",
+  "data": {
+    "provider": "https://data.alpaca.markets/v2/stocks/bars",
+    "feed": "sip",
+    "adjustment": "split",
+    "timeframe": "1Day",
+    "snapshot_sha256": {
+      "discovery_and_holdout": "5aa73e42d17d7e4d93d7dd451388a26e73044a56896d3b22048cf0a99f8150e4",
+      "bear_check": "32bdf37d0ccbd5dc4ecb9d169d54c025728dcadeb7f6725a2f6e0b51435af4c1"
+    }
+  },
+  "parameters": "swing_signal_parameters_v1 defaults plus the single change named by each run",
+  "settings": "signal execution defaults (1% risk, 20% maximum position, 8 positions, 1 bp limit slippage) and cost schedule rh_listed_equity_2026q4_v1",
+  "periods": {
+    "discovery": [
+      "2023-10-20",
+      "2025-10-17"
+    ],
+    "holdout": [
+      "2025-10-20",
+      "2026-10-19"
+    ],
+    "bear_check": [
+      "2021-10-20",
+      "2023-10-19"
+    ]
+  },
+  "decision_rule": "Rule variant is a candidate only if it beats its baseline on total return and return/max drawdown in discovery and holdout; the post-hoc bear check can reject but not select.",
+  "baselines": {
+    "500": "fractional_5bp",
+    "10000": "whole_share"
+  },
+  "source_file_hashes": {
+    "app/Services/PaperTrading/StrategyReplay.php": "46ffd28e99a8817b11ed4a64ba0e7c55d1d30f97d34a3b581186d8bcb0cf5d8f",
+    "app/Services/PaperTrading/ResearchVariants.php": "7fd7f30b5023b33a697c7bb0da0a2d9460e50d3ac75a32988467dff7a8581e5a",
+    "app/Services/PaperTrading/RiskSizer.php": "9f3b6530367e6eb5361eebe71795ce4830529b0561f23d4da0b1daba00520266",
+    "app/Services/PaperTrading/SignalRules.php": "75e62c9c4c909bb6baf94ff5610d49545bcf8213e7fc82eb8278aacd4171a005",
+    "app/Services/PaperTrading/ProfileCalculator.php": "1ea896aea6871bb0bac7fd564cb99a3e7258286d50ec50db98451b848902f7a0",
+    "app/Services/PaperTrading/TradingCosts.php": "637ecc6fd44ebfac5460af2649cc3a398fc88327fd612f573a34527a0686c7fc",
+    "app/Services/PaperTrading/SignalParameters.php": "9ccf1b3be22e205afdbe6910904d671ebf7580fedc977ef3b1494b82937e906e",
+    "app/Services/PaperTrading/StrategyParameters.php": "9fb00d4ccdffd09e630fdd777ca7e12d3a98bae503336427ad6884dc8680fd7d",
+    "app/Services/MarketData/Alpaca/DailyBars.php": "ba901c8d8df549c8206827c7ff0397c58c186ecf910ffd2a3ef573be598900f2"
+  },
+  "runs": [
+    {
+      "period": "discovery",
+      "equity": "500",
+      "id": "whole_share",
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "520.37",
+      "return_pct": "4.0740",
+      "max_dd_pct": "6.1421",
+      "return_over_dd": "0.663",
+      "trades": 24,
+      "open": 1,
+      "hit_pct": "33.33",
+      "pf": "1.4889",
+      "exposure_pct": "39.00",
+      "counts": {
+        "setups": 1322,
+        "entries": 25,
+        "skipped_zero_size": 472,
+        "skipped_capacity": 0,
+        "skipped_chase_or_no_cross": 622,
+        "market_filter_off_days": 50
+      },
+      "exits": {
+        "intraday_stop_hit": 18,
+        "daily_close_below_fast_sma": 3,
+        "time_exit_without_progress": 1,
+        "entry_day_stop_assumed": 1,
+        "trailing_stop_hit": 1
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 24,
+          "net": "20.64",
+          "wins": 8
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "55.9674",
+        "equal_weight_universe_pct": "66.1125"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "discovery",
+      "equity": "500",
+      "id": "fractional_5bp",
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "584.11",
+      "return_pct": "16.8220",
+      "max_dd_pct": "11.2751",
+      "return_over_dd": "1.492",
+      "trades": 110,
+      "open": 4,
+      "hit_pct": "34.55",
+      "pf": "1.3642",
+      "exposure_pct": "85.20",
+      "counts": {
+        "setups": 1322,
+        "entries": 114,
+        "skipped_zero_size": 69,
+        "skipped_capacity": 0,
+        "skipped_chase_or_no_cross": 241,
+        "market_filter_off_days": 50
+      },
+      "exits": {
+        "daily_close_below_fast_sma": 35,
+        "intraday_stop_hit": 58,
+        "trailing_stop_hit": 11,
+        "time_exit_without_progress": 3,
+        "initial_stop_hit": 3
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 108,
+          "net": "66.26",
+          "wins": 38
+        },
+        "breakout": {
+          "trades": 2,
+          "net": "-3.35",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "55.9674",
+        "equal_weight_universe_pct": "66.1125"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "discovery",
+      "equity": "500",
+      "id": "fractional_10bp",
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "574.65",
+      "return_pct": "14.9300",
+      "max_dd_pct": "11.7621",
+      "return_over_dd": "1.269",
+      "trades": 110,
+      "open": 4,
+      "hit_pct": "33.64",
+      "pf": "1.3065",
+      "exposure_pct": "85.20",
+      "counts": {
+        "setups": 1322,
+        "entries": 114,
+        "skipped_zero_size": 69,
+        "skipped_capacity": 0,
+        "skipped_chase_or_no_cross": 241,
+        "market_filter_off_days": 50
+      },
+      "exits": {
+        "daily_close_below_fast_sma": 34,
+        "intraday_stop_hit": 57,
+        "trailing_stop_hit": 11,
+        "time_exit_without_progress": 3,
+        "initial_stop_hit": 5
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 108,
+          "net": "57.54",
+          "wins": 37
+        },
+        "breakout": {
+          "trades": 2,
+          "net": "-3.52",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "55.9674",
+        "equal_weight_universe_pct": "66.1125"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "10"
+      }
+    },
+    {
+      "period": "discovery",
+      "equity": "500",
+      "id": "fractional_no_sma_exit",
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "643.73",
+      "return_pct": "28.7460",
+      "max_dd_pct": "9.6385",
+      "return_over_dd": "2.982",
+      "trades": 91,
+      "open": 6,
+      "hit_pct": "42.86",
+      "pf": "1.7202",
+      "exposure_pct": "85.80",
+      "counts": {
+        "setups": 1322,
+        "entries": 97,
+        "skipped_zero_size": 79,
+        "skipped_capacity": 0,
+        "skipped_chase_or_no_cross": 239,
+        "market_filter_off_days": 50
+      },
+      "exits": {
+        "intraday_stop_hit": 74,
+        "trailing_stop_hit": 8,
+        "time_exit_without_progress": 4,
+        "initial_stop_hit": 5
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 89,
+          "net": "130.51",
+          "wins": 39
+        },
+        "breakout": {
+          "trades": 2,
+          "net": "-2.71",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "55.9674",
+        "equal_weight_universe_pct": "66.1125"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "discovery",
+      "equity": "500",
+      "id": "fractional_no_market_filter",
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "641.93",
+      "return_pct": "28.3860",
+      "max_dd_pct": "13.0681",
+      "return_over_dd": "2.172",
+      "trades": 117,
+      "open": 4,
+      "hit_pct": "34.19",
+      "pf": "1.6066",
+      "exposure_pct": "96.20",
+      "counts": {
+        "setups": 1322,
+        "entries": 121,
+        "skipped_zero_size": 60,
+        "skipped_capacity": 4,
+        "skipped_chase_or_no_cross": 213,
+        "market_filter_off_days": 50
+      },
+      "exits": {
+        "daily_close_below_fast_sma": 44,
+        "intraday_stop_hit": 58,
+        "trailing_stop_hit": 10,
+        "initial_stop_hit": 3,
+        "time_exit_without_progress": 2
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 115,
+          "net": "121.75",
+          "wins": 40
+        },
+        "breakout": {
+          "trades": 2,
+          "net": "-2.91",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "55.9674",
+        "equal_weight_universe_pct": "66.1125"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "discovery",
+      "equity": "500",
+      "id": "fractional_filter_100",
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "587.00",
+      "return_pct": "17.4000",
+      "max_dd_pct": "11.5283",
+      "return_over_dd": "1.509",
+      "trades": 109,
+      "open": 4,
+      "hit_pct": "33.94",
+      "pf": "1.3673",
+      "exposure_pct": "82.40",
+      "counts": {
+        "setups": 1322,
+        "entries": 113,
+        "skipped_zero_size": 56,
+        "skipped_capacity": 0,
+        "skipped_chase_or_no_cross": 229,
+        "market_filter_off_days": 70
+      },
+      "exits": {
+        "intraday_stop_hit": 55,
+        "trailing_stop_hit": 11,
+        "daily_close_below_fast_sma": 37,
+        "time_exit_without_progress": 3,
+        "initial_stop_hit": 3
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 107,
+          "net": "69.06",
+          "wins": 37
+        },
+        "breakout": {
+          "trades": 2,
+          "net": "-3.37",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "55.9674",
+        "equal_weight_universe_pct": "66.1125"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "discovery",
+      "equity": "10000",
+      "id": "whole_share",
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "11954.93",
+      "return_pct": "19.5493",
+      "max_dd_pct": "10.4486",
+      "return_over_dd": "1.871",
+      "trades": 116,
+      "open": 4,
+      "hit_pct": "37.93",
+      "pf": "1.4487",
+      "exposure_pct": "85.20",
+      "counts": {
+        "setups": 1322,
+        "entries": 120,
+        "skipped_zero_size": 37,
+        "skipped_capacity": 13,
+        "skipped_chase_or_no_cross": 225,
+        "market_filter_off_days": 50
+      },
+      "exits": {
+        "daily_close_below_fast_sma": 39,
+        "intraday_stop_hit": 59,
+        "trailing_stop_hit": 11,
+        "time_exit_without_progress": 3,
+        "initial_stop_hit": 4
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 114,
+          "net": "1612.61",
+          "wins": 44
+        },
+        "breakout": {
+          "trades": 2,
+          "net": "-64.91",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "55.9674",
+        "equal_weight_universe_pct": "66.1125"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "discovery",
+      "equity": "10000",
+      "id": "no_sma_exit",
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "12802.99",
+      "return_pct": "28.0299",
+      "max_dd_pct": "9.7616",
+      "return_over_dd": "2.871",
+      "trades": 98,
+      "open": 5,
+      "hit_pct": "41.84",
+      "pf": "1.6755",
+      "exposure_pct": "85.80",
+      "counts": {
+        "setups": 1322,
+        "entries": 103,
+        "skipped_zero_size": 51,
+        "skipped_capacity": 18,
+        "skipped_chase_or_no_cross": 220,
+        "market_filter_off_days": 50
+      },
+      "exits": {
+        "intraday_stop_hit": 80,
+        "trailing_stop_hit": 9,
+        "time_exit_without_progress": 4,
+        "initial_stop_hit": 5
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 96,
+          "net": "2523.12",
+          "wins": 41
+        },
+        "breakout": {
+          "trades": 2,
+          "net": "-90.31",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "55.9674",
+        "equal_weight_universe_pct": "66.1125"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "discovery",
+      "equity": "10000",
+      "id": "no_market_filter",
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "12982.24",
+      "return_pct": "29.8224",
+      "max_dd_pct": "12.2563",
+      "return_over_dd": "2.433",
+      "trades": 120,
+      "open": 4,
+      "hit_pct": "37.50",
+      "pf": "1.6848",
+      "exposure_pct": "96.20",
+      "counts": {
+        "setups": 1322,
+        "entries": 124,
+        "skipped_zero_size": 48,
+        "skipped_capacity": 9,
+        "skipped_chase_or_no_cross": 212,
+        "market_filter_off_days": 50
+      },
+      "exits": {
+        "daily_close_below_fast_sma": 44,
+        "intraday_stop_hit": 60,
+        "trailing_stop_hit": 10,
+        "initial_stop_hit": 4,
+        "time_exit_without_progress": 2
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 118,
+          "net": "2592.78",
+          "wins": 45
+        },
+        "breakout": {
+          "trades": 2,
+          "net": "-46.19",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "55.9674",
+        "equal_weight_universe_pct": "66.1125"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "discovery",
+      "equity": "10000",
+      "id": "filter_100",
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "10993.42",
+      "return_pct": "9.9342",
+      "max_dd_pct": "10.7253",
+      "return_over_dd": "0.926",
+      "trades": 112,
+      "open": 4,
+      "hit_pct": "37.50",
+      "pf": "1.1806",
+      "exposure_pct": "82.40",
+      "counts": {
+        "setups": 1322,
+        "entries": 116,
+        "skipped_zero_size": 31,
+        "skipped_capacity": 22,
+        "skipped_chase_or_no_cross": 220,
+        "market_filter_off_days": 70
+      },
+      "exits": {
+        "intraday_stop_hit": 58,
+        "trailing_stop_hit": 11,
+        "daily_close_below_fast_sma": 37,
+        "time_exit_without_progress": 3,
+        "initial_stop_hit": 3
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 110,
+          "net": "664.82",
+          "wins": 42
+        },
+        "breakout": {
+          "trades": 2,
+          "net": "-44.95",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "55.9674",
+        "equal_weight_universe_pct": "66.1125"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "holdout",
+      "equity": "500",
+      "id": "whole_share",
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "505.90",
+      "return_pct": "1.1800",
+      "max_dd_pct": "2.6353",
+      "return_over_dd": "0.448",
+      "trades": 16,
+      "open": 0,
+      "hit_pct": "62.50",
+      "pf": "1.8215",
+      "exposure_pct": "52.19",
+      "counts": {
+        "setups": 792,
+        "entries": 16,
+        "skipped_zero_size": 256,
+        "skipped_capacity": 0,
+        "skipped_chase_or_no_cross": 371,
+        "market_filter_off_days": 13
+      },
+      "exits": {
+        "intraday_stop_hit": 9,
+        "trailing_stop_hit": 2,
+        "daily_close_below_fast_sma": 5
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 15,
+          "net": "5.28",
+          "wins": 9
+        },
+        "breakout": {
+          "trades": 1,
+          "net": "0.61",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "14.8594",
+        "equal_weight_universe_pct": "6.1711"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "holdout",
+      "equity": "500",
+      "id": "fractional_5bp",
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "516.38",
+      "return_pct": "3.2760",
+      "max_dd_pct": "8.1201",
+      "return_over_dd": "0.403",
+      "trades": 64,
+      "open": 2,
+      "hit_pct": "35.94",
+      "pf": "1.0263",
+      "exposure_pct": "96.02",
+      "counts": {
+        "setups": 792,
+        "entries": 66,
+        "skipped_zero_size": 29,
+        "skipped_capacity": 1,
+        "skipped_chase_or_no_cross": 163,
+        "market_filter_off_days": 13
+      },
+      "exits": {
+        "intraday_stop_hit": 36,
+        "initial_stop_hit": 5,
+        "daily_close_below_fast_sma": 21,
+        "trailing_stop_hit": 1,
+        "entry_day_stop_assumed": 1
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 59,
+          "net": "12.60",
+          "wins": 22
+        },
+        "breakout": {
+          "trades": 5,
+          "net": "-10.26",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "14.8594",
+        "equal_weight_universe_pct": "6.1711"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "holdout",
+      "equity": "500",
+      "id": "fractional_10bp",
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "517.92",
+      "return_pct": "3.5840",
+      "max_dd_pct": "8.3870",
+      "return_over_dd": "0.427",
+      "trades": 62,
+      "open": 2,
+      "hit_pct": "30.65",
+      "pf": "1.0448",
+      "exposure_pct": "96.02",
+      "counts": {
+        "setups": 792,
+        "entries": 64,
+        "skipped_zero_size": 34,
+        "skipped_capacity": 1,
+        "skipped_chase_or_no_cross": 171,
+        "market_filter_off_days": 13
+      },
+      "exits": {
+        "intraday_stop_hit": 35,
+        "initial_stop_hit": 4,
+        "daily_close_below_fast_sma": 21,
+        "trailing_stop_hit": 1,
+        "entry_day_stop_assumed": 1
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 57,
+          "net": "14.61",
+          "wins": 18
+        },
+        "breakout": {
+          "trades": 5,
+          "net": "-10.71",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "14.8594",
+        "equal_weight_universe_pct": "6.1711"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "10"
+      }
+    },
+    {
+      "period": "holdout",
+      "equity": "500",
+      "id": "fractional_no_sma_exit",
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "497.69",
+      "return_pct": "-0.4620",
+      "max_dd_pct": "9.2854",
+      "return_over_dd": "-0.050",
+      "trades": 50,
+      "open": 3,
+      "hit_pct": "38.00",
+      "pf": "0.7969",
+      "exposure_pct": "96.81",
+      "counts": {
+        "setups": 792,
+        "entries": 53,
+        "skipped_zero_size": 42,
+        "skipped_capacity": 0,
+        "skipped_chase_or_no_cross": 143,
+        "market_filter_off_days": 13
+      },
+      "exits": {
+        "intraday_stop_hit": 41,
+        "initial_stop_hit": 4,
+        "trailing_stop_hit": 3,
+        "time_exit_without_progress": 1,
+        "entry_day_stop_assumed": 1
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 47,
+          "net": "-14.45",
+          "wins": 18
+        },
+        "breakout": {
+          "trades": 3,
+          "net": "-3.05",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "14.8594",
+        "equal_weight_universe_pct": "6.1711"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "holdout",
+      "equity": "500",
+      "id": "fractional_no_market_filter",
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "548.73",
+      "return_pct": "9.7460",
+      "max_dd_pct": "7.3565",
+      "return_over_dd": "1.325",
+      "trades": 59,
+      "open": 2,
+      "hit_pct": "37.29",
+      "pf": "1.4078",
+      "exposure_pct": "99.20",
+      "counts": {
+        "setups": 792,
+        "entries": 61,
+        "skipped_zero_size": 39,
+        "skipped_capacity": 1,
+        "skipped_chase_or_no_cross": 182,
+        "market_filter_off_days": 13
+      },
+      "exits": {
+        "intraday_stop_hit": 30,
+        "initial_stop_hit": 4,
+        "daily_close_below_fast_sma": 22,
+        "trailing_stop_hit": 2,
+        "entry_day_stop_assumed": 1
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 54,
+          "net": "30.40",
+          "wins": 20
+        },
+        "breakout": {
+          "trades": 5,
+          "net": "3.36",
+          "wins": 2
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "14.8594",
+        "equal_weight_universe_pct": "6.1711"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "holdout",
+      "equity": "500",
+      "id": "fractional_filter_100",
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "539.21",
+      "return_pct": "7.8420",
+      "max_dd_pct": "6.8643",
+      "return_over_dd": "1.142",
+      "trades": 58,
+      "open": 2,
+      "hit_pct": "39.66",
+      "pf": "1.3539",
+      "exposure_pct": "90.04",
+      "counts": {
+        "setups": 792,
+        "entries": 60,
+        "skipped_zero_size": 27,
+        "skipped_capacity": 1,
+        "skipped_chase_or_no_cross": 155,
+        "market_filter_off_days": 27
+      },
+      "exits": {
+        "intraday_stop_hit": 33,
+        "initial_stop_hit": 4,
+        "daily_close_below_fast_sma": 19,
+        "trailing_stop_hit": 1,
+        "entry_day_stop_assumed": 1
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 52,
+          "net": "37.26",
+          "wins": 22
+        },
+        "breakout": {
+          "trades": 6,
+          "net": "-12.69",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "14.8594",
+        "equal_weight_universe_pct": "6.1711"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "holdout",
+      "equity": "10000",
+      "id": "whole_share",
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "10312.90",
+      "return_pct": "3.1290",
+      "max_dd_pct": "7.7752",
+      "return_over_dd": "0.402",
+      "trades": 65,
+      "open": 2,
+      "hit_pct": "40.00",
+      "pf": "1.0307",
+      "exposure_pct": "96.02",
+      "counts": {
+        "setups": 792,
+        "entries": 67,
+        "skipped_zero_size": 10,
+        "skipped_capacity": 17,
+        "skipped_chase_or_no_cross": 142,
+        "market_filter_off_days": 13
+      },
+      "exits": {
+        "intraday_stop_hit": 34,
+        "initial_stop_hit": 5,
+        "daily_close_below_fast_sma": 22,
+        "trailing_stop_hit": 3,
+        "entry_day_stop_assumed": 1
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 60,
+          "net": "301.87",
+          "wins": 25
+        },
+        "breakout": {
+          "trades": 5,
+          "net": "-249.48",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "14.8594",
+        "equal_weight_universe_pct": "6.1711"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "holdout",
+      "equity": "10000",
+      "id": "no_sma_exit",
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "10044.37",
+      "return_pct": "0.4437",
+      "max_dd_pct": "8.6915",
+      "return_over_dd": "0.051",
+      "trades": 53,
+      "open": 3,
+      "hit_pct": "37.74",
+      "pf": "0.8412",
+      "exposure_pct": "96.81",
+      "counts": {
+        "setups": 792,
+        "entries": 56,
+        "skipped_zero_size": 41,
+        "skipped_capacity": 0,
+        "skipped_chase_or_no_cross": 142,
+        "market_filter_off_days": 13
+      },
+      "exits": {
+        "intraday_stop_hit": 43,
+        "initial_stop_hit": 4,
+        "trailing_stop_hit": 4,
+        "time_exit_without_progress": 1,
+        "entry_day_stop_assumed": 1
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 50,
+          "net": "-213.64",
+          "wins": 19
+        },
+        "breakout": {
+          "trades": 3,
+          "net": "-54.27",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "14.8594",
+        "equal_weight_universe_pct": "6.1711"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "holdout",
+      "equity": "10000",
+      "id": "no_market_filter",
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "10858.73",
+      "return_pct": "8.5873",
+      "max_dd_pct": "6.9123",
+      "return_over_dd": "1.242",
+      "trades": 60,
+      "open": 2,
+      "hit_pct": "41.67",
+      "pf": "1.4030",
+      "exposure_pct": "98.80",
+      "counts": {
+        "setups": 792,
+        "entries": 62,
+        "skipped_zero_size": 23,
+        "skipped_capacity": 15,
+        "skipped_chase_or_no_cross": 167,
+        "market_filter_off_days": 13
+      },
+      "exits": {
+        "intraday_stop_hit": 30,
+        "initial_stop_hit": 3,
+        "daily_close_below_fast_sma": 23,
+        "trailing_stop_hit": 3,
+        "entry_day_stop_assumed": 1
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 55,
+          "net": "530.27",
+          "wins": 23
+        },
+        "breakout": {
+          "trades": 5,
+          "net": "67.97",
+          "wins": 2
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "14.8594",
+        "equal_weight_universe_pct": "6.1711"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "holdout",
+      "equity": "10000",
+      "id": "filter_100",
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "10815.41",
+      "return_pct": "8.1541",
+      "max_dd_pct": "6.9123",
+      "return_over_dd": "1.180",
+      "trades": 59,
+      "open": 2,
+      "hit_pct": "42.37",
+      "pf": "1.4307",
+      "exposure_pct": "90.04",
+      "counts": {
+        "setups": 792,
+        "entries": 61,
+        "skipped_zero_size": 23,
+        "skipped_capacity": 1,
+        "skipped_chase_or_no_cross": 155,
+        "market_filter_off_days": 27
+      },
+      "exits": {
+        "intraday_stop_hit": 33,
+        "initial_stop_hit": 3,
+        "daily_close_below_fast_sma": 20,
+        "trailing_stop_hit": 2,
+        "entry_day_stop_assumed": 1
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 53,
+          "net": "849.27",
+          "wins": 24
+        },
+        "breakout": {
+          "trades": 6,
+          "net": "-294.36",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "14.8594",
+        "equal_weight_universe_pct": "6.1711"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "bear_check",
+      "equity": "500",
+      "id": "fractional_5bp",
+      "start": "2021-10-20",
+      "end": "2023-10-19",
+      "sessions": 503,
+      "final": "477.48",
+      "return_pct": "-4.5040",
+      "max_dd_pct": "16.5241",
+      "return_over_dd": "-0.273",
+      "trades": 88,
+      "open": 4,
+      "hit_pct": "27.27",
+      "pf": "0.8446",
+      "exposure_pct": "57.85",
+      "counts": {
+        "setups": 1400,
+        "entries": 92,
+        "skipped_zero_size": 77,
+        "skipped_capacity": 11,
+        "skipped_chase_or_no_cross": 239,
+        "market_filter_off_days": 231
+      },
+      "exits": {
+        "intraday_stop_hit": 41,
+        "daily_close_below_fast_sma": 37,
+        "initial_stop_hit": 6,
+        "trailing_stop_hit": 4
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 85,
+          "net": "-19.43",
+          "wins": 23
+        },
+        "breakout": {
+          "trades": 3,
+          "net": "-3.85",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "-5.4751",
+        "equal_weight_universe_pct": "2.0779"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "bear_check",
+      "equity": "500",
+      "id": "fractional_no_market_filter",
+      "start": "2021-10-20",
+      "end": "2023-10-19",
+      "sessions": 503,
+      "final": "483.81",
+      "return_pct": "-3.2380",
+      "max_dd_pct": "18.4037",
+      "return_over_dd": "-0.176",
+      "trades": 117,
+      "open": 4,
+      "hit_pct": "25.64",
+      "pf": "0.9039",
+      "exposure_pct": "81.51",
+      "counts": {
+        "setups": 1400,
+        "entries": 121,
+        "skipped_zero_size": 79,
+        "skipped_capacity": 11,
+        "skipped_chase_or_no_cross": 271,
+        "market_filter_off_days": 231
+      },
+      "exits": {
+        "intraday_stop_hit": 45,
+        "daily_close_below_fast_sma": 57,
+        "initial_stop_hit": 8,
+        "trailing_stop_hit": 7
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 113,
+          "net": "-10.97",
+          "wins": 29
+        },
+        "breakout": {
+          "trades": 4,
+          "net": "-5.95",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "-5.4751",
+        "equal_weight_universe_pct": "2.0779"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "bear_check",
+      "equity": "500",
+      "id": "fractional_filter_100",
+      "start": "2021-10-20",
+      "end": "2023-10-19",
+      "sessions": 503,
+      "final": "538.56",
+      "return_pct": "7.7120",
+      "max_dd_pct": "12.5314",
+      "return_over_dd": "0.615",
+      "trades": 77,
+      "open": 0,
+      "hit_pct": "31.17",
+      "pf": "1.3208",
+      "exposure_pct": "63.42",
+      "counts": {
+        "setups": 1400,
+        "entries": 77,
+        "skipped_zero_size": 94,
+        "skipped_capacity": 3,
+        "skipped_chase_or_no_cross": 244,
+        "market_filter_off_days": 222
+      },
+      "exits": {
+        "intraday_stop_hit": 37,
+        "daily_close_below_fast_sma": 32,
+        "initial_stop_hit": 4,
+        "trailing_stop_hit": 4
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 76,
+          "net": "43.11",
+          "wins": 24
+        },
+        "breakout": {
+          "trades": 1,
+          "net": "-4.56",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "-5.4751",
+        "equal_weight_universe_pct": "2.0779"
+      },
+      "execution": {
+        "order_mode": "fractional_market",
+        "quantity_scale": 6,
+        "slippage_bps": "5"
+      }
+    },
+    {
+      "period": "bear_check",
+      "equity": "10000",
+      "id": "whole_share",
+      "start": "2021-10-20",
+      "end": "2023-10-19",
+      "sessions": 503,
+      "final": "9936.63",
+      "return_pct": "-0.6337",
+      "max_dd_pct": "15.5055",
+      "return_over_dd": "-0.041",
+      "trades": 92,
+      "open": 4,
+      "hit_pct": "23.91",
+      "pf": "0.9708",
+      "exposure_pct": "57.85",
+      "counts": {
+        "setups": 1400,
+        "entries": 96,
+        "skipped_zero_size": 64,
+        "skipped_capacity": 5,
+        "skipped_chase_or_no_cross": 229,
+        "market_filter_off_days": 231
+      },
+      "exits": {
+        "intraday_stop_hit": 41,
+        "daily_close_below_fast_sma": 41,
+        "initial_stop_hit": 5,
+        "trailing_stop_hit": 5
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 89,
+          "net": "-8.05",
+          "wins": 21
+        },
+        "breakout": {
+          "trades": 3,
+          "net": "-76.17",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "-5.4751",
+        "equal_weight_universe_pct": "2.0779"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "bear_check",
+      "equity": "10000",
+      "id": "no_market_filter",
+      "start": "2021-10-20",
+      "end": "2023-10-19",
+      "sessions": 503,
+      "final": "9852.13",
+      "return_pct": "-1.4787",
+      "max_dd_pct": "16.8641",
+      "return_over_dd": "-0.088",
+      "trades": 123,
+      "open": 4,
+      "hit_pct": "25.20",
+      "pf": "0.9497",
+      "exposure_pct": "81.51",
+      "counts": {
+        "setups": 1400,
+        "entries": 127,
+        "skipped_zero_size": 40,
+        "skipped_capacity": 41,
+        "skipped_chase_or_no_cross": 237,
+        "market_filter_off_days": 231
+      },
+      "exits": {
+        "intraday_stop_hit": 47,
+        "daily_close_below_fast_sma": 63,
+        "initial_stop_hit": 6,
+        "trailing_stop_hit": 7
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 119,
+          "net": "-63.02",
+          "wins": 30
+        },
+        "breakout": {
+          "trades": 4,
+          "net": "-105.71",
+          "wins": 1
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "-5.4751",
+        "equal_weight_universe_pct": "2.0779"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    },
+    {
+      "period": "bear_check",
+      "equity": "10000",
+      "id": "filter_100",
+      "start": "2021-10-20",
+      "end": "2023-10-19",
+      "sessions": 503,
+      "final": "11100.28",
+      "return_pct": "11.0028",
+      "max_dd_pct": "11.8671",
+      "return_over_dd": "0.927",
+      "trades": 87,
+      "open": 0,
+      "hit_pct": "31.03",
+      "pf": "1.4857",
+      "exposure_pct": "63.42",
+      "counts": {
+        "setups": 1400,
+        "entries": 87,
+        "skipped_zero_size": 50,
+        "skipped_capacity": 28,
+        "skipped_chase_or_no_cross": 193,
+        "market_filter_off_days": 222
+      },
+      "exits": {
+        "intraday_stop_hit": 39,
+        "daily_close_below_fast_sma": 40,
+        "initial_stop_hit": 4,
+        "trailing_stop_hit": 4
+      },
+      "by_setup": {
+        "pullback": {
+          "trades": 86,
+          "net": "1185.62",
+          "wins": 27
+        },
+        "breakout": {
+          "trades": 1,
+          "net": "-85.34",
+          "wins": 0
+        }
+      },
+      "benchmarks": {
+        "benchmark_buy_and_hold_pct": "-5.4751",
+        "equal_weight_universe_pct": "2.0779"
+      },
+      "execution": {
+        "order_mode": "whole_share_limit",
+        "quantity_scale": 0,
+        "slippage_bps": "1"
+      }
+    }
+  ],
+  "limitations": [
+    "daily_bars_approximate_five_minute_triggers_and_stops",
+    "earnings_blackout_not_reconstructed",
+    "opening_delay_not_modeled",
+    "current_watchlist_applied_to_past_selection_bias",
+    "current_fee_schedule_applied_across_history",
+    "market_order_slippage_assumed_not_measured",
+    "symbol_fractional_eligibility_assumed",
+    "benchmarks_exclude_dividends_and_costs"
+  ],
+  "database_writes": false,
+  "broker_calls": false
+}
