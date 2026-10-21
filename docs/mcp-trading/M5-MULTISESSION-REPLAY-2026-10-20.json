@@ -1,0 +1,260 @@
+{
+  "experiment": "QUOTE-002",
+  "version": "intraday_quotes_multisession_v1",
+  "label": "retrospective_sampled_quote_scenario_not_forward_or_point_in_time",
+  "symbols": [
+    "CRM",
+    "MSFT"
+  ],
+  "dates": [
+    "2026-10-19",
+    "2026-10-20"
+  ],
+  "inputs_sha256": "89fc0b26e1f24284ab9048e5c2a225b691f752b783920d801b4c09dab67e42a8",
+  "source_hashes": {
+    "app/Services/PaperTrading/IntradayQuoteReplay.php": "9c3cb7d5a4c1c7ad2eb3f574b9c5e3c1b50699115a05d2b6e1eaf5829cc9845e",
+    "app/Services/PaperTrading/StrategyReplay.php": "81b6b785d67cf08491721787bfd2449446fcc299665a63483c86b00143d3629b",
+    "app/Services/PaperTrading/SignalRules.php": "c2a33ef1929849ddcc02bf2bc3fd55126d1aed5068e5d97e2a1bd22688099cd2",
+    "app/Services/PaperTrading/SignalParameters.php": "9ccf1b3be22e205afdbe6910904d671ebf7580fedc977ef3b1494b82937e906e",
+    "app/Services/PaperTrading/ProfileCalculator.php": "1ea896aea6871bb0bac7fd564cb99a3e7258286d50ec50db98451b848902f7a0",
+    "app/Services/PaperTrading/RiskSizer.php": "d9a02fd0dbc9df63ac5bce90441fd0b116d268e682abec0dbb609b67cac67173",
+    "app/Services/PaperTrading/PaperFillPrice.php": "6e964c457d866dd10eae654566ead0b3ff80ca0222167fc60591586d26d920c8",
+    "app/Services/PaperTrading/TradingCosts.php": "637ecc6fd44ebfac5460af2649cc3a398fc88327fd612f573a34527a0686c7fc",
+    "app/Services/PaperTrading/EligibilityRules.php": "3b2d0e4f64c3e21e632f749bd8d51d81e2027cf81d2a7ad1c33830f1e2b0c9e7",
+    "app/Services/MarketData/Alpaca/HistoricalQuotes.php": "b04c423467a8dcdb325035e82d60c8d50ef26e6cdd1c9f4d8f2c52d6543b3588",
+    "app/Services/MarketData/Alpaca/DailyBars.php": "ba901c8d8df549c8206827c7ff0397c58c186ecf910ffd2a3ef573be598900f2",
+    "app/Services/MarketData/Alpaca/TradingCalendar.php": "5b164558ad7fd04128384c03995c035dbc77047d68b8eb5bb9684246c98cd0bc",
+    "app/Services/MarketData/Alpaca/CorporateActions.php": "5066184ef0c772e0c85546b91b18c276cbc25fef65845501971c738e8f5db2b5",
+    "app/Services/PaperTrading/IntradayReplayInputs.php": "895588c4bb93960aa521b2f7b27f2463a1aad277c4c3201aa7566a199fbda316",
+    "app/Services/PaperTrading/PaperMarketReferences.php": "9c46a851df658b64e403cda6c0d66c71fe338611258902bacb75a8b88d2f1b21",
+    "app/Services/PaperTrading/MultiSessionQuoteReplay.php": "9a66828d1756e440e3c2c323d495ddbbef08a4a9f00bd885f3ed52faea611afc"
+  },
+  "parameters": {
+    "version": "swing_signal_parameters_v1",
+    "values": {
+      "benchmark_symbol": "SPY",
+      "market_filter_sma_sessions": 200,
+      "fast_sma_sessions": 50,
+      "slow_sma_sessions": 200,
+      "relative_strength_sessions": 126,
+      "atr_sessions": 14,
+      "max_atr_pct": "6",
+      "ema_sessions": 20,
+      "pullback_max_atr_from_ema": "1",
+      "breakout_range_sessions": 20,
+      "breakout_max_range_atr": "3",
+      "max_chase_atr": "0.5",
+      "initial_stop_atr": "2",
+      "trailing_stop_atr": "3",
+      "earnings_blackout_sessions": 5,
+      "entry_delay_minutes": 15,
+      "time_exit_sessions": 20,
+      "cooldown_sessions": 5
+    },
+    "hash": "7f305b77cd773b0f9ac8df8f351586b611f5c73d1bfeff0cc4312627bae5fd5c"
+  },
+  "settings": {
+    "risk_per_trade_pct": "1",
+    "max_position_pct": "20",
+    "max_open_positions": 8,
+    "slippage_bps": "1",
+    "limit_offset_bps": "5",
+    "quote_max_age_seconds": 20,
+    "allow_fractional": false,
+    "cost_schedule": {
+      "version": "rh_listed_equity_2026q4_v1",
+      "reviewed_on": "2026-10-19",
+      "effective_from": "2026-10-01",
+      "effective_through": "2026-12-31",
+      "commission_per_share": "0",
+      "sec_per_million": "20.60",
+      "sec_waiver_notional": "500",
+      "taf_per_share": "0",
+      "taf_waiver_shares": "50",
+      "taf_max_per_execution": "9.79",
+      "cat_per_share": "0.000003",
+      "cat_minimum_charge": "0.01",
+      "rounding_policy": "per_simulated_execution_sec_up_other_half_up_v1",
+      "sources": [
+        "https://robinhood.com/us/en/support/articles/trading-fees-on-robinhood/",
+        "https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2",
+        "https://www.finra.org/rules-guidance/rule-filings/sr-finra-2026-021"
+      ]
+    },
+    "active_pct": "100",
+    "cash_pct": "0",
+    "daily_loss_pause_pct": "20"
+  },
+  "new_requests": 166,
+  "new_acquisition_ms": 24365,
+  "results": [
+    {
+      "initial_cash": "500",
+      "final_equity": "500.000000000000000000",
+      "cash": "500",
+      "closed_trade_net": "0",
+      "open_episode_marked_pnl": "0.000000000000000000",
+      "coverage": {
+        "known_quotes": 310,
+        "expected_quotes": 316
+      },
+      "orders": 0,
+      "fills": 0,
+      "closed_trades": 0,
+      "open_positions": 0,
+      "sessions": [
+        {
+          "date": "2026-10-19",
+          "opening_equity": "500",
+          "daily_loss_paused": false,
+          "closing_equity": "500.000000000000000000",
+          "cash": "500",
+          "fills": 0,
+          "closed_trades": 0,
+          "open_positions": []
+        },
+        {
+          "date": "2026-10-20",
+          "opening_equity": "500",
+          "daily_loss_paused": false,
+          "closing_equity": "500.000000000000000000",
+          "cash": "500",
+          "fills": 0,
+          "closed_trades": 0,
+          "open_positions": []
+        }
+      ],
+      "stats": {
+        "closed_trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "hit_rate_pct": null,
+        "average_win_pct": null,
+        "average_loss_pct": null,
+        "profit_factor": null,
+        "total_return_pct": "0.0000",
+        "max_drawdown_pct": "0",
+        "exposure_pct": "0.00"
+      },
+      "event_reasons": {
+        "historical_quote_unavailable": 6,
+        "opening_entry_delay": 8,
+        "trigger_not_crossed": 294,
+        "whole_share_size_zero": 4
+      },
+      "limitations": [
+        "fixed_research_universe_not_historical_watchlist",
+        "historical_earnings_blackout_assumed_clear",
+        "historical_listing_classification_and_broker_permission_assumed",
+        "sampled_quotes_not_continuous_order_book_or_queue_priority",
+        "event_time_not_historical_arrival_latency",
+        "missing_marks_leave_equity_unknown",
+        "drawdown_measured_only_at_known_quote_samples",
+        "retrospective_provider_corrections_possible",
+        "observed_action_windows_not_guaranteed_historical_clearance",
+        "sessions_with_missing_opening_marks_block_all_new_entries",
+        "flat_start_and_open_terminal_positions_no_forced_liquidation"
+      ]
+    },
+    {
+      "initial_cash": "10000",
+      "final_equity": "9994.778255000000000000",
+      "cash": "8782.42825500",
+      "closed_trade_net": "0",
+      "open_episode_marked_pnl": "-5.221745000000000000",
+      "coverage": {
+        "known_quotes": 310,
+        "expected_quotes": 316
+      },
+      "orders": 1,
+      "fills": 1,
+      "closed_trades": 0,
+      "open_positions": 1,
+      "sessions": [
+        {
+          "date": "2026-10-19",
+          "opening_equity": "10000",
+          "daily_loss_paused": false,
+          "closing_equity": "10000.000000000000000000",
+          "cash": "10000",
+          "fills": 0,
+          "closed_trades": 0,
+          "open_positions": []
+        },
+        {
+          "date": "2026-10-20",
+          "opening_equity": "10000",
+          "daily_loss_paused": false,
+          "closing_equity": "9994.778255000000000000",
+          "cash": "8782.42825500",
+          "fills": 1,
+          "closed_trades": 0,
+          "open_positions": {
+            "CRM": {
+              "quantity": "5",
+              "entry_price": "243.514349000000000000",
+              "buy_cost": "1217.57174500",
+              "sold_net": "0",
+              "entry_quantity": "5",
+              "entry_date": "2026-10-20",
+              "entry_atr": "8.60637857",
+              "setup": "pullback",
+              "latched_exit_signal_id": null,
+              "sessions_held": 0,
+              "progressed": false,
+              "trailing_stop": "226.301591860000000000",
+              "initial_stop": "226.301591860000000000"
+            }
+          }
+        }
+      ],
+      "stats": {
+        "closed_trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "hit_rate_pct": null,
+        "average_win_pct": null,
+        "average_loss_pct": null,
+        "profit_factor": null,
+        "total_return_pct": "-0.0522",
+        "max_drawdown_pct": "0.2387",
+        "exposure_pct": "46.84"
+      },
+      "event_reasons": {
+        "historical_quote_unavailable": 6,
+        "opening_entry_delay": 8,
+        "trigger_not_crossed": 226,
+        "pullback_trigger_crossed": 1,
+        "holding_exit_not_triggered": 71
+      },
+      "limitations": [
+        "fixed_research_universe_not_historical_watchlist",
+        "historical_earnings_blackout_assumed_clear",
+        "historical_listing_classification_and_broker_permission_assumed",
+        "sampled_quotes_not_continuous_order_book_or_queue_priority",
+        "event_time_not_historical_arrival_latency",
+        "missing_marks_leave_equity_unknown",
+        "drawdown_measured_only_at_known_quote_samples",
+        "retrospective_provider_corrections_possible",
+        "observed_action_windows_not_guaranteed_historical_clearance",
+        "sessions_with_missing_opening_marks_block_all_new_entries",
+        "flat_start_and_open_terminal_positions_no_forced_liquidation"
+      ]
+    }
+  ],
+  "independent_checks": [
+    {
+      "initial_cash": "500",
+      "checks": "passed",
+      "result_sha256": "cfe154dfcee8d46f93ea96d9e1f16e232dcaf2b6f1149f893804643c235c02f4"
+    },
+    {
+      "initial_cash": "10000",
+      "checks": "passed",
+      "result_sha256": "13602cde59eba7e7f828fb9bcef32e33d885bfed30f4db92f7237f125ed3b4ac"
+    }
+  ],
+  "source_state": "uncommitted source increment on 51392ea; not runtime deployed",
+  "interpretation": "Mechanics and affordability trial; no closed trades or real overnight holding occurred. No strategy edge established.",
+  "reused_data_note": "October 20 inputs reused byte for byte from QUOTE-001; 166 new read-only requests acquired October 19. 332 total requests represented in the combined dataset."
+}

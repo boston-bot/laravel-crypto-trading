@@ -26,11 +26,11 @@ final class DailyBars
 
     /** @return array<string, array> one result per requested symbol */
     /** @param int|null $lookbackDays longer windows serve retrospective replay only; eligibility uses the configured window */
-    public function readMany(array $symbols, CarbonImmutable $asOf, ?int $lookbackDays = null): array
+    public function readMany(array $symbols, CarbonImmutable $asOf, ?int $lookbackDays = null, string $adjustment = 'split'): array
     {
         $end = $asOf->setTimezone('America/New_York')->startOfDay()->subDay();
         $start = $end->subDays(max(1, min(2400, $lookbackDays ?? (int) config('alpaca_data.history_lookback_days'))));
-        $base = ['provider' => self::URL, 'contract' => self::CONTRACT, 'feed' => 'sip', 'adjustment' => 'split', 'timeframe' => '1Day',
+        $base = ['provider' => self::URL, 'contract' => $adjustment === 'raw' ? 'alpaca_bars_v2_1day_sip_raw_v1' : self::CONTRACT, 'feed' => 'sip', 'adjustment' => $adjustment, 'timeframe' => '1Day',
             'start' => $start->toDateString(), 'end' => $end->toDateString(), 'retrieved_at' => null, 'complete' => false, 'error' => null,
             'bars' => [], 'requests' => 0];
         $results = [];
@@ -40,6 +40,7 @@ final class DailyBars
         $error = match (true) {
             ! config('alpaca_data.enabled') || ! config('alpaca_data.reference_enabled') => 'disabled',
             ! $this->credentials() => 'credentials_missing',
+            ! in_array($adjustment, ['raw', 'split'], true) => 'invalid_adjustment',
             default => null,
         };
         foreach ($symbols as $symbol) {
@@ -51,7 +52,7 @@ final class DailyBars
             return array_map(fn ($result) => array_replace($result, ['error' => $error ?? 'no_symbols', 'retrieved_at' => CarbonImmutable::now()->toISOString()]), $results);
         }
         foreach (array_chunk(array_values(array_unique($symbols)), max(1, min(100, (int) config('alpaca_data.history_symbols_per_request')))) as $chunk) {
-            $outcome = $this->chunk($chunk, $start->toDateString(), $end->toDateString());
+            $outcome = $this->chunk($chunk, $start->toDateString(), $end->toDateString(), $adjustment);
             foreach ($chunk as $symbol) {
                 $results[$symbol] = array_replace($results[$symbol], ['retrieved_at' => $outcome['retrieved_at'], 'requests' => $outcome['requests'],
                     'error' => $outcome['error'], 'complete' => $outcome['error'] === null, 'bars' => $outcome['error'] === null ? ($outcome['bars'][$symbol] ?? []) : []]);
@@ -61,7 +62,7 @@ final class DailyBars
         return $results;
     }
 
-    private function chunk(array $chunk, string $start, string $end): array
+    private function chunk(array $chunk, string $start, string $end, string $adjustment): array
     {
         $outcome = ['retrieved_at' => CarbonImmutable::now()->toISOString(), 'requests' => 0, 'error' => null, 'bars' => []];
         $cursor = null;
@@ -70,7 +71,7 @@ final class DailyBars
         try {
             for ($page = 0; $page < max(1, min(50, (int) config('alpaca_data.history_max_pages'))); $page++) {
                 $query = ['symbols' => implode(',', $chunk), 'timeframe' => '1Day', 'start' => $start, 'end' => $end,
-                    'adjustment' => 'split', 'feed' => 'sip', 'limit' => 10000, 'sort' => 'asc'];
+                    'adjustment' => $adjustment, 'feed' => 'sip', 'limit' => 10000, 'sort' => 'asc'];
                 if ($cursor !== null) {
                     $query['page_token'] = $cursor;
                 }

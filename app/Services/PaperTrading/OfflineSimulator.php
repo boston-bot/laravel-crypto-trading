@@ -445,11 +445,7 @@ final class OfflineSimulator
 
     private function price(SimulationOrder $order, SimulationQuote|BrokerSimulationQuote $quote): Decimal
     {
-        $buy = $order->side === 'BUY';
-        $reference = Decimal::from($quote->data[$buy ? 'ask' : 'bid']);
-        $multiplier = Decimal::from('1')->plus(Decimal::from($order->assumptions['slippage_bps'])->dividedBy(Decimal::from('10000'), 12)->multipliedBy(Decimal::from($buy ? '1' : '-1')));
-
-        return $reference->multipliedBy($multiplier)->rounded(8, $buy ? RoundingMode::CEILING : RoundingMode::FLOOR);
+        return PaperFillPrice::calculate($order->side, $quote->data[$order->side === 'BUY' ? 'ask' : 'bid'], $order->assumptions['slippage_bps']);
     }
 
     private function commitment(SimulationOrder $order, Decimal $quantity): Decimal

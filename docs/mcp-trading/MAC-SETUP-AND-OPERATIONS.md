@@ -521,3 +521,103 @@ Keep paper fills/handoff and AI/live execution disabled while cadence, fractiona
 ### Replay and cadence reports (M5 source, not deployed)
 
 Requires additive migration `2026_10_19_000026` (one table). `php artisan mcp:strategy-replay --account=<local-connection-id> [--years=3] [--equity=500]` records a retrospective daily replay of the live rules over Alpaca's split-adjusted history for today's nominating watchlist symbols; it needs the Alpaca reference reads enabled, takes about a minute for 25 symbols, and never changes orders, the paper ledger or settings. Results are labeled retrospective and are not forward performance. `php artisan mcp:cadence-report --account=<local-connection-id> [--date=YYYY-MM-DD]` measures a regular session's collection, quote age and strategy-cycle cadence from stored records (read-only). Robinhood's agentic order contract allows fractional quantities only on regular-hours market orders, so new execution settings cannot request fractional limit orders. [Evidence](M5-REPLAY-FRACTIONAL-CADENCE-EVIDENCE.md).
+
+
+### October 20 deployment recovery
+
+The owner created encrypted backup `mcp-trading-20261021T021151Z.dump.enc` (the filename uses UTC), then attempted deployment with `--migrate`. The command stopped with `000025`/`000026` still pending. The private migration file had correct owner/permissions, and a dry run with its path explicitly supplied succeeded; the pasted command omitted the credential-path export. The failed attempt had already checked out the new release, but had not restarted services or applied either migration.
+
+Deployment was completed at exact release `51392ea` using a command-scoped path:
+
+```bash
+cd "$HOME/Services/investing-ops/app"
+MCP_MIGRATION_CREDENTIALS_FILE="$HOME/.config/investing-ops/migration.json" \
+  bash deploy/macos/deploy.sh 51392ea --migrate
+```
+
+Both additive migrations completed as batch 11. Doctor, `/ready`, empty pending-migration list and reads of the two new empty tables as `mcp_trading_runtime` passed in `postgres` / `mcp_trading`. No backfill or policy/configuration change occurred. Batch collection, opening valuations, signals, paper fills/handoff, AI and brokerage writes stayed disabled. No owner credential was persisted or printed. The inline variable applies only to that command; no later `unset` is necessary. Next: deliberate read-only collection activation and cadence measurement, separately from paper execution.
+
+
+### October 20 read-only batch activation
+
+Runtime remains on deployed `51392ea`, with migrations `000025`/`000026` applied. At the owner's request, only `MCP_PAPER_BATCH_COLLECTION_ENABLED=true` and `MCP_PAPER_SESSION_VALUATIONS_ENABLED=true` were changed in the runtime's private `.env`. The prior file was preserved in a private `0700` directory outside the checkout, with a `0600` backup. Configuration was recached, queue workers signaled to restart, and PHP-FPM restarted. The checked-in `.env.example` remains default-off. Signals, signal handoff, real-data paper fills, AI and brokerage writes stayed false; no owner execution policy was applied.
+
+`schedule:list` selects `mcp:market-cycle --once --scheduled` instead of the old rotating collector; it attempts every five minutes during verified regular sessions and hourly otherwise. An after-close scheduled probe correctly selected zero symbols. `/ready` and doctor passed. Opening valuations cannot establish a new regular-session baseline after the close; the next verified session must supply its opening evidence.
+
+Initial after-close manual measurement (October 20 21:21:43–21:22:32 CDT): 32 symbols selected, 32 new observations, 48.874 seconds, no budget/backoff stop. All base observations were incomplete. A read-only quote-batch diagnostic established `stale_data` for the mixed batches; no stale threshold was relaxed and no executable quote was invented. Direct single/two-symbol CRM/MSFT reads returned complete responses, which does not make the larger batches fresh. This is attempt throughput, not 32 usable quote reads or a regular-session freshness pass. $500 cash, $0 reserved, zero paper orders/positions and ledger version 1 were unchanged.
+
+A second manual sample at 21:26:52–21:27:47 CDT again selected/recorded 32 symbols, taking 54.807 seconds, with no backoff/budget stop and zero complete base quote observations. Start-to-start spacing was 308.527 seconds. Across the 32 common symbols, record-to-record intervals were median 311.043 seconds / p95 314.227 seconds / maximum 314.461 seconds. These intervals were produced by two operator-initiated runs; the off-session scheduler itself remains hourly. Both preserved paper accounting and all execution gates. `comparison.json` records these measurements; `quote-diagnostic.json` records the separate stale-batch diagnostic. No opening valuation was created after close. The stored calendar confirms October 21 regular hours as 08:30–15:00 Central.
+
+The last completed regular-session baseline, October 20 under the old collector: 365 observations across 32 symbols, 73/78 slots (93.6%), per-symbol refresh median 34.287 minutes / p95 40.434 minutes, quote age at retrieval median 4.241 seconds / p95 9.216 seconds. Strategy evaluation was disabled throughout; no quote-age-at-evaluation result exists. Private measurement artifacts are in runtime `storage/app/private/cadence/activation-2026-10-20/`.
+
+A full regular session with the batch collector is still required. After the October 21 session, inspect:
+
+```bash
+cd "$HOME/Services/investing-ops/app"
+/opt/homebrew/opt/php@8.5/bin/php artisan mcp:cadence-report --account=1 --date=2026-10-21
+```
+
+Use its per-symbol intervals, slot spans and quote ages, plus observation completeness, to assess coverage. Do not count incomplete observations as usable data, or these manually initiated off-session samples as proof of unattended regular-session cadence. No paper execution is enabled by this activation.
+
+
+### Manual historical quote trial (source only)
+
+The new `mcp:intraday-replay` mode is not deployed in runtime `51392ea`. It uses the existing encrypted replay archive (`000026`); no new migration is needed. Its separate `MCP_HISTORICAL_QUOTE_REPLAY_ENABLED=false` flag defaults off. After deploying the source, deliberately configure that flag for manual research and refresh cached configuration through the normal operator procedure. The existing Alpaca data/reference/calendar flags and app-owned credentials must be configured. No scheduler is added. Changing this flag does not enable forward paper fills or broker writes.
+
+```bash
+php artisan mcp:intraday-replay --account=1 --date=2026-10-20 \
+  --symbol=CRM --symbol=MSFT --equity=500 --minutes=390
+```
+
+`--request=<uuid>` provides duplicate-safe archival. Dates must be completed sessions covered by the reviewed cost schedule; one or two explicit symbols and 20–390 minutes are supported. Invalid/missing historical access yields an incomplete record without partial performance. The archive's encrypted payload includes the full normalized snapshot and research limitations. It is separate from forward paper orders, cash and positions. A shorter window keeps outstanding DAY orders pending; a complete session expires remaining orders at the close.
+
+The first actual full-session trial used the development app's own data access and wrote private local artifacts only, leaving runtime settings/ledger unchanged. At $500 no order could be sized; a $10,000 comparison produced one fill and ended with one open position. This is one-session research with historical earnings/eligibility assumptions, not point-in-time walk-forward or performance acceptance. [Evidence, reproduction and exact limitations](M5-INTRADAY-REPLAY-EVIDENCE.md).
+
+For two to five consecutive **full** sessions, use repeated `--session` instead of `--date`, in chronological order, with `--minutes=390` (verified early closes are honored):
+
+```bash
+php artisan mcp:intraday-replay --account=1 \
+  --session=2026-10-19 --session=2026-10-20 \
+  --symbol=CRM --symbol=MSFT --equity=500 --minutes=390
+```
+
+This selects `intraday_quotes_multisession_v1` and carries cash/positions across closes, while expiring each session's DAY remainder. The range must contain every intervening trading session. A single incomplete acquisition or unsupported overnight action produces no partial performance. Per-session opening marks are required for new entries; exits continue when an opening baseline is unavailable. UUID retries bind the same dates/mode and reuse the encrypted `postgres` / `mcp_trading` / `mcp_strategy_replays` record. A run may acquire up to five bounded sessions; it does not start a continuous loop.
+
+Use the [strategy experiment register](STRATEGY-EXPERIMENTS.md) to find each hypothesis, exact comparison, source/input versions, result and interpretation, including inconclusive and superseded results. [Multi-session evidence and actual two-session results](M5-MULTISESSION-REPLAY-EVIDENCE.md) remain source-only. No actual overnight holding or completed trade occurred in that small real sample; automated tests cover carry and later exits. Historical earnings/watchlist/account assumptions still prevent a point-in-time claim.
+
+### Durable historical experiments (source only)
+
+[Runner design, recovery and evidence](M5-EXPERIMENT-RUNNER-EVIDENCE.md). Migration `2026_10_20_000027` adds two encrypted research tables, with no backfill. Runtime database/schema remain `postgres` / `mcp_trading`. This source is not deployed or enabled. Use the normal encrypted backup, explicit-owner migration review and `deploy.sh <committed-release> --migrate` procedure before using the commands.
+
+After deployment, configure `MCP_STRATEGY_EXPERIMENTS_ENABLED=true` and `MCP_HISTORICAL_QUOTE_REPLAY_ENABLED=true` through the normal private-environment/config-cache procedure. Existing Alpaca data/reference/calendar access and operator/account configuration must also be valid. These flags do not activate signals, forward paper fills, AI decisions or brokerage writes.
+
+The updated `deploy/macos/install.sh` installs the separate `local.investing-ops.experiments` LaunchAgent (alongside existing agents). Review/apply it through the normal install procedure after migration/configuration. It uses the `mcp_experiments` database connection and `experiments` queue. For a foreground worker during setup:
+
+```bash
+/opt/homebrew/opt/php@8.5/bin/php artisan queue:work mcp_experiments \
+  --queue=experiments --sleep=3 --tries=5 --timeout=300 --max-time=3600
+```
+
+Launchd restarts the installed worker after its hourly recycle or an exit. An experiment continues independently of a ChatGPT/Codex conversation while the Mac and worker are running. Deployments signal queue restarts; source changes require a worker restart before new definitions can run. Check `experiments.out.log` / `experiments.err.log` in the private runtime logs directory. No worker/service was installed by the source implementation itself.
+
+Start from the checked-in example or a reviewed JSON specification:
+
+```bash
+php artisan mcp:experiment start --account=1 \
+  --spec=docs/mcp-trading/examples/strategy-experiment.json
+```
+
+The response contains `experiment_id`, `request_id`, status and the frozen definition hash; processing is queued, not performed by this prompt. To retry the same submission without creating another experiment, supply its original `--request=<uuid>` and unchanged specification.
+
+```bash
+php artisan mcp:experiment report --account=1 --experiment=<experiment-uuid>
+php artisan mcp:experiment resume --account=1 --experiment=<experiment-uuid>
+```
+
+`report` is read-only and returns JSON: progress, reasons, failed attempts, completed variant metrics and the final comparison when complete. `resume` is explicit recovery after failures/expired leases; it retains all evidence and grants another bounded attempt budget. It refuses an active lease or changed frozen code/definition. If a step is paused by disabled gates, restore the intended research configuration before resuming. An authorization/binding change requires a new authorized experiment rather than silently continuing the old one.
+
+Specifications accept 1–2 symbols, 2–20 consecutive completed sessions and 1–8 variants. Monetary/ATR values must be strings; risk limits, trading permissions and arbitrary code cannot be supplied. Owner cost/allocation/risk settings are snapshotted once. A twenty-session experiment uses up to 29 bounded jobs (20 acquisitions, 8 variants, 1 report); each variant carries positions across the entire window. Current reviewed costs only cover Q4 2026. Nothing continuously repeats or automatically promotes a winning variant.
+
+For a new comparison after changing a parameter or rebuilding rules, add `"dataset_experiment": "<completed-experiment-uuid>"` to a new specification with identical symbols/dates. The application reuses the parent's verified observations, calculates differences against its baseline, and records changed sources. It withholds cross-experiment deltas when capital or cost/risk settings differ. Keep original experiments/releases as evidence; do not modify them.
+
+Example prompt after activation: “Start the historical experiment in `docs/mcp-trading/examples/strategy-experiment.json` and return its ID.” A later prompt: “Read experiment `<uuid>` and explain the calculated results and limitations.” The prompt selects/starts work or interprets output; the application's classes perform the processing.

@@ -1,0 +1,12 @@
+{
+  "name": "CRM/MSFT historical baseline and sizing comparison",
+  "hypothesis": "Compare whole-share affordability and a declared wider-stop variant on identical historical quotes; this is exploratory, with no profitability claim.",
+  "symbols": ["CRM", "MSFT"],
+  "sessions": ["2026-10-19", "2026-10-20"],
+  "baseline": "baseline",
+  "variants": [
+    {"id": "baseline", "equity": "500"},
+    {"id": "larger_cash", "equity": "10000"},
+    {"id": "wider_stop", "equity": "500", "parameters": {"initial_stop_atr": "3"}}
+  ]
+}

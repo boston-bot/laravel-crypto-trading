@@ -17,6 +17,16 @@ final class IntegrationCleanup
         if ($connectionId === null || DB::connection()->getDriverName() !== 'pgsql') {
             return;
         }
+        $experimentIds = DB::table('mcp_strategy_experiments')->where('mcp_connection_id', $connectionId)->pluck('id')->all();
+        DB::table('mcp_strategy_experiment_steps')->whereIn('experiment_id', $experimentIds)->delete();
+        foreach (DB::table('jobs')->where('queue', 'experiments')->get() as $job) {
+            $command = json_decode($job->payload, true)['data']['command'] ?? '';
+            foreach ($experimentIds as $experimentId) {
+                if (str_contains($command, 's:12:"experimentId";i:'.$experimentId.';')) {
+                    DB::table('jobs')->where('id', $job->id)->delete();
+                }
+            }
+        }
         $incidentIds = DB::table('mcp_incidents')->where('mcp_connection_id', $connectionId)->pluck('id')->all();
         foreach (Outbox::where('kind', 'notification')->get() as $event) {
             if (in_array($event->payload['incident_id'] ?? null, $incidentIds, true)) {

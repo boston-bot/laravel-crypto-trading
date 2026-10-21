@@ -15,6 +15,8 @@ Owner decisions, October 18:
 
 October 19 runtime checkpoint: the owner deployed `80225da`, including the deterministic signals and risk/cost/paper handoff code and migrations `000023`/`000024`. The rule eligibility policy replaces the fixed list for candidate assessment, and external-order detection and paper action accounting are enabled. The signal execution policy remains unapplied; signals, paper fills/handoff, AI and live writes remain off, with $500 cash and no paper positions. A subsequent source increment adds first-minute bid opening valuations and batched collection behind separate default-off gates; its migration `000025` is pending deployment. [Current evidence and limits](M5-OPENING-AND-BATCH-COLLECTION-EVIDENCE.md).
 
+October 20 historical research update: the existing replay engine now supports bounded [historical SIP quote scenarios](M5-INTRADAY-REPLAY-EVIDENCE.md), with raw pre-session profiles, five-minute decisions, later-source fills and shared risk/cost/fill math. First CRM/MSFT session trial completed; source is not deployed, and historical earnings/eligibility and overnight carrying remain limitations. It does not enable execution or prove an edge.
+
 ## Roles and data flow
 
 ```mermaid
@@ -211,3 +213,7 @@ No paid LLM API runs in this application. The earlier $100 target / $150 maximum
 - Strict separation from broker-confirmed state.
 
 Every unavailable, rejected or skipped outcome remains visible.
+
+October 20 research continuation: [multi-session quote replay](M5-MULTISESSION-REPLAY-EVIDENCE.md) and a [strategy experiment register](STRATEGY-EXPERIMENTS.md) now preserve dated hypotheses, fixed comparisons, source/input versions and both inconclusive and superseded outcomes. The current real two-session sample has zero closed trades and establishes no edge. These source-only research tools neither apply parameters nor activate signals or execution.
+
+October 20 experiment orchestration: the [durable runner](M5-EXPERIMENT-RUNNER-EVIDENCE.md) makes historical processing application-owned. Prompts can submit a bounded JSON specification or read its UUID report; PHP owns acquisition, replay, verification and comparisons. Definitions/settings/source hashes and checkpoints are persisted; rebuilds create new experiments using frozen parent data. No model runs in the worker, parameter variants cannot apply policy, and research does not authorize trading. Source-only migration `000027` and default-off worker activation remain pending.

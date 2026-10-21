@@ -2,6 +2,7 @@
 
 return [
     // Data reads only; never used by a brokerage execution adapter.
+    'historical_quote_replay_enabled' => filter_var(env('MCP_HISTORICAL_QUOTE_REPLAY_ENABLED', false), FILTER_VALIDATE_BOOL),
     'enabled' => filter_var(env('ALPACA_DATA_ENABLED', false), FILTER_VALIDATE_BOOL),
     'key' => env('ALPACA_KEY'),
     'secret' => env('ALPACA_SECRET'),

@@ -54,6 +54,16 @@ return [
             'after_commit' => false,
         ],
 
+        // Historical experiments checkpoint one bounded step per job; share the authoritative DB transaction.
+        'mcp_experiments' => [
+            'driver' => 'database',
+            'connection' => null,
+            'table' => 'jobs',
+            'queue' => 'experiments',
+            'retry_after' => 420,
+            'after_commit' => false,
+        ],
+
         // Slow AI research cannot occupy monitoring workers. Jobs are never generically retried.
         'mcp_research' => [
             'driver' => 'database',

@@ -16,7 +16,7 @@ NGINX_CONF_DIR="$BREW/etc/nginx"
 AGENTS="$HOME/Library/LaunchAgents"
 TEMPLATES="$(cd "$(dirname "$0")" && pwd)/templates"
 DOMAIN="gui/$(id -u)"
-SERVICES=(php-fpm nginx scheduler monitoring reconciliation research)
+SERVICES=(php-fpm nginx scheduler monitoring reconciliation research experiments)
 
 [[ "$BASE" != *[[:space:]#]* ]] || { echo "Choose a runtime path without spaces or '#'." >&2; exit 1; }
 [[ -f "$APP/artisan" && -f "$APP/.env" ]] || { echo "Deploy the app (with its .env) to $APP first." >&2; exit 1; }

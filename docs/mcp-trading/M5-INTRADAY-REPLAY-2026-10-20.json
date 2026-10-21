@@ -1,0 +1,204 @@
+{
+  "date": "2026-10-20",
+  "session": {
+    "date": "2026-10-20",
+    "opens_at": "2026-10-20T13:30:00+00:00",
+    "closes_at": "2026-10-20T20:00:00+00:00",
+    "status": "regular"
+  },
+  "window_end": "2026-10-20T20:00:00.000000Z",
+  "symbols": [
+    "CRM",
+    "MSFT"
+  ],
+  "mode": "retrospective_sampled_quote_scenario_not_forward_or_point_in_time",
+  "requests": 166,
+  "acquisition_ms": 22487,
+  "frames": 79,
+  "inputs_sha256": "1dfe3566c06fd4099c157b6aa74027a812225566b4beb646b9993325a68a7c2a",
+  "source_hashes": {
+    "app/Services/PaperTrading/IntradayQuoteReplay.php": "d368684b04e932312da827d0d5089cf794506c7c58317c506a65f5dc2e1102f2",
+    "app/Services/PaperTrading/StrategyReplay.php": "2463f43115ab415f379af472d42240b191379b9ca22b307435896bc445d528ed",
+    "app/Services/PaperTrading/SignalRules.php": "c2a33ef1929849ddcc02bf2bc3fd55126d1aed5068e5d97e2a1bd22688099cd2",
+    "app/Services/PaperTrading/SignalParameters.php": "9ccf1b3be22e205afdbe6910904d671ebf7580fedc977ef3b1494b82937e906e",
+    "app/Services/PaperTrading/ProfileCalculator.php": "1ea896aea6871bb0bac7fd564cb99a3e7258286d50ec50db98451b848902f7a0",
+    "app/Services/PaperTrading/RiskSizer.php": "d9a02fd0dbc9df63ac5bce90441fd0b116d268e682abec0dbb609b67cac67173",
+    "app/Services/PaperTrading/PaperFillPrice.php": "6e964c457d866dd10eae654566ead0b3ff80ca0222167fc60591586d26d920c8",
+    "app/Services/PaperTrading/TradingCosts.php": "637ecc6fd44ebfac5460af2649cc3a398fc88327fd612f573a34527a0686c7fc",
+    "app/Services/PaperTrading/EligibilityRules.php": "3b2d0e4f64c3e21e632f749bd8d51d81e2027cf81d2a7ad1c33830f1e2b0c9e7",
+    "app/Services/MarketData/Alpaca/HistoricalQuotes.php": "b04c423467a8dcdb325035e82d60c8d50ef26e6cdd1c9f4d8f2c52d6543b3588",
+    "app/Services/MarketData/Alpaca/DailyBars.php": "ba901c8d8df549c8206827c7ff0397c58c186ecf910ffd2a3ef573be598900f2",
+    "app/Services/MarketData/Alpaca/TradingCalendar.php": "5b164558ad7fd04128384c03995c035dbc77047d68b8eb5bb9684246c98cd0bc",
+    "app/Services/MarketData/Alpaca/CorporateActions.php": "5066184ef0c772e0c85546b91b18c276cbc25fef65845501971c738e8f5db2b5",
+    "app/Services/PaperTrading/IntradayReplayInputs.php": "9edd443720ac42bf9374c5d858c24f1741f8b6ca11ba7f10eeb9cfaebbcc3870",
+    "app/Services/PaperTrading/PaperMarketReferences.php": "9c46a851df658b64e403cda6c0d66c71fe338611258902bacb75a8b88d2f1b21"
+  },
+  "settings": {
+    "risk_per_trade_pct": "1",
+    "max_position_pct": "20",
+    "max_open_positions": 8,
+    "slippage_bps": "1",
+    "limit_offset_bps": "5",
+    "quote_max_age_seconds": 20,
+    "allow_fractional": false,
+    "cost_schedule": {
+      "version": "rh_listed_equity_2026q4_v1",
+      "reviewed_on": "2026-10-19",
+      "effective_from": "2026-10-01",
+      "effective_through": "2026-12-31",
+      "commission_per_share": "0",
+      "sec_per_million": "20.60",
+      "sec_waiver_notional": "500",
+      "taf_per_share": "0",
+      "taf_waiver_shares": "50",
+      "taf_max_per_execution": "9.79",
+      "cat_per_share": "0.000003",
+      "cat_minimum_charge": "0.01",
+      "rounding_policy": "per_simulated_execution_sec_up_other_half_up_v1",
+      "sources": [
+        "https://robinhood.com/us/en/support/articles/trading-fees-on-robinhood/",
+        "https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2",
+        "https://www.finra.org/rules-guidance/rule-filings/sr-finra-2026-021"
+      ]
+    },
+    "active_pct": "100",
+    "cash_pct": "0",
+    "daily_loss_pause_pct": "20"
+  },
+  "parameters": {
+    "version": "swing_signal_parameters_v1",
+    "values": {
+      "benchmark_symbol": "SPY",
+      "market_filter_sma_sessions": 200,
+      "fast_sma_sessions": 50,
+      "slow_sma_sessions": 200,
+      "relative_strength_sessions": 126,
+      "atr_sessions": 14,
+      "max_atr_pct": "6",
+      "ema_sessions": 20,
+      "pullback_max_atr_from_ema": "1",
+      "breakout_range_sessions": 20,
+      "breakout_max_range_atr": "3",
+      "max_chase_atr": "0.5",
+      "initial_stop_atr": "2",
+      "trailing_stop_atr": "3",
+      "earnings_blackout_sessions": 5,
+      "entry_delay_minutes": 15,
+      "time_exit_sessions": 20,
+      "cooldown_sessions": 5
+    },
+    "hash": "7f305b77cd773b0f9ac8df8f351586b611f5c73d1bfeff0cc4312627bae5fd5c"
+  },
+  "results": [
+    {
+      "initial_cash": "500",
+      "final_equity": "500",
+      "marked_net_pnl": "0",
+      "return_pct": "0.0000",
+      "orders": 0,
+      "fills": 0,
+      "closed_trades": 0,
+      "open_positions": 0,
+      "coverage": {
+        "known_quotes": 154,
+        "expected_quotes": 158
+      },
+      "event_reasons": {
+        "historical_quote_unavailable": 4,
+        "opening_entry_delay": 4,
+        "trigger_not_crossed": 144,
+        "whole_share_size_zero": 4
+      },
+      "stats": {
+        "closed_trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "hit_rate_pct": null,
+        "average_win_pct": null,
+        "average_loss_pct": null,
+        "profit_factor": null,
+        "total_return_pct": "0.0000",
+        "max_drawdown_pct": "0",
+        "exposure_pct": "0.00"
+      },
+      "sha256": "baab118dc0fd731f8df6877813da50bd77ea3f3cbfa0c8ba55a46c8c841d24bd",
+      "checks": "passed"
+    },
+    {
+      "initial_cash": "10000",
+      "final_equity": "9994.77825500",
+      "marked_net_pnl": "-5.22174500",
+      "return_pct": "-0.0522",
+      "orders": 1,
+      "fills": 1,
+      "closed_trades": 0,
+      "open_positions": 1,
+      "coverage": {
+        "known_quotes": 154,
+        "expected_quotes": 158
+      },
+      "event_reasons": {
+        "historical_quote_unavailable": 4,
+        "opening_entry_delay": 4,
+        "trigger_not_crossed": 76,
+        "pullback_trigger_crossed": 1,
+        "holding_exit_not_triggered": 71
+      },
+      "stats": {
+        "closed_trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "hit_rate_pct": null,
+        "average_win_pct": null,
+        "average_loss_pct": null,
+        "profit_factor": null,
+        "total_return_pct": "-0.0522",
+        "max_drawdown_pct": "0.2387",
+        "exposure_pct": "93.67"
+      },
+      "sha256": "f470f95a7ae4cc1cb247c3a78230aed12e1bfbd6ce6474a703dfc4b2c279e469",
+      "checks": "passed"
+    }
+  ],
+  "limitations": [
+    "fixed_research_universe_not_historical_watchlist",
+    "historical_earnings_blackout_assumed_clear",
+    "historical_listing_classification_and_broker_permission_assumed",
+    "sampled_quotes_not_continuous_order_book_or_queue_priority",
+    "event_time_not_historical_arrival_latency",
+    "single_session_flat_start_no_overnight_actions",
+    "missing_marks_leave_equity_unknown",
+    "drawdown_measured_only_at_known_quote_samples",
+    "unfilled_day_orders_remain_pending_at_sample_window_end",
+    "retrospective_provider_corrections_possible"
+  ],
+  "daily_history": {
+    "CRM": {
+      "bars": 276,
+      "first": "2025-09-15",
+      "last": "2026-10-19",
+      "adjustment": "raw",
+      "contract": "alpaca_bars_v2_1day_sip_raw_v1"
+    },
+    "MSFT": {
+      "bars": 276,
+      "first": "2025-09-15",
+      "last": "2026-10-19",
+      "adjustment": "raw",
+      "contract": "alpaca_bars_v2_1day_sip_raw_v1"
+    },
+    "SPY": {
+      "bars": 276,
+      "first": "2025-09-15",
+      "last": "2026-10-19",
+      "adjustment": "raw",
+      "contract": "alpaca_bars_v2_1day_sip_raw_v1"
+    }
+  },
+  "quote_retrieval_window": [
+    "2026-10-21T02:57:05.252436Z",
+    "2026-10-21T02:57:26.298654Z"
+  ],
+  "validation": "Independent cash, final equity, inventory, input-hash, limit, displayed-size, source chronology and non-reused liquidity checks passed.",
+  "source_release": "51392ea plus uncommitted historical-quote implementation; not runtime deployed"
+}

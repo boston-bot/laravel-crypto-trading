@@ -1,0 +1,26 @@
+# Strategy experiments and findings
+
+This is the comparison register for the deterministic breakout/pullback rules. The strategy definitions and starting parameters are in the [M5 design](M5-DESIGN.md); each result pins the actual versions used. Operational success, affordability and strategy profitability are separate questions. No experiment applies settings, activates paper trading or authorizes brokerage orders.
+
+Durable execution now lives in the [experiment runner](M5-EXPERIMENT-RUNNER-EVIDENCE.md). Each submitted specification and its hypotheses, versions, attempts, input hashes, verified metrics and comparisons are recorded automatically in PostgreSQL; `mcp:experiment report` retrieves them without LLM calculations. This document remains the human interpretation register. Runner tests use synthetic inputs and are not additional strategy-performance evidence.
+
+## Record before running
+
+Assign an experiment ID and write the hypothesis, fixed universe, dates, initial cash, baseline, single intended change and success criterion before fetching or evaluating new observations. Record replay/profile/rule/parameter and fee versions, settings, input SHA-256, source hashes and provenance in the result artifact. Freeze those inputs for every comparison. Retain failures, incomplete runs and superseded results, with the reason; never overwrite them with the preferred outcome.
+
+Report quote coverage, reasons for blocked entries, order/fill/closed-trade counts, open holdings, exact cash, closed-trade net P&L, open-position marked P&L, return and observed drawdown. A higher cash scenario is an affordability comparison, not a recommended funding change. A small sample with open trades cannot establish profitability. Missing marks make affected equity unknown; do not substitute the entry price. Compare performance variants only on the same universe, dates and data version; validate any chosen variant on a reserved period before considering a policy change.
+
+## Register
+
+| ID | Question / fixed comparison | Evidence | Finding / disposition |
+|---|---|---|---|
+| DAILY-001 | Initial daily-bar replay and stop-width sensitivity | [Superseded v1 evidence](M5-REPLAY-FRACTIONAL-CADENCE-EVIDENCE.md) | **Superseded:** chronology, sizing and window defects. Do not use v1 returns or stop-width comparisons to select parameters. |
+| DAILY-002 | Corrected default rules; 23 current nominees, 751 sessions, 2023-10-20–2026-10-19; $500 vs $10,000 | [v2 report](M5-REPLAY-V2-2026-10-20.json), [interpretation](M5-REPLAY-FRACTIONAL-CADENCE-EVIDENCE.md) | **Exploratory, no edge established:** +5.1480% / +24.2168%, versus SPY price return +79.9333%; 41 / 182 closed trades. Daily approximations and present-day selection bias prevent a point-in-time claim. Parameters unchanged. |
+| QUOTE-001 | Can the default rules replay a real completed session with later quote fills? CRM/MSFT, 2026-10-20, $500 vs $10,000 | [Single-session report](M5-INTRADAY-REPLAY-2026-10-20.json), [method](M5-INTRADAY-REPLAY-EVIDENCE.md) | **Mechanics demonstrated; strategy inconclusive:** 154/158 usable quote samples. $500: no orders, four triggered evaluations sized zero. $10,000: one fill, no closed trade, one open position; final bid-marked equity $9,994.78. Whole-share affordability is an observed constraint, not a failed trading edge. |
+| QUOTE-002 | Can full-session replay carry cash, positions, pinned stops and exit intents across consecutive closes? CRM/MSFT, 2026-10-19–2026-10-20; default parameters and fee version unchanged; same frozen inputs at $500 and $10,000 | [Multi-session results](M5-MULTISESSION-REPLAY-2026-10-20.json), [method and limits](M5-MULTISESSION-REPLAY-EVIDENCE.md) | **Completed; strategy inconclusive:** 310/316 usable quotes. $500: no orders. $10,000: one buy, no closed trades, one open position, $9,994.78 final equity. No real position crossed the first close; synthetic tests verify overnight carry. **Protocol recorded before acquisition:** Functional success requires deterministic replay, exact cash/share/P&L conservation, no fills at acceptance, DAY expiry and no use of current/future daily bars. No profitability success criterion or parameter search; these dates overlap prior exploratory work and are not a holdout. If no trades close, record that outcome without forcing exits. |
+
+## What remains unknown
+
+We have not established which playbook has a repeatable edge, selected better stop parameters, reconstructed historical watchlist/earnings/account eligibility, or passed controlled forward-paper acceptance. Historical research can find defects and reject weak hypotheses sooner. The regular-session collection/latency checks still need actual runtime observations.
+
+Next comparisons should change one rule at a time, record breakout and pullback results separately, retain a benchmark and reserve later data for validation. Any production parameter change needs a new version and explicit policy application; this register never changes the trading policy.

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>local.investing-ops.experiments</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@@PHP@@</string>
+        <string>@@APP@@/artisan</string>
+        <string>queue:work</string>
+        <string>mcp_experiments</string>
+        <string>--queue=experiments</string>
+        <string>--sleep=3</string>
+        <string>--tries=5</string>
+        <string>--timeout=300</string>
+        <string>--max-time=3600</string>
+    </array>
+    <key>WorkingDirectory</key><string>@@APP@@</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key><string>@@BREW@@/bin:@@BREW@@/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>ThrottleInterval</key><integer>10</integer>
+    <key>StandardOutPath</key><string>@@LOGS@@/experiments.out.log</string>
+    <key>StandardErrorPath</key><string>@@LOGS@@/experiments.err.log</string>
+</dict>
+</plist>

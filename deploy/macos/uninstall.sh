@@ -3,7 +3,7 @@
 set -euo pipefail
 
 DOMAIN="gui/$(id -u)"
-for name in research reconciliation monitoring scheduler nginx php-fpm; do
+for name in experiments research reconciliation monitoring scheduler nginx php-fpm; do
     label="local.investing-ops.$name"
     launchctl bootout "$DOMAIN/$label" 2>/dev/null || true
     rm -f "$HOME/Library/LaunchAgents/$label.plist"

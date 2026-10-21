@@ -15,6 +15,13 @@ use Brick\Math\RoundingMode;
  */
 final class StrategyReplay
 {
+    use IntradayQuoteReplay;
+    use MultiSessionQuoteReplay;
+
+    public const MULTISESSION_VERSION = 'intraday_quotes_multisession_v1';
+
+    public const INTRADAY_VERSION = 'intraday_quotes_v1';
+
     public const VERSION = 'daily_replay_v2';
 
     /** Bars per profile, matching the live 400-calendar-day history window (about 275 sessions). */
