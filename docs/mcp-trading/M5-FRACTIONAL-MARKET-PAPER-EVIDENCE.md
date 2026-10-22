@@ -52,8 +52,8 @@ A remainder that cannot fill then (for example, displayed size exhausted) waits 
 
 | Check | Result |
 |---|---|
-| Full SQLite | **599 passed / 4,101 assertions, 35 PostgreSQL-only skips** (634 total) |
-| Full PostgreSQL | **633 passed / 4,429 assertions, 1 existing PHP-FPM environment skip** (634 total) |
+| Full SQLite | **599 passed / 4,108 assertions, 35 PostgreSQL-only skips** (634 total) |
+| Full PostgreSQL | **633 passed / 4,436 assertions, 1 existing PHP-FPM environment skip** (634 total) |
 | `composer validate`, Pint, `git diff --check` | Passed |
 
 All existing paper-trading feature tests (293) passed before the new tests were added, so limit-order behavior is unchanged.
@@ -63,7 +63,7 @@ New `FractionalMarketPaperTest` (10 tests):
 - **Small position limit:** a 0.5% limit (like a $500 account) buys a fraction under one share. With `untradable` the same signal sizes to zero whole shares and places nothing. With the flag missing, a whole-share market order fills.
 - **Rejections at submission, with no fill and no cash or reservation change:** a moved quote (entry rule), an ask above a lowered stored maximum entry (price guard), and a wide spread (eligibility).
 - **Exits:** a fractional exit sells the full fraction at the bid minus 5 bp, with no floor. After eligibility is lost, the whole shares sell and the fraction is recorded.
-- **Settings:** fractional permission is refused with a limit execution version, with market orders but fractional shares disallowed, and with slippage under 5 bp. The owner form records a boolean, and the Control Center shows the new choices.
+- **Settings:** fractional permission is refused with a limit execution version, with market orders but fractional shares disallowed, and with slippage under 5 bp. A refusal from the Control Center form now appears as a "Change not recorded" message with its reason, instead of a bare 422 page (found during owner activation on October 22). The owner form records a boolean, and the Control Center shows the new choices.
 
 `InstrumentEligibilityTest` now also covers the readiness flag and an unknown `fractional` value.
 
@@ -77,7 +77,7 @@ The market-data cycle and the signal paper cycle are separate five-minute jobs, 
 ## Activation (owner, runtime)
 
 No migration. After deployment:
-1. **Execution version.** In Control Center → Paper execution settings, save and apply a new execution version: order type "Market orders with a submission price guard", fractional shares allowed, fractional limit orders disallowed, other values unchanged.
+1. **Execution version.** In Control Center → Paper execution settings, save and apply a new execution version: order type "Market orders with a submission price guard", fractional shares allowed, fractional limit orders **Disallowed**, other values unchanged. The applied October 18 version allows fractional limit orders, so the form prefills "Allowed"; saving that is refused.
 2. **Signal settings.** In Signal paper risk and costs, apply new settings: slippage of at least 5 bp, and fractional shares "Fractional on market orders".
 3. **Runtime flags.** Confirm or set:
    - `ROBINHOOD_MCP_EXECUTION_INPUTS_ENABLED=true` (tradability and price book with each observation)

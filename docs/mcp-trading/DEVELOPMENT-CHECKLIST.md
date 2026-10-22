@@ -353,7 +353,7 @@ Fractional forward-paper path, October 22 (source only):
 - **Market exits:** no price floor. A fraction that is no longer fractional-tradable is recorded, not sold.
 - **Limit mode:** unchanged.
 
-Full SQLite **599 passed / 4,101 assertions, 35 skips**; PostgreSQL **633 passed / 4,429 assertions, 1 existing skip** (634 total each). Composer, Pint and diff checks passed; no migration, no frontend asset change. No deployment, runtime setting, ledger write, model call or brokerage action. Expected gap to measure first: the signal cycle runs after a market cycle that took about 49–55 s for 32 symbols, against a 20 s quote-age limit, so early-read symbols may be unavailable at evaluation. [Evidence and activation steps](M5-FRACTIONAL-MARKET-PAPER-EVIDENCE.md). Next: owner activation, controlled forward paper and the completed-session cadence report. M5 partial; M6 unstarted.
+Full SQLite **599 passed / 4,108 assertions, 35 skips**; PostgreSQL **633 passed / 4,436 assertions, 1 existing skip** (634 total each). Signal-settings refusals now show their reason on the Control Center form instead of a bare 422 page. Composer, Pint and diff checks passed; no migration, no frontend asset change. No deployment, runtime setting, ledger write, model call or brokerage action. Expected gap to measure first: the signal cycle runs after a market cycle that took about 49–55 s for 32 symbols, against a 20 s quote-age limit, so early-read symbols may be unavailable at evaluation. [Evidence and activation steps](M5-FRACTIONAL-MARKET-PAPER-EVIDENCE.md). Next: owner activation, controlled forward paper and the completed-session cadence report. M5 partial; M6 unstarted.
 
 ## M6 — Controlled execution, separately enabled
 

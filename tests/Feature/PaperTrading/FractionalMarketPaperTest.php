@@ -228,6 +228,13 @@ class FractionalMarketPaperTest extends TestCase
             }
         }
         $this->assertSame(1, SignalExecutionPolicy::count());
+        // From the Control Center form the refusal is shown on the page, not as a bare error.
+        $form = ['account_scope' => AccountScope::key($c), 'base_version' => 1, 'request_id' => (string) Str::uuid(), 'confirm_signal_paper' => '1',
+            'execution_version_id' => ExecutionVersion::latest('id')->first()->id, 'signal_execution' => ['slippage_bps' => '1', 'allow_fractional' => '1'] + SignalExecutionPolicies::DEFAULTS];
+        $this->actingAs(User::findOrFail($c->user_id))->from('/mcp/dashboard/control')->post('/mcp/paper/signal-execution/apply', $form)
+            ->assertRedirect('/mcp/dashboard/control')->assertSessionHasErrors('signal_execution');
+        $this->followRedirects($this->from('/mcp/dashboard/control')->post('/mcp/paper/signal-execution/apply', ['request_id' => (string) Str::uuid()] + $form))
+            ->assertOk()->assertSee('Change not recorded')->assertSee('basis points of slippage');
         // The owner form sends '1'; the applied version records a boolean.
         E::apply($c, ['order_type' => 'market', 'allow_fractional' => true]);
         $this->actingAs(User::findOrFail($c->user_id))->post('/mcp/paper/signal-execution/apply', ['account_scope' => AccountScope::key($c), 'base_version' => 1,

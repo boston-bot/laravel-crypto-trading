@@ -10,6 +10,7 @@ use App\Services\PaperTrading\PaperOrderHandoff;
 use App\Services\PaperTrading\SignalExecutionPolicies;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class PaperExecutionController extends Controller
 {
@@ -24,7 +25,13 @@ class PaperExecutionController extends Controller
             false, '0' => false,
             default => $settings['allow_fractional'],
         };
-        $policies->apply($this->connection($request), $request->user()->id, (int) $data['base_version'], $data['request_id'], $settings, (int) $data['execution_version_id']);
+        try {
+            $policies->apply($this->connection($request), $request->user()->id, (int) $data['base_version'], $data['request_id'], $settings, (int) $data['execution_version_id']);
+        } catch (HttpException $refused) {
+            // Show the policy's reason on the form instead of a bare error page.
+            throw_unless($refused->getStatusCode() === 422, $refused);
+            throw ValidationException::withMessages(['signal_execution' => $refused->getMessage()]);
+        }
 
         return $this->back('Signal paper risk and cost settings applied. Balances and service enablement are unchanged.');
     }
