@@ -31,6 +31,13 @@ class TradeDecisionApprovalController extends Controller
             ], 422);
         }
 
+        // Approval queues legacy submission, which now runs in paper mode only (CRYPTO-AUTOMATION-PLAN.md C0).
+        if ((string) config('broker.mode', 'paper') !== 'paper') {
+            return response()->json([
+                'message' => 'Legacy live order submission is retired; approval is available in paper mode only.',
+            ], 422);
+        }
+
         $actor = (string) $request->user()->getAuthIdentifier();
         $tradeDecision->update([
             'status' => TradingDecisionStatus::APPROVED->value,

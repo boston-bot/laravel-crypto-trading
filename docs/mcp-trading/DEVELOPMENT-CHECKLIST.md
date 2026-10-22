@@ -223,7 +223,7 @@ Migration-helper deployment, October 17: the operator authorized the remaining s
 - [x] Add 5-minute entry and exit signals with reproducible records (rule and parameter versions, watchlist revision, profile, input fingerprint, cutoff), no look-ahead and duplicate-safe evaluation. (October 19 source implementation, independently default-off; immutable atomic cycles, exact-decimal entries, signal-linked paper-position exits and authenticated history. No runtime deployment/activation or order handoff. [Evidence and limits](M5-STRATEGY-SIGNALS-EVIDENCE.md).)
 - [ ] Add risk-based sizing (1% risk per trade starting value, ~20% maximum position, 8 open positions) with verified fractional and fractional limit-order support. Add realistic costs: verified commission, sell-only SEC/FINRA fees at versioned rates, bid/ask fills and slippage. Switch the paper handoff to signals instead of `target_weight_pct`/`allow_ai_sizing`, and run paper fills on the 5-minute cycle. (October 19 source: risk/position/cash/sleeve caps, explicit owner signal settings, reviewed dated fees, separate signal handoff and combined five-minute paper processing implemented; next-day exits run without an opening baseline. Fractional LIMIT support and new-day held-portfolio opening valuations remain unverified/unavailable, so this combined acceptance item stays open. No runtime deployment or activation. [Evidence](M5-SIGNAL-PAPER-HANDOFF-EVIDENCE.md).)
 - [ ] Add the versioned strategy parameter editor and eligibility/profile/playbook views to the Control Center. The owner applies replacement settings versions.
-- [ ] Retire the superseded AI decision code and the legacy crypto live order path in planned, tested changes.
+- [ ] Retire the superseded AI decision code and the legacy crypto live order path in planned, tested changes. (October 22: legacy crypto live order path retired under [crypto C0](#crypto-track--coinbase-and-robinhood-crypto); AI decision code remains.)
 - [ ] Adapt existing paper components to equities and the planned order lifecycle.
 - [x] Add a disabled offline synthetic simulator on M5's virtual ledger: decimal cash/share reservations, bounded market/limit DAY orders, later-observation partial fills, shared liquidity, idempotent recovery and accounting reports. No model-to-order handoff or runtime deployment. ([Evidence](M5-OFFLINE-SIMULATION-EVIDENCE.md).)
 - [x] Implement a separately gated real-data paper fill path using scoped immutable broker inputs, applied execution settings, later observations, shared book liquidity, simulated provenance and rollback/restart safety. Controlled coverage fixtures and PostgreSQL concurrent workers pass; actual source eligibility/action coverage and regular-session validation remain blocked. ([Evidence](M5-REAL-DATA-PAPER-FILLS-EVIDENCE.md).)
@@ -373,6 +373,29 @@ Mandatory fault tests: two workers claim the same intent; crash immediately befo
 
 Evidence: pending. Live authorization: none supplied by this documentation.
 
+## Crypto track — Coinbase and Robinhood Crypto
+
+Adopted October 22, 2026. Scope, owner decisions and effort: [crypto automation plan](CRYPTO-AUTOMATION-PLAN.md). This track authorizes no live crypto order; C7 needs separate owner authorization.
+
+### C0 — Adoption and containment
+
+- [x] Owner adopted the plan; AGENTS.md, the index, the implementation plan and the operator guide were amended.
+- [x] Per-venue write flags `COINBASE_WRITES_ENABLED` and `ROBINHOOD_CRYPTO_WRITES_ENABLED`, default false, gate each client's `placeOrder` independently of `BROKERAGE_WRITES_ENABLED`; both test configurations pin them false.
+- [x] Legacy live submission removed from `TradeExecutionService`; any non-paper `BROKER_MODE` is refused before a broker call. The approval API and `trading:approve-decision` refuse outside paper mode without changing status or queueing. Read-only legacy reconciliation is unchanged.
+- [ ] Record each key's actual permissions. `broker:key-permissions` (Coinbase key-permission read; Robinhood reported as unverified, since that API documents no equivalent) is implemented and tested with fakes. **Blocked:** on October 22 no Coinbase or Robinhood Crypto credentials existed in `.env` or `broker_credentials`, so no live read was made.
+
+Evidence, October 22 (source only): `LegacyLiveSubmissionRetiredTest` covers live and other non-paper modes for both venues with every write flag on (no client call, no `broker_orders` row, no HTTP), approval refusal through the API and the command, the agentic flag not arming venue clients, and a source scan showing no `app/` code calls `placeOrder`. `BrokerKeyPermissionsCommandTest` covers view-only, trade-capable, incomplete-response and Robinhood cases. Composer validation and Pint passed. On the isolated C0 tree: SQLite **616 passed / 36 PostgreSQL-only skips**; PostgreSQL **652 tests / 4,532 assertions, 1 existing environment skip**. No migration, frontend asset, runtime configuration, deployment or broker call.
+
+### C1–C7
+
+- [ ] C1 Read-only crypto market data into `mcp_trading` with provenance (needs owner venue decision).
+- [ ] C2 Crypto eligibility, profiles, rules and costs in the shared engine (needs symbol-universe and sleeve decisions).
+- [ ] C3 Candle replay and 24/7 forward paper; judge after at least 30 closed trades.
+- [ ] C4 Shared execution boundary (equals M6).
+- [ ] C5 Coinbase and Robinhood Crypto limit-order adapters with M6 fault tests.
+- [ ] C6 24/7 operations: wake/supervision, reconcile-first restart, overnight alerts, backup drill.
+- [ ] C7 Owner-authorized small live pilot.
+
 ## Operator commands: available and planned
 
 Unimplemented rows remain proposed interfaces. `--account` on M2 commands is the local connection ID, not a brokerage account number.
@@ -400,6 +423,7 @@ Unimplemented rows remain proposed interfaces. `--account` on M2 commands is the
 | `php artisan mcp:notify --once\|--test\|--digest` | M4 available | Escalate and dispatch alert intents to ntfy; delivered only with provider acknowledgement |
 | `php artisan mcp:backup [--init-key]` | M4 available | Encrypted, verified schema backup with retention and an off-Mac copy; `--init-key` creates the key once |
 | `php artisan mcp:restore-drill [--file=<path>]` | M4 available | Restore into a scratch database, verify counts, decryption and disabled policy, then drop it |
+| `php artisan broker:key-permissions [--broker=coinbase\|robinhood] [<credential-id>]` | Crypto C0 available | Read-only report of a legacy crypto API key's own view/trade/transfer permissions; no order, account or key change |
 | `php artisan mcp:execution-disable --reason=<text>` | Planned | Persist global mutation disable; no automatic liquidation |
 | `php artisan mcp:readiness` | Planned | Release gates, latest evidence, and blockers; `/ready` remains the minimal M0 database check |
 

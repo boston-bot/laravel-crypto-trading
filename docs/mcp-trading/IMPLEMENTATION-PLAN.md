@@ -26,6 +26,8 @@ The personal investing account remains advisory. The agentic account is the only
 
 Non-goals for the first release: high-frequency trading, predictive ML training, options, leverage, crypto expansion, autonomous risk-limit increases, public internet hosting, and a rewrite of the application in Python.
 
+October 22: crypto expansion is now a separate adopted track with its own milestones and gates; see the [crypto automation plan](CRYPTO-AUTOMATION-PLAN.md). It does not change Release 1–3 scope for the agentic account.
+
 ## 2. Existing implementation: reuse and repair
 
 | Existing component | Treatment |
@@ -37,7 +39,7 @@ Non-goals for the first release: high-frequency trading, predictive ML training,
 | Paper trading components | Audit before reuse; simulate realistic lifecycle rather than treating submission as a fill |
 | Research/backtest models | Reuse records; current `BacktestOrchestrator` records supplied metrics and is not evidence of a working replay engine |
 | API and approval controller | Add authentication and policies; replace caller-supplied approver identity with authenticated identity |
-| Live execution service | Replace unsafe agentic reuse: current code calls broker before creating its local order record and lacks atomic submission ownership |
+| Live execution service | Replace unsafe agentic reuse: current code calls broker before creating its local order record and lacks atomic submission ownership. October 22: its live branch is removed; it now submits in paper mode only (crypto C0) |
 | Database configuration | Support `mcp_trading` search path, verify it before migration, add PostgreSQL integration tests |
 
 The roadmap does not assert the existing tests pass. Establish that baseline in M0. Do not install a framework upgrade as part of the pivot.

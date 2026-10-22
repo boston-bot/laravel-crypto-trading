@@ -12,6 +12,8 @@ The collection-readiness reporting increment is now deployed in `9c597d1`: live 
 
 October 22 runtime check: the running release is now **`0ee4894`**, with forward-paper signals/handoff/fills and batch collection enabled; brokerage writes and AI decisions remain disabled. A new **source-only** increment evaluates each collected batch immediately and adds gated background reference/profile warm-up for midday watchlist additions. Today's post-close cadence baseline is scheduled for 15:05 Central and remains pending. [Batch and warm-up evidence](M5-INTRADAY-COLLECTION-EVIDENCE.md), [operator procedure](MAC-SETUP-AND-OPERATIONS.md#batch-evaluation-and-midday-additions-october-22-source-increment).
 
+Crypto track, October 22 (source only): the owner adopted the [crypto automation plan](CRYPTO-AUTOMATION-PLAN.md). C0 retires the legacy crypto live order path, adds default-off per-venue write flags and a read-only Coinbase key-permission check. The live key check is blocked because no crypto credentials are configured. No migration or runtime change. [Checklist evidence](DEVELOPMENT-CHECKLIST.md#crypto-track--coinbase-and-robinhood-crypto).
+
 Prepared October 16, 2026. This documentation describes planned work, not an application already deployed or approved to trade.
 
 Current milestone update, October 18: M4 is accepted under the owner's explicit waiver of its seven-session proving requirement (0/7 completed; no passed endurance test claimed). M5 paper development is active. Live brokerage mutations remain unauthorized.
@@ -68,6 +70,7 @@ Direction change, October 18: the owner adopted a strategy/execution split. Ever
 | [M5 verified execution-data controls](M5-VERIFIED-DATA-EVIDENCE.md) | Owner and developer | Pinned share-unit semantics, fresh quote/book matching, per-symbol readiness and remaining provider requirements |
 | [M5 broker execution-input evidence](M5-MARKET-INPUT-EVIDENCE.md) | Owner and developer | Gated account-tradability and price-book reads, real contract checks and precise remaining fill blockers |
 | [M5 deployment evidence](M5-DEPLOYMENT-EVIDENCE.md) | Owner and operator | Deployed partial release/migrations, runtime safety and restore checks, prepared settings and blocked authenticated application |
+| [Crypto automation plan](CRYPTO-AUTOMATION-PLAN.md) | Owner and developer | Adopted October 22; C0 done in source. Coinbase/Robinhood Crypto automation through the shared engine and M6 boundary: legacy-path containment, milestones C0–C7, effort and owner decisions |
 | [Repository AGENTS.md](../../AGENTS.md) | Codex | Concise standing development instructions |
 
 Open the repository root in VS Code so the repository instructions are available to Codex. Begin with milestone M0 in the checklist. Do not ask Codex to implement the entire roadmap in one unreviewed change.
@@ -83,6 +86,7 @@ Open the repository root in VS Code so the repository instructions are available
 - Budget: $50–$150/month for AI and data. Planning target $100, maximum planned envelope $150; provider subscriptions and in-flight usage must be included. Since October 18 no paid LLM API runs in the app, so the envelope covers data only.
 - Strategy research runs in ChatGPT under the owner's subscription, which maintains a dedicated Robinhood watchlist every 30 minutes. This app reads it every 5 minutes, sets each symbol's strategy from its own data, and makes the final deterministic decision (October 18).
 - No options, borrowing, shorts, leveraged/inverse products, or crypto in the initial agentic strategy.
+- Crypto (Coinbase, Robinhood Crypto) is a separate track adopted October 22, built on the same engine and execution boundary. Its legacy live order path is retired and venue writes are gated by their own default-off flags. [Crypto plan](CRYPTO-AUTOMATION-PLAN.md).
 
 ## What we inspected
 

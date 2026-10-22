@@ -84,16 +84,21 @@ class SafeFoundationTest extends TestCase
         $this->assertCount(0, Schedule::events());
         $this->assertFalse(config('mcp.monitoring_enabled'));
         $this->assertFalse(config('mcp.brokerage_writes_enabled'));
+        $this->assertFalse(config('broker.coinbase.writes_enabled'));
+        $this->assertFalse(config('broker.robinhood.writes_enabled'));
     }
 
     public function test_broker_clients_refuse_writes_before_http_or_signing(): void
     {
-        foreach ([CoinbaseClient::class, RobinhoodClient::class] as $client) {
+        foreach ([
+            CoinbaseClient::class => 'Coinbase writes are disabled.',
+            RobinhoodClient::class => 'Robinhood Crypto writes are disabled.',
+        ] as $client => $message) {
             try {
                 app($client)->placeOrder(new BrokerCredential, []);
                 $this->fail('Client accepted disabled write');
             } catch (\RuntimeException $exception) {
-                $this->assertSame('Brokerage writes are disabled.', $exception->getMessage());
+                $this->assertSame($message, $exception->getMessage());
             }
         }
         Http::assertNothingSent();

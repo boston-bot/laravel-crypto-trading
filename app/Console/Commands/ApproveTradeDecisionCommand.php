@@ -11,7 +11,7 @@ class ApproveTradeDecisionCommand extends Command
 {
     protected $signature = 'trading:approve-decision {decisionId : Trade decision ID} {--actor=system : Approver identity}';
 
-    protected $description = 'Approve a pending trade decision and queue order submission.';
+    protected $description = 'Approve a pending legacy trade decision and queue paper submission (paper mode only).';
 
     public function handle(): int
     {
@@ -24,6 +24,12 @@ class ApproveTradeDecisionCommand extends Command
 
         if ($decision->status !== TradingDecisionStatus::AWAITING_HUMAN_APPROVAL) {
             $this->error('Trade decision is not awaiting human approval.');
+
+            return self::FAILURE;
+        }
+
+        if ((string) config('broker.mode', 'paper') !== 'paper') {
+            $this->error('Legacy live order submission is retired; approval is available in paper mode only.');
 
             return self::FAILURE;
         }
@@ -41,4 +47,3 @@ class ApproveTradeDecisionCommand extends Command
         return self::SUCCESS;
     }
 }
-

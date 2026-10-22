@@ -9,6 +9,8 @@ return [
         'api_key' => env('COINBASE_API_KEY'),
         'api_private_key' => env('COINBASE_API_PRIVATE_KEY'),
         'quote_currency' => env('COINBASE_QUOTE_CURRENCY', 'USD'),
+        // Venue-specific; independent of the agentic-account BROKERAGE_WRITES_ENABLED flag.
+        'writes_enabled' => filter_var(env('COINBASE_WRITES_ENABLED', false), FILTER_VALIDATE_BOOL),
         'timeout_seconds' => (int) env('COINBASE_TIMEOUT_SECONDS', 10),
         'retry' => [
             'times' => (int) env('COINBASE_RETRY_TIMES', 3),
@@ -22,6 +24,7 @@ return [
             'place_order' => env('COINBASE_ENDPOINT_PLACE_ORDER', '/api/v3/brokerage/orders'),
             'quotes' => env('COINBASE_ENDPOINT_QUOTES', '/api/v3/brokerage/best_bid_ask'),
             'candles' => env('COINBASE_ENDPOINT_CANDLES', '/api/v3/brokerage/products/{product_id}/candles'),
+            'key_permissions' => env('COINBASE_ENDPOINT_KEY_PERMISSIONS', '/api/v3/brokerage/key_permissions'),
         ],
     ],
 
@@ -32,6 +35,8 @@ return [
         'public_api_key' => env('ROBINHOOD_PUBLIC_API_KEY', env('ROBINHOOD_API_KEY')),
         'private_api_key' => env('ROBINHOOD_PRIVATE_API_KEY', env('ROBINHOOD_SIGNING_PRIVATE_KEY', env('ROBINHOOD_API_KEY'))),
         'x_api_key' => env('ROBINHOOD_X_API_KEY', env('ROBINHOOD_API_SECRET')),
+        // Venue-specific; independent of the agentic-account BROKERAGE_WRITES_ENABLED flag.
+        'writes_enabled' => filter_var(env('ROBINHOOD_CRYPTO_WRITES_ENABLED', false), FILTER_VALIDATE_BOOL),
         'timeout_seconds' => (int) env('ROBINHOOD_TIMEOUT_SECONDS', 10),
         'retry' => [
             'times' => (int) env('ROBINHOOD_RETRY_TIMES', 3),

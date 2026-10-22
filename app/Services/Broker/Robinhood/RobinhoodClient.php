@@ -157,8 +157,8 @@ class RobinhoodClient
      */
     public function placeOrder(BrokerCredential $credential, array $payload): array
     {
-        if (! config('mcp.brokerage_writes_enabled')) {
-            throw new \RuntimeException('Brokerage writes are disabled.');
+        if (! config('broker.robinhood.writes_enabled')) {
+            throw new \RuntimeException('Robinhood Crypto writes are disabled.');
         }
 
         return $this->request(

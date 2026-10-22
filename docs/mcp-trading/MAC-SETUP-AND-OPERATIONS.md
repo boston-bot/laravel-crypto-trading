@@ -359,7 +359,11 @@ Keep these settings false through local foundation setup:
 LEGACY_CRYPTO_SCHEDULES_ENABLED=false
 MCP_MONITORING_ENABLED=false
 BROKERAGE_WRITES_ENABLED=false
+COINBASE_WRITES_ENABLED=false
+ROBINHOOD_CRYPTO_WRITES_ENABLED=false
 ```
+
+The two crypto venue flags (added October 22, crypto C0) gate the legacy Coinbase and Robinhood Crypto clients independently of `BROKERAGE_WRITES_ENABLED`. Keep them false: no application code currently submits crypto orders, and legacy live submission is retired. To check a configured Coinbase key's own permissions without changing anything, run `php artisan broker:key-permissions`; a view-only key is recommended until an authorized crypto pilot.
 
 Set `MCP_OPERATOR_EMAILS` to explicitly trusted local operators. This grants access to **all legacy accounts**. Only operator emails also listed in `TRADING_APPROVER_EMAILS` may approve/reject decisions. After migrations, provision each local login with `php artisan mcp:operator-create <email> <name>`; the password prompt is hidden and existing users are not overwritten. Visit `/login`. Financial endpoints keep `/api/...` URLs but require session cookies and CSRF tokens for mutations. No registration endpoint exists.
 

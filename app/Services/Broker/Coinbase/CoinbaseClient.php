@@ -40,6 +40,22 @@ class CoinbaseClient
     }
 
     /**
+     * Read-only report of what the API key itself may do (view, trade, transfer).
+     *
+     * @return array<string, mixed>
+     */
+    public function getKeyPermissions(BrokerCredential $credential): array
+    {
+        $body = $this->request(
+            $credential,
+            'GET',
+            (string) config('broker.coinbase.endpoints.key_permissions'),
+        )['body'] ?? [];
+
+        return is_array($body) ? $body : [];
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function getAssets(BrokerCredential $credential): array
@@ -161,8 +177,8 @@ class CoinbaseClient
      */
     public function placeOrder(BrokerCredential $credential, array $payload): array
     {
-        if (! config('mcp.brokerage_writes_enabled')) {
-            throw new \RuntimeException('Brokerage writes are disabled.');
+        if (! config('broker.coinbase.writes_enabled')) {
+            throw new \RuntimeException('Coinbase writes are disabled.');
         }
 
         return $this->request(

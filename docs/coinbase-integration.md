@@ -1,5 +1,7 @@
 # Coinbase Integration Notes
 
+> October 22, 2026: historical document. Live order submission through `TradeExecutionService` is retired, and `placeOrder` is gated by `COINBASE_WRITES_ENABLED` (default false). Current direction: [crypto automation plan](mcp-trading/CRYPTO-AUTOMATION-PLAN.md).
+
 ## Platform Scope
 
 The codebase now treats Coinbase Advanced Trade as a first-class broker for:

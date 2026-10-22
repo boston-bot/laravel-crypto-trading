@@ -15,6 +15,14 @@ On October 18, 2026 the owner adopted the strategy/execution split below. It rep
 
 Read [the documentation index](docs/mcp-trading/README.md), then [the implementation plan](docs/mcp-trading/IMPLEMENTATION-PLAN.md) and the current milestone in [the development checklist](docs/mcp-trading/DEVELOPMENT-CHECKLIST.md). Consult [the operator guide](docs/mcp-trading/MAC-SETUP-AND-OPERATIONS.md) when working on deployment. Read only relevant sections after initial orientation.
 
+## Crypto track (adopted October 22, 2026)
+
+The owner adopted [the crypto automation plan](docs/mcp-trading/CRYPTO-AUTOMATION-PLAN.md) as a separate track for Coinbase and Robinhood Crypto, with its own milestones (C0–C7) and release gates. It does not change the agentic-account direction above and authorizes no live crypto order.
+
+- Crypto uses the same engine, invariants and future M6 execution boundary as equities. Do not build a second strategy engine. Legacy crypto thresholds need an explicit owner policy mapping.
+- The legacy live order path is retired: `TradeExecutionService` submits in paper mode only, and legacy approval refuses outside paper mode. Crypto venue writes are gated by `COINBASE_WRITES_ENABLED` and `ROBINHOOD_CRYPTO_WRITES_ENABLED` (default false), independent of `BROKERAGE_WRITES_ENABLED`. Only a future execution boundary may call a venue client's `placeOrder`, added deliberately with its own tests.
+- Open owner decisions (venues, symbol universe, sleeve limits, hosting) are listed in the plan. Until they are made, stop at the safe behavior it records.
+
 ## Working agreement
 
 - Inspect current code and Git changes before editing. Preserve unrelated work.
