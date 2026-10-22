@@ -18,8 +18,12 @@ class PaperExecutionController extends Controller
         $data = $request->validate(['base_version' => ['required', 'integer', 'min:0'], 'request_id' => ['required', 'uuid'],
             'execution_version_id' => ['required', 'integer', 'min:1'], 'confirm_signal_paper' => ['accepted'], 'signal_execution' => ['required', 'array']]);
         $settings = $data['signal_execution'];
-        abort_if(array_key_exists('allow_fractional', $settings) && $settings['allow_fractional'] !== false, 422, 'Fractional limit-order support is unverified.');
-        $settings['allow_fractional'] = false; // Current reviewed broker contract cannot establish fractional LIMIT permission.
+        // The form sends '1' or '0'; JSON clients send booleans. Anything else is refused by the policy service.
+        $settings['allow_fractional'] = match ($settings['allow_fractional'] ?? false) {
+            true, '1' => true,
+            false, '0' => false,
+            default => $settings['allow_fractional'],
+        };
         $policies->apply($this->connection($request), $request->user()->id, (int) $data['base_version'], $data['request_id'], $settings, (int) $data['execution_version_id']);
 
         return $this->back('Signal paper risk and cost settings applied. Balances and service enablement are unchanged.');

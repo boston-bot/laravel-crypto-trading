@@ -199,4 +199,16 @@ class StrategyReplayTest extends TestCase
         $this->expectExceptionObject(new \InvalidArgumentException('Unsupported replay order mode.'));
         app(StrategyReplay::class)->run(['BRKO' => $this->bars($rows)], $this->benchmark(count($rows)), $values, $settings + ['order_mode' => 'fractional_limit'], '500');
     }
+
+    public function test_a_research_risk_profile_changes_only_sizing_and_capacity(): void
+    {
+        $rows = $this->base();
+        $rows[] = [10080, 10150, 10050, 10140];
+        $settings = ['risk_per_trade_pct' => '3', 'max_position_pct' => '50', 'max_open_positions' => 3, 'slippage_bps' => '1', 'cost_schedule' => TradingCosts::reviewed()];
+        $replay = app(StrategyReplay::class)->run(['BRKO' => $this->bars($rows)], $this->benchmark(count($rows)), SignalParameters::current()['values'], $settings, '10000');
+        // 3% of $10,000 over about $2.01 of planned risk per share allows 149 shares; the 50% cap allows 49 at 101.1202.
+        $this->assertSame(['49', '101.1202'], [$replay['open_positions']['BRKO']['quantity'], $replay['open_positions']['BRKO']['entry_price']]);
+        $this->assertSame(['max_open_positions' => 3, 'max_position_pct' => '50', 'risk_per_trade_pct' => '3'], $replay['risk']);
+        $this->assertSame('19', $this->replay($rows)['open_positions']['BRKO']['quantity']);
+    }
 }

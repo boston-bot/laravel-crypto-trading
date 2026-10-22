@@ -337,7 +337,23 @@ Research variants and fractional decision, October 21: the owner chose fractiona
 - **Fractional sizing:** made $500 tradable (zero-size skips 472→69; trades 24→110 in discovery), tracking the $10,000 whole-share account.
 - **Rule variants:** none qualifies. Removing the 50-day exit failed the holdout, the 100-session filter failed $10,000 discovery, and removing the market filter passed both periods but was rejected by a 2021–2023 bear check.
 
-Parameters unchanged. Full SQLite **588 passed / 4,034 assertions, 35 skips**; PostgreSQL **622 passed / 4,362 assertions, 1 existing skip** (623 total each). Composer, changed-file Pint and diff checks passed; no migration or frontend build needed. No deployment, runtime setting, ledger write, model call or brokerage action. [Evidence](M5-RESEARCH-VARIANTS-EVIDENCE.md), [report](M5-DAILY-003-2026-10-21.json). Next: the forward-paper fractional path (market-order fills with the submission-time price guard, a per-symbol fractional-eligibility source, an owner-applied settings version). M5 partial; M6 unstarted.
+Parameters unchanged.
+
+The owner clarified the account's purpose: a $500, high-return satellite; long-term core investing is separate, and this app does not read that watchlist. Added bounded research risk profiles (`risk_per_trade_pct` up to 3, `max_position_pct` up to 50, `max_open_positions`). Pre-registered DAILY-004 at $500 with fractional orders:
+- **Both profiles qualify:** moderate (2%/35%/5) and aggressive (3%/50%/3) beat current in all three periods, 2021–2026.
+- **Moderate is the better balance:** +2.06% / +33.48% / +8.25% against current −4.50% / +16.82% / +3.28%.
+- **Buy-and-hold:** none matches SPY or QQQ in the rising periods.
+
+Applying a larger profile needs an owner decision and a change to the settings code bounds. Full SQLite **589 passed / 4,044 assertions, 35 skips**; PostgreSQL **623 passed / 4,372 assertions, 1 existing skip** (624 total each). Composer, changed-file Pint and diff checks passed; no migration or frontend build needed. No deployment, runtime setting, ledger write, model call or brokerage action. [Evidence](M5-RESEARCH-VARIANTS-EVIDENCE.md), [DAILY-003](M5-DAILY-003-2026-10-21.json) and [DAILY-004](M5-DAILY-004-2026-10-21.json) reports. Next: the forward-paper fractional path (market-order fills with the submission-time price guard, a per-symbol fractional-eligibility source, an owner-applied settings version). M5 partial; M6 unstarted.
+
+Fractional forward-paper path, October 22 (source only):
+- **Order type from owner versions:** an owner-applied execution version may now select regular-hours market orders. Signal settings may allow fractional shares only on top of that, with at least 5 bp slippage; risk limits are unchanged.
+- **Fractional eligibility:** taken per symbol from Robinhood's `fractional_tradability` in the same fresh tradability read.
+- **Market buys:** sized to 6 decimals with the $1 minimum and bounded at the profile's maximum entry plus slippage. They are rechecked at submission (eligibility spread, entry rule, explicit price guard, session baseline, loss pause, external-order pause, limits) and fill immediately against the guarded quote.
+- **Market exits:** no price floor. A fraction that is no longer fractional-tradable is recorded, not sold.
+- **Limit mode:** unchanged.
+
+Full SQLite **599 passed / 4,101 assertions, 35 skips**; PostgreSQL **633 passed / 4,429 assertions, 1 existing skip** (634 total each). Composer, Pint and diff checks passed; no migration, no frontend asset change. No deployment, runtime setting, ledger write, model call or brokerage action. Expected gap to measure first: the signal cycle runs after a market cycle that took about 49–55 s for 32 symbols, against a 20 s quote-age limit, so early-read symbols may be unavailable at evaluation. [Evidence and activation steps](M5-FRACTIONAL-MARKET-PAPER-EVIDENCE.md). Next: owner activation, controlled forward paper and the completed-session cadence report. M5 partial; M6 unstarted.
 
 ## M6 — Controlled execution, separately enabled
 

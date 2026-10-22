@@ -214,6 +214,7 @@ final class StrategyReplay
             'benchmarks' => $this->benchmarks($bars, $benchmark, $curve[0][0] ?? null, $curve[array_key_last($curve)][0] ?? null),
             'trades' => $trades, 'equity_curve' => $curve,
             'execution' => ['order_mode' => $mode, 'quantity_scale' => $scale, 'slippage_bps' => $settings['slippage_bps']],
+            'risk' => ['max_open_positions' => $settings['max_open_positions'], 'max_position_pct' => $settings['max_position_pct'], 'risk_per_trade_pct' => $settings['risk_per_trade_pct']],
             'limitations' => ['daily_bars_approximate_five_minute_triggers_and_stops', 'earnings_blackout_not_reconstructed', 'opening_delay_not_modeled',
                 'current_watchlist_applied_to_past_selection_bias', 'no_intraday_quotes_or_book_liquidity',
                 ...($scale === 0 ? ['whole_share_limit_orders_per_reviewed_broker_contract']

@@ -168,7 +168,7 @@ class StrategyReplaysTest extends TestCase
         $this->assertSame(['fractional_market', 6, '5'], array_values($fractional['result']['execution']));
         $this->assertSame(['exit_on_fast_sma_close' => false, 'market_filter_sma_sessions' => 100], $loose['parameters']); // sorted, typed
         $this->assertSame('whole_share_limit', $run->payload['result']['execution']['order_mode']);
-        $this->assertSame(array_map(fn ($v) => array_intersect_key($v, array_flip(['id', 'parameters', 'execution'])), $run->payload['variants']), $run->payload['input']['variants']);
+        $this->assertSame(array_map(fn ($v) => array_intersect_key($v, array_flip(['id', 'parameters', 'execution', 'risk'])), $run->payload['variants']), $run->payload['input']['variants']);
         $this->assertNotSame($fractional['parameters_hash'], $loose['parameters_hash']);
         foreach ([
             'baseline id' => [['id' => 'baseline']],
@@ -180,6 +180,10 @@ class StrategyReplaysTest extends TestCase
             'out of bounds' => [['id' => 'short', 'parameters' => ['market_filter_sma_sessions' => 20]]],
             'duplicates' => [['id' => 'a', 'parameters' => ['cooldown_sessions' => 3]], ['id' => 'b', 'parameters' => ['cooldown_sessions' => 3]]],
             'too many' => array_map(fn ($i) => ['id' => 'v'.$i, 'parameters' => ['cooldown_sessions' => $i]], range(1, 7)),
+            'risk above research bound' => [['id' => 'huge', 'risk' => ['risk_per_trade_pct' => '5']]],
+            'position above research bound' => [['id' => 'all_in', 'risk' => ['max_position_pct' => '100']]],
+            'untyped position count' => [['id' => 'count', 'risk' => ['max_open_positions' => '3']]],
+            'unknown risk key' => [['id' => 'loss', 'risk' => ['daily_loss_pause_pct' => '50']]],
         ] as $case => $variants) {
             try {
                 app(StrategyReplays::class)->run($this->connection, $this->connection->user_id, (string) Str::uuid(), 3, '500', ['ALFA'], $variants);
@@ -190,11 +194,15 @@ class StrategyReplaysTest extends TestCase
         }
         $this->assertSame(1, StrategyReplayRun::count());
         $this->artisan('mcp:strategy-replay', ['--account' => $this->connection->id, '--symbol' => ['ALFA'],
-            '--variant' => ['fractional:order_mode=fractional_market,market_slippage_bps=10', 'loose:exit_on_fast_sma_close=false,market_filter_sma_sessions=100']])
+            '--variant' => ['fractional:order_mode=fractional_market,market_slippage_bps=10', 'loose:exit_on_fast_sma_close=false,market_filter_sma_sessions=100',
+                'aggressive:order_mode=fractional_market,risk_per_trade_pct=3,max_position_pct=50,max_open_positions=3']])
             ->expectsOutputToContain('"id":"loose"')->assertSuccessful();
         $variants = StrategyReplayRun::latest('id')->first()->payload['variants'];
         $this->assertSame([['order_mode' => 'fractional_market', 'market_slippage_bps' => '10'], ['exit_on_fast_sma_close' => false, 'market_filter_sma_sessions' => 100]],
             [$variants[0]['execution'], $variants[1]['parameters']]);
+        $this->assertSame(['max_open_positions' => 3, 'max_position_pct' => '50', 'risk_per_trade_pct' => '3'], $variants[2]['risk']);
+        $this->assertSame($variants[2]['risk'], $variants[2]['result']['risk']);
+        $this->assertSame('20', StrategyReplayRun::latest('id')->first()->payload['result']['risk']['max_position_pct']); // the baseline keeps owner settings
         $this->artisan('mcp:strategy-replay', ['--account' => $this->connection->id, '--symbol' => ['ALFA'], '--variant' => ['no colon']])->assertFailed();
         $this->assertSame(2, StrategyReplayRun::count());
     }

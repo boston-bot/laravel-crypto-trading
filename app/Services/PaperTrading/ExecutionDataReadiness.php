@@ -83,7 +83,13 @@ final class ExecutionDataReadiness
         $checks = ['market_observation' => ($payload['complete'] ?? false) ? 'base_reads_complete' : 'base_reads_incomplete',
             'quote_and_book' => $match['status'] === 'matched' ? 'verified_prices_times_and_share_units' : $match['reason'],
             'broker_tradability' => $this->tradabilityStatus($tradability, $cutoff, $maxAge)] + $checks;
-        // The same stored-input gate used by real-data fills; fractional quantities remain unsupported.
+        // Robinhood's per-symbol flag; fractional quantities also need market orders and the owner's signal permission.
+        $checks['fractional_market'] = match ($tradability['fields']['fractional_tradability'] ?? null) {
+            'tradable' => 'robinhood_reports_fractional_tradable',
+            null => 'fractional_eligibility_unreported',
+            default => 'robinhood_reports_whole_shares_only',
+        };
+        // The same stored-input gate used by real-data fills.
         $gate = app(PaperMarketInputs::class)->executionReason($input, $cutoff, $maxAge);
         $checks['execution_gate'] = $gate ?? 'passed_whole_shares_only';
         $ready = $gate === null && $checks['quote_and_book'] === 'verified_prices_times_and_share_units' && $checks['broker_tradability'] === 'observed_tradeable_source_time_unknown';

@@ -15,7 +15,6 @@ use App\Models\PaperTrading\StrategySignal;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\MarketCalendar;
 use App\Support\Mcp\Decimal;
-use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
 
 /** Rechecks the signal-specific settings at submission and every later fill. Caller holds connection/portfolio locks. */
@@ -39,8 +38,11 @@ final class SignalOrderAdmission
                 return 'signal_assumptions_changed';
             }
         }
-        if (($order->assumptions['fee_per_share'] ?? null) !== '0' || ($order->assumptions['fee_bps'] ?? null) !== '0' ||
-            $order->assumptions['allow_fractional'] !== false || $order->assumptions['allow_fractional_limit'] !== false) {
+        // Order type and fractional permission come from the applied execution and signal versions; fractional limits never exist.
+        $execution = ExecutionPolicies::current($portfolio);
+        $fractional = $order->type === 'market' && $policy->payload['allow_fractional'] === true;
+        if (($order->assumptions['fee_per_share'] ?? null) !== '0' || ($order->assumptions['fee_bps'] ?? null) !== '0' || $order->type !== ($execution?->payload['order_type'] ?? null) ||
+            $order->assumptions['allow_fractional'] !== $fractional || $order->assumptions['allow_fractional_limit'] !== false) {
             return 'signal_assumptions_changed';
         }
         if (! TradingCosts::valid($policy->payload['cost_schedule'], CarbonImmutable::now())) {
@@ -56,19 +58,15 @@ final class SignalOrderAdmission
             return 'signal_expired';
         }
         if (! $existing && isset($marks[$order->symbol])) {
-            $buy = $order->side === 'BUY';
-            $reference = Decimal::from($marks[$order->symbol]->data[$buy ? 'ask' : 'bid']);
-            $offset = Decimal::from($policy->payload['limit_offset_bps'])->dividedBy(Decimal::from('10000'), 12);
-            $expected = $reference->multipliedBy(Decimal::from('1')->plus($offset->multipliedBy(Decimal::from($buy ? '1' : '-1'))))
-                ->rounded(8, $buy ? RoundingMode::CEILING : RoundingMode::FLOOR);
-            if ($buy) {
+            $maxEntry = null;
+            if ($order->side === 'BUY') {
                 $profile = app(SymbolProfiles::class)->latest($connection, $order->symbol, CarbonImmutable::now());
                 if (! $profile || ! isset($profile->payload['levels']['max_entry'])) {
                     return 'entry_profile_changed_or_blocked';
                 }
-                $max = Decimal::from($profile->payload['levels']['max_entry']);
-                $expected = $expected->compareTo($max) > 0 ? $max : $expected;
+                $maxEntry = $profile->payload['levels']['max_entry'];
             }
+            $expected = SignalOrderPrice::bound($order->type, $order->side, $marks[$order->symbol]->data, $maxEntry, $policy->payload);
             if ($expected->compareTo(Decimal::from($order->price_bound)) !== 0) {
                 return 'signal_limit_offset_mismatch';
             }
@@ -154,7 +152,13 @@ final class SignalOrderAdmission
             return 'entry_trigger_no_longer_valid';
         }
         $max = Decimal::from($profile->payload['levels']['max_entry']);
-        if (Decimal::from($order->price_bound)->compareTo($max) > 0) {
+        if ($order->type === 'market') {
+            // Submission-time price guard. The spread limit was already enforced above by the applied eligibility rules,
+            // and the entry rule rechecked the maximum chase on this fresh ask; the stored maximum entry is rounded down.
+            if (Decimal::from($quote['ask'])->compareTo($max) > 0) {
+                return 'market_price_guard_failed';
+            }
+        } elseif (Decimal::from($order->price_bound)->compareTo($max) > 0) {
             return 'entry_limit_exceeds_maximum_chase';
         }
         $equity = Decimal::from($portfolio->cash)->plus(app(PaperIncome::class)->receivable($portfolio));
@@ -170,7 +174,7 @@ final class SignalOrderAdmission
         $cash = $capacity['cash'];
         $bound = Decimal::from($order->price_bound);
         $stop = $bound->minus(Decimal::from($signal->payload['result']['facts']['entry_atr'])->multipliedBy(Decimal::from($signal->payload['parameters']['values']['initial_stop_atr'])));
-        $size = app(RiskSizer::class)->calculate($equity, $cash, $bound, $stop, $policy->payload, $capacity['sleeve_notional']);
+        $size = app(RiskSizer::class)->calculate($equity, $cash, $bound, $stop, $policy->payload, $capacity['sleeve_notional'], SignalOrderPrice::scale($order->type, $policy->payload, $quote));
         $remaining = Decimal::from($order->quantity)->minus(Decimal::from($order->filled_quantity));
         if (Decimal::from($order->quantity)->multipliedBy(Decimal::from($order->price_bound))->multipliedBy(Decimal::from('100'))
             ->compareTo($equity->multipliedBy(Decimal::from($policy->payload['max_position_pct']))) > 0) {

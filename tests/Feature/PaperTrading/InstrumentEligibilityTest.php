@@ -165,7 +165,9 @@ class InstrumentEligibilityTest extends TestCase
         $checks = $report['symbols']['DEMO']['checks'];
         $this->assertSame([1, 1, 'data_ready_whole_shares'], [$report['ready_count'], $report['symbol_count'], $report['status']]);
         $this->assertSame('verified_not_leveraged_or_inverse_registered_fund_ncen', $checks['leverage_and_inverse']);
-        $this->assertSame(['eligible', 'passed_whole_shares_only', 'no_reviewed_fractional_limit_contract'], [$checks['instrument_eligibility'], $checks['execution_gate'], $checks['fractional_limit']]);
+        $this->assertSame(['eligible', 'passed_whole_shares_only', 'no_reviewed_fractional_limit_contract', 'fractional_eligibility_unreported'],
+            [$checks['instrument_eligibility'], $checks['execution_gate'], $checks['fractional_limit'], $checks['fractional_market']]);
+        $this->assertNull(BrokerSimulationQuote::fromStored($this->connection, $input->id, CarbonImmutable::now(), 60)->data['fractional']);
         $this->artisan('mcp:paper-readiness', ['--account' => $this->connection->id])->assertSuccessful();
         $quote = BrokerSimulationQuote::fromStored($this->connection, $input->id, CarbonImmutable::now(), 60);
         $this->assertSame([true, 'etf', false, false], [$quote->data['eligible'], $quote->data['asset_type'], $quote->data['leveraged'], $quote->data['inverse']]);

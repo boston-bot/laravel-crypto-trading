@@ -70,13 +70,19 @@ final readonly class BrokerSimulationQuote
         $quote = new SimulationQuote(array_intersect_key($q, array_flip(['symbol', 'bid', 'ask', 'eligible', 'asset_type', 'leveraged', 'inverse', 'corporate_actions_clear'])) +
             ['key' => 'broker-book:'.$liquidityKey, 'provenance' => 'synthetic', 'source_at' => $source->utc()->toIso8601String(),
                 'retrieved_at' => $input->retrieved_at->toIso8601String(), 'bid_size' => $match['bid_size'], 'ask_size' => $match['ask_size'],
-                // Current reviewed broker contract does not establish fractional LIMIT permission. Whole shares only.
-                'fractional' => null]);
+                // Robinhood's per-symbol flag from the same fresh tradability read; any value other than 'tradable' means whole shares.
+                'fractional' => self::fractional($trade['fields']['fractional_tradability'] ?? null)]);
 
         return new self($quote, $input->id, $connection->id, AccountScope::key($connection), $connection->auth_generation,
             ['liquidity_key' => $liquidityKey, 'recorded_at' => $input->recorded_at->toISOString(), 'market_input_source_at' => $input->source_at?->toISOString(),
                 'corporate_action_policy' => $actionPolicy, 'classification_policy' => $classPolicy, 'quote_retrieved_at' => $q['retrieved_at'], 'tradability_retrieved_at' => $time, 'quote_times' => [$q['bid_as_of'], $q['ask_as_of']],
                 'book_source_at' => $book['source_as_of'], 'book_retrieved_at' => $book['retrieved_at'], 'semantic_fingerprint' => $book['semantic_fingerprint']]);
+    }
+
+    /** True only for Robinhood's 'tradable'; another reported value is false; a missing value stays unknown. */
+    private static function fractional(mixed $value): ?bool
+    {
+        return is_string($value) ? $value === 'tradable' : null;
     }
 
     public function assertCurrent(McpConnection $connection, int $maxAge): void

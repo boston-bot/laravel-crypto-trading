@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\Validator;
 /**
  * Stores retrospective daily replays of the live rules as immutable, labeled evidence. Market-data reads only:
  * no broker call, order, paper-ledger change or policy change. Replay results are never forward paper results.
- * Optional research variants (bounded rule overrides or an order mode) replay the same downloaded history beside
- * the live-parameter baseline; they never change live parameters or owner settings.
+ * Optional research variants (bounded rule overrides, an order mode or a risk profile) replay the same downloaded
+ * history beside the live-parameter baseline; they never change live parameters or owner settings.
  */
 final class StrategyReplays
 {
@@ -26,7 +26,7 @@ final class StrategyReplays
 
     public const MAX_VARIANTS = 6;
 
-    /** @param list<array{id: string, parameters?: array, execution?: array}> $variants */
+    /** @param list<array{id: string, parameters?: array, execution?: array, risk?: array}> $variants */
     public function run(McpConnection $connection, int $actor, string $requestId, int $years = 3, string $equity = '500', array $symbols = [], array $variants = []): StrategyReplayRun
     {
         Validator::make(['request' => $requestId, 'years' => $years, 'equity' => $equity, 'symbols' => $symbols], ['request' => ['required', 'uuid'],
@@ -87,7 +87,7 @@ final class StrategyReplays
         foreach ($complete ? $variants : [] as $variant) {
             $values = array_replace($parameters['values'], $variant['parameters']);
             $variantResults[] = $variant + ['parameters_hash' => hash('sha256', json_encode($values, JSON_THROW_ON_ERROR)),
-                'result' => $this->engine->run($bars, $reads[$benchmark]['bars'], $values, $variant['execution'] + $settings, $equity, $start->toDateString(), $end->toDateString())];
+                'result' => $this->engine->run($bars, $reads[$benchmark]['bars'], $values, $variant['risk'] + $variant['execution'] + $settings, $equity, $start->toDateString(), $end->toDateString())];
         }
 
         return DB::transaction(function () use ($connection, $actor, $requestId, $scope, $parameters, $complete, $reason, $result, $fingerprint, $input, $symbols, $excluded, $applied, $variantResults) {
@@ -113,24 +113,26 @@ final class StrategyReplays
     {
         abort_unless(array_is_list($variants) && count($variants) <= self::MAX_VARIANTS, 422, 'Use at most '.self::MAX_VARIANTS.' variants.');
         // Compared by effective values, so restating a live default cannot duplicate the baseline.
-        $effective = function (array $parameters, array $execution): string {
+        $effective = function (array $parameters, array $execution, array $risk): string {
             $values = array_replace(SignalParameters::current()['values'] + array_fill_keys(ResearchVariants::FLAGS, true), $parameters);
             ksort($values);
 
-            return hash('sha256', json_encode([$values, $execution], JSON_THROW_ON_ERROR));
+            return hash('sha256', json_encode([$values, $execution, $risk], JSON_THROW_ON_ERROR));
         };
-        $seen = [$effective([], ['order_mode' => 'whole_share_limit']) => 'baseline'];
+        $seen = [$effective([], ['order_mode' => 'whole_share_limit'], []) => 'baseline'];
         $normalized = [];
         foreach ($variants as $variant) {
-            abort_unless(is_array($variant) && ! array_diff(array_keys($variant), ['id', 'parameters', 'execution']) && is_string($variant['id'] ?? null) &&
-                preg_match('/^[a-z][a-z0-9_]{0,31}$/D', $variant['id']) && $variant['id'] !== 'baseline' && is_array($variant['parameters'] ?? []) && is_array($variant['execution'] ?? []), 422, 'Malformed replay variant.');
+            abort_unless(is_array($variant) && ! array_diff(array_keys($variant), ['id', 'parameters', 'execution', 'risk']) && is_string($variant['id'] ?? null) &&
+                preg_match('/^[a-z][a-z0-9_]{0,31}$/D', $variant['id']) && $variant['id'] !== 'baseline' && is_array($variant['parameters'] ?? []) &&
+                is_array($variant['execution'] ?? []) && is_array($variant['risk'] ?? []), 422, 'Malformed replay variant.');
             $parameters = ResearchVariants::parameters($variant['parameters'] ?? []);
             ksort($parameters);
             $execution = ResearchVariants::execution($variant['execution'] ?? []);
-            $key = $effective($parameters, $execution);
+            $risk = ResearchVariants::risk($variant['risk'] ?? []);
+            $key = $effective($parameters, $execution, $risk);
             abort_if(isset($seen[$key]) || in_array($variant['id'], $seen, true), 422, 'Duplicate replay variant.');
             $seen[$key] = $variant['id'];
-            $normalized[] = ['id' => $variant['id'], 'parameters' => $parameters, 'execution' => $execution];
+            $normalized[] = ['id' => $variant['id'], 'parameters' => $parameters, 'execution' => $execution, 'risk' => $risk];
         }
 
         return $normalized;

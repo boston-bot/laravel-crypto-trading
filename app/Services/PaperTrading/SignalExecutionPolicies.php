@@ -6,6 +6,7 @@ use App\Models\McpConnection;
 use App\Models\PaperTrading\Portfolio;
 use App\Models\PaperTrading\SignalExecutionPolicy;
 use App\Models\User;
+use App\Services\Broker\Agentic\RobinhoodOrderContract;
 use App\Services\Monitoring\AccountScope;
 use App\Support\Mcp\Decimal;
 use Illuminate\Support\Facades\DB;
@@ -32,12 +33,12 @@ final class SignalExecutionPolicies
             'max_position_pct' => ['required', 'string', 'regex:/^\d+(?:\.\d{1,8})?$/D'], 'max_open_positions' => ['required', 'integer', 'min:1', 'max:8'],
             'slippage_bps' => ['required', 'string', 'regex:/^\d+(?:\.\d{1,8})?$/D'], 'limit_offset_bps' => ['required', 'string', 'regex:/^\d+(?:\.\d{1,8})?$/D'],
             'quote_max_age_seconds' => ['required', 'integer', 'min:1', 'max:60'], 'allow_fractional' => ['present']])->validate();
+        abort_unless(is_bool($payload['allow_fractional']), 422, 'Fractional shares must be true or false.');
         foreach (['risk_per_trade_pct' => '1', 'max_position_pct' => '20', 'slippage_bps' => '100', 'limit_offset_bps' => '100'] as $key => $max) {
             $v = Decimal::from($payload[$key]);
             abort_unless($v->compareTo(Decimal::from('0')) >= 0 && $v->compareTo(Decimal::from($max)) <= 0 &&
                 (! in_array($key, ['risk_per_trade_pct', 'max_position_pct']) || $v->compareTo(Decimal::from('0')) > 0), 422, 'Signal setting outside code bounds.');
         }
-        abort_unless($payload['allow_fractional'] === false, 422, 'Fractional limit-order support remains unverified; select whole shares.');
         Validator::make(['request' => $request, 'base' => $base], ['request' => ['required', 'uuid'], 'base' => ['integer', 'min:0']])->validate();
         $payload['max_open_positions'] = (int) $payload['max_open_positions'];
         $payload['quote_max_age_seconds'] = (int) $payload['quote_max_age_seconds'];
@@ -52,6 +53,11 @@ final class SignalExecutionPolicies
             $execution = ExecutionPolicies::current($portfolio);
             abort_unless($expectedExecutionId === null || $execution?->id === $expectedExecutionId, 409, 'Execution settings changed since review.');
             abort_unless($execution && RuleEligibilityPolicies::current($portfolio), 409, 'Apply allocation, execution and eligibility rules first.');
+            // Robinhood allows fractional quantities only on regular-hours market orders, so the applied execution version decides.
+            abort_if($payload['allow_fractional'] && ! (($execution->payload['order_type'] ?? null) === 'market' && ($execution->payload['allow_fractional'] ?? null) === true &&
+                RobinhoodOrderContract::allowsFractional('market', 'regular_hours')), 422, 'Fractional shares need an applied execution version with market orders and fractional shares allowed.');
+            abort_if(($execution->payload['order_type'] ?? null) === 'market' && Decimal::from($payload['slippage_bps'])->compareTo(Decimal::from(SignalOrderPrice::MARKET_SLIPPAGE_FLOOR_BPS)) < 0,
+                422, 'Market orders need at least '.SignalOrderPrice::MARKET_SLIPPAGE_FLOOR_BPS.' basis points of slippage.');
             if ($prior = SignalExecutionPolicy::where('paper_portfolio_id', $portfolio->id)->where('request_id', $request)->first()) {
                 abort_unless($prior->payload === $payload && $prior->execution_version_id === $execution->id, 409, 'Request already used for different settings.');
 

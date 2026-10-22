@@ -100,23 +100,21 @@ final class SignalPaperHandoff
                         $equity = $equity->plus(Decimal::from($position->quantity)->multipliedBy(Decimal::from($marks[$position->symbol]->data['bid'])));
                     }
                 }
-                $reference = Decimal::from($marks[$signal->symbol]->data[$buy ? 'ask' : 'bid']);
-                $offset = Decimal::from($settings['limit_offset_bps'])->dividedBy(Decimal::from('10000'), 12);
-                $bound = $reference->multipliedBy(Decimal::from('1')->plus($offset->multipliedBy(Decimal::from($buy ? '1' : '-1'))))
-                    ->rounded(8, $buy ? RoundingMode::CEILING : RoundingMode::FLOOR);
+                // The applied execution version picks limit or guarded market orders; fractional sizing needs market orders,
+                // the owner's signal permission and Robinhood's current per-symbol eligibility.
+                $type = $execution->payload['order_type'];
+                $scale = SignalOrderPrice::scale($type, $settings, $marks[$signal->symbol]->data);
+                $evidence['order'] = ['type' => $type, 'quantity_scale' => $scale, 'fractional_tradable' => $marks[$signal->symbol]->data['fractional']];
                 if ($buy) {
                     $profile = app(SymbolProfiles::class)->latest($current, $signal->symbol, CarbonImmutable::now());
                     if (! $profile || $profile->id !== $signal->profile_id) {
                         throw new DecisionFailure('entry_profile_changed_or_blocked', 'unavailable');
                     }
-                    $max = Decimal::from($profile->payload['levels']['max_entry']);
-                    if ($bound->compareTo($max) > 0) {
-                        $bound = $max;
-                    }
+                    $bound = SignalOrderPrice::bound($type, 'BUY', $marks[$signal->symbol]->data, $profile->payload['levels']['max_entry'], $settings);
                     $capacity = app(SignalPortfolioCapacity::class)->for($portfolio, $equity, $execution->payload['decision_sleeve'], $marks);
                     $cash = $capacity['cash'];
                     $stop = $bound->minus(Decimal::from($signal->payload['result']['facts']['entry_atr'])->multipliedBy(Decimal::from($signal->payload['parameters']['values']['initial_stop_atr'])));
-                    $size = app(RiskSizer::class)->calculate($equity, $cash, $bound, $stop, $settings, $capacity['sleeve_notional']);
+                    $size = app(RiskSizer::class)->calculate($equity, $cash, $bound, $stop, $settings, $capacity['sleeve_notional'], $scale);
                     $quantity = Decimal::from($size['quantity']);
                     $evidence['sizing'] = $size + ['equity' => (string) $equity, 'cash_available' => (string) $cash, 'price_bound' => (string) $bound];
                     $baseline = $this->baseline($portfolio, $session);
@@ -124,22 +122,27 @@ final class SignalPaperHandoff
                         throw new DecisionFailure('verified_session_baseline_unavailable', 'unavailable');
                     }
                 } else {
+                    $bound = SignalOrderPrice::bound($type, 'SELL', $marks[$signal->symbol]->data, null, $settings);
                     $held = $positions->where('symbol', $signal->symbol)->where('sleeve', $execution->payload['decision_sleeve'])->first();
-                    $quantity = Decimal::from($held?->quantity ?? '0')->minus(Decimal::from($held?->reserved_quantity ?? '0'))->rounded(0, RoundingMode::DOWN);
+                    $available = Decimal::from($held?->quantity ?? '0')->minus(Decimal::from($held?->reserved_quantity ?? '0'));
+                    // A fraction can be sold only while Robinhood still reports the symbol fractional-tradable; the whole shares still go.
+                    $quantity = $available->rounded($scale, RoundingMode::DOWN);
+                    $evidence['order']['unsold_fraction'] = (string) $available->minus($quantity);
                     $baseline = null;
                 }
                 if ($quantity->compareTo(Decimal::from('0')) <= 0) {
-                    return $record('no_order', 'whole_share_size_zero');
+                    return $record('no_order', $buy ? ($size['reason'] ?? 'whole_share_size_zero')
+                        : ($available->compareTo(Decimal::from('0')) > 0 ? 'fractional_exit_unavailable' : 'whole_share_size_zero'));
                 }
                 $evidence['session_baseline'] = $buy ? $baseline : ['kind' => 'not_required_for_exit'];
                 $assumptions = new SimulationAssumptions(['fee_per_share' => '0', 'fee_bps' => '0', 'slippage_bps' => $settings['slippage_bps'],
-                    'quote_max_age_seconds' => $settings['quote_max_age_seconds'], 'allow_fractional' => false, 'allow_fractional_limit' => false,
+                    'quote_max_age_seconds' => $settings['quote_max_age_seconds'], 'allow_fractional' => $type === 'market' && $settings['allow_fractional'] === true, 'allow_fractional_limit' => false,
                     'cost_schedule' => $settings['cost_schedule'], 'session_date' => $session['date'], 'session_open_equity' => $buy ? $baseline['equity'] : null] +
                     ($buy ? [] : ['baseline_kind' => 'not_required_for_exit']));
                 $order = app(OfflineSimulator::class)->submit($current, $actor, $execution->policy_application_id, $portfolio->ledger_version,
                     ['request_id' => Uuid::uuid5(Uuid::NAMESPACE_URL, 'signal-paper-order:'.$signal->id)->toString(),
                         'symbol' => $signal->symbol, 'side' => $signal->side, 'sleeve' => $execution->payload['decision_sleeve'],
-                        'type' => 'limit', 'quantity' => (string) $quantity, 'price_bound' => (string) $bound,
+                        'type' => $type, 'quantity' => (string) $quantity, 'price_bound' => (string) $bound,
                         'expires_at' => CarbonImmutable::parse($session['closes_at'])->toIso8601String(),
                         'strategy_signal_id' => $signal->id, 'strategy_execution_policy_id' => $policy->id,
                         'rationale' => 'Deterministic '.$signal->rule_version.': '.$signal->reason], $assumptions, $marks, $execution->id);

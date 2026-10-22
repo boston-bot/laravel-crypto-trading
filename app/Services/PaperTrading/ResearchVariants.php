@@ -8,8 +8,10 @@ use App\Services\Broker\Agentic\RobinhoodOrderContract;
 use App\Support\Mcp\Decimal;
 
 /**
- * Reviewed bounds for research-only rule and order-mode variants. Variants only change retrospective replays and
- * experiments; they never change live parameters, owner settings, risk limits or the forward ledger.
+ * Reviewed bounds for research-only rule, order-mode and risk-profile variants. Variants only change retrospective
+ * replays and experiments; they never change live parameters, owner settings, applied risk limits or the forward ledger.
+ * Risk-profile bounds are wider than the owner settings allow today so a more concentrated profile can be evaluated
+ * before the owner decides whether to apply one.
  */
 final class ResearchVariants
 {
@@ -26,6 +28,9 @@ final class ResearchVariants
     public const MARKET_SLIPPAGE_BPS = '5';
 
     public const MARKET_SLIPPAGE_BOUNDS = ['1', '50'];
+
+    /** Daily replay only: risk per trade and maximum position in percent, and the open-position cap. */
+    public const RISK = ['risk_per_trade_pct' => ['0.25', '3'], 'max_position_pct' => ['5', '50'], 'max_open_positions' => [1, 8]];
 
     /** @return list<string> */
     public static function parameterKeys(): array
@@ -73,10 +78,28 @@ final class ResearchVariants
         return ['order_mode' => $mode, 'market_slippage_bps' => $slippage];
     }
 
+    /** Research risk profile for the daily replay; keys left out keep the applied owner settings. */
+    public static function risk(array $risk): array
+    {
+        abort_if(array_diff(array_keys($risk), array_keys(self::RISK)), 422, 'Unsupported research risk setting.');
+        foreach ($risk as $key => $value) {
+            [$min, $max] = self::RISK[$key];
+            if ($key === 'max_open_positions') {
+                abort_unless(is_int($value) && $value >= $min && $value <= $max, 422, 'Research position count outside bounds.');
+            } else {
+                abort_unless(is_string($value) && preg_match('/^\d{1,2}(?:\.\d{1,2})?$/D', $value) &&
+                    Decimal::from($value)->compareTo(Decimal::from($min)) >= 0 && Decimal::from($value)->compareTo(Decimal::from($max)) <= 0, 422, 'Research risk setting outside bounds.');
+            }
+        }
+        ksort($risk);
+
+        return $risk;
+    }
+
     /** Converts operator text from a form or command into the typed value, leaving validation to parameters(). */
     public static function typed(string $key, string $value): mixed
     {
-        if (isset(self::SESSIONS[$key])) {
+        if (isset(self::SESSIONS[$key]) || $key === 'max_open_positions') {
             return preg_match('/^[1-9]\d{0,2}$/D', $value) ? (int) $value : $value;
         }
         if (in_array($key, self::FLAGS, true)) {

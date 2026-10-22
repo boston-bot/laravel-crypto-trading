@@ -97,12 +97,46 @@ Each replay took 12–24 s. Full figures, including breakout/pullback splits and
 - **Pullbacks vs breakouts:** pullbacks produced almost all trades and all of the profit. Breakouts were rare (1–6 per period) and lost money in most runs.
 - **Parameters:** no parameter change is recommended. These are retrospective, selection-biased daily approximations and not forward results.
 
+## Risk profiles (DAILY-004)
+
+**The owner's goal for this account:** $500 in the Robinhood agentic account, meant to find opportunities and earn a high return. Long-term core investing happens separately, from a different watchlist this app does not read. "Core candidates" and "Growth opportunities" both continue to nominate.
+
+**What the research replay can now vary:** a risk profile, through `risk_per_trade_pct` (0.25–3), `max_position_pct` (5–50) and `max_open_positions` (1–8). These research bounds are wider than the owner settings allow today (1%, 20%), so a more concentrated profile can be evaluated before any decision. Each result records the profile it used, and the baseline keeps the applied owner settings.
+
+**Protocol:**
+- Recorded in the [register](STRATEGY-EXPERIMENTS.md) before data was fetched.
+- Same 23 symbols, default rules, $500, fractional market orders at 5 bp.
+- One snapshot, sha256 `8ea008c7…` (4 read-only requests).
+
+| Period | | Current (1%, 20%, 8) | Moderate (2%, 35%, 5) | Aggressive (3%, 50%, 3) | SPY / QQQ hold |
+|---|---|---|---|---|---|
+| 2021-10 to 2023-10 | Return | −4.50% | **+2.06%** | −0.72% | −5.48% / −4.25% |
+| | Max drawdown | 16.52% | 21.67% | 19.64% | |
+| | Worst day / worst trade | −2.9% / −$8.52 | −5.7% / −$16.65 | −5.5% / −$24.68 | |
+| 2023-10 to 2025-10 | Return | +16.82% | +33.48% | **+48.95%** | +55.97% / +68.01% |
+| | Max drawdown | 11.28% | 12.39% | 15.25% | |
+| | Worst day / worst trade | −4.3% / −$9.08 | −5.5% / −$13.41 | −5.9% / −$20.35 | |
+| 2025-10 to 2026-10 | Return | +3.28% | **+8.25%** | +6.80% | +14.86% / +18.32% |
+| | Max drawdown | 8.12% | 12.74% | 16.34% | |
+| | Worst day / worst trade | −2.7% / −$6.60 | −3.9% / −$13.18 | −4.2% / −$16.50 | |
+| All periods | Closed trades | 88 / 110 / 64 | 60 / 72 / 45 | 42 / 52 / 37 | |
+
+Reading:
+- **Decision rule:** both larger profiles qualify. Each beats current on return in every period and on return ÷ drawdown in all three.
+- **Moderate vs aggressive:** moderate is the better balance. It wins two of three periods with lower drawdown in two, while aggressive's advantage comes from one strong period.
+- **Why it helps:** concentration puts more of the account to work. Larger positions fill the cash, which is also why more small setups are skipped as unaffordable.
+- **Buy-and-hold:** neither larger profile comes close to SPY or QQQ in the two rising periods. All three profiles lose less than both in 2021–2023.
+- **Gap risk:** the worst trades were overnight gaps through the stop (BKNG −12.6%, NVDA −13.8%). A bigger position makes the same gap cost more.
+- **Not modeled here:** the daily loss pause.
+- **Applying moderate:** it would need an owner decision and a code change, because applied settings are bounded at 1% risk and a 20% maximum position, matching the October 18 owner decision.
+- **Caveat:** these are selection-biased daily approximations with fewer trades, not forward results.
+
 ## Verification
 
 | Check | Result |
 |---|---|
-| Full SQLite | **588 passed / 4,034 assertions, 35 PostgreSQL-only skips** (623 total) |
-| Full PostgreSQL | **622 passed / 4,362 assertions, 1 existing PHP-FPM environment skip** (623 total) |
+| Full SQLite | **589 passed / 4,044 assertions, 35 PostgreSQL-only skips** (624 total) |
+| Full PostgreSQL | **623 passed / 4,372 assertions, 1 existing PHP-FPM environment skip** (624 total) |
 | `composer validate`, changed-file Pint, `git diff --check` | Passed |
 
 No frontend asset changed (Blade only), and no migration was added.
@@ -114,6 +148,7 @@ New or extended tests:
 - **Intraday replay:** the market-filter switch; blocking stays the default.
 - **Replay service:** variants share one history read and are stored typed; baseline restatements, owner risk keys, fractional limits, untyped switches, out-of-bounds values, duplicates and too many variants are refused; the command parses `--variant`.
 - **Experiments:** typed switches through the definition and the form; invalid choices are refused.
+- **Risk profiles:** a research profile changes only sizing and capacity and is recorded with each result; out-of-bound, untyped and unknown risk keys (including the daily loss pause) are refused; the command parses risk keys.
 
 ## Migration and deployment impact
 

@@ -35,7 +35,7 @@ final class ExecutionPolicies
             throw ValidationException::withMessages(['execution_json' => 'Only paper execution settings may be supplied.']);
         }
         $decimal = ['nullable', 'string', 'regex:/^\d{1,8}(?:\.\d{1,8})?$/D'];
-        $rules = ['decision_sleeve' => ['nullable', 'in:active,long_term'], 'order_type' => ['nullable', 'in:limit'],
+        $rules = ['decision_sleeve' => ['nullable', 'in:active,long_term'], 'order_type' => ['nullable', 'in:limit,market'],
             'session' => ['nullable', 'in:regular'], 'time_in_force' => ['nullable', 'in:day'],
             'initial_holdings' => ['nullable', 'in:cash_only'], 'allowed_symbols' => ['nullable', 'array', 'list', 'min:1', 'max:100'],
             'allowed_symbols.*' => ['required', 'string', 'distinct:strict', 'regex:/^[A-Z][A-Z0-9.-]{0,15}$/D'],

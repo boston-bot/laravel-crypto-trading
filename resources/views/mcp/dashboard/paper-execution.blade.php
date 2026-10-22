@@ -3,14 +3,14 @@
     $executionPayload = array_replace(array_fill_keys(App\Services\PaperTrading\ExecutionPolicies::FIELDS, null), $executionLatest?->payload ?? []);
     $executionChoices = [
         'decision_sleeve' => ['Paper sleeve for AI proposals', ['active' => 'Active', 'long_term' => 'Long term']],
-        'order_type' => ['Paper order type', ['limit' => 'Limit orders']],
+        'order_type' => ['Paper order type', ['limit' => 'Limit orders', 'market' => 'Market orders with a submission price guard (regular hours)']],
         'session' => ['Fill session', ['regular' => 'Regular market hours']],
         'time_in_force' => ['Order duration', ['day' => 'Expire by the session close']],
         'initial_holdings' => ['Starting portfolio', ['cash_only' => 'Virtual cash only; no imported holdings']],
         'allow_entries' => ['Allow paper entries', ['1' => 'Allowed', '0' => 'Disallowed']],
         'allow_exits' => ['Allow paper exits', ['1' => 'Allowed', '0' => 'Disallowed']],
         'allow_ai_sizing' => ['Retired AI target-weight permission (unused by signals)', ['1' => 'Allowed within application limits', '0' => 'Disallowed']],
-        'allow_fractional' => ['Fractional shares', ['1' => 'Allowed with verified instrument support', '0' => 'Whole shares only']],
+        'allow_fractional' => ['Fractional shares', ['1' => 'Allowed on market orders where Robinhood reports the symbol fractional-tradable', '0' => 'Whole shares only']],
         'allow_fractional_limit' => ['Fractional limit orders', ['1' => 'Allowed with verified instrument support', '0' => 'Disallowed']],
     ];
     $executionNumbers = ['fee_per_share' => 'Simulated fee per share (USD)', 'fee_bps' => 'Additional fee on fill value (basis points; 100 = 1%)', 'slippage_bps' => 'Adverse slippage (basis points)',
@@ -18,7 +18,7 @@
 @endphp
 <x-panel title="Signal paper risk and costs" subtitle="Explicit settings for deterministic signals. Applying them does not enable orders or alter balances." icon="shield">
     <p>Signal handoff {{ config('paper.signal_handoff_enabled') ? 'enabled' : 'disabled' }} · applied version {{ $execution['signal_policy']?->version ?? 'none for current settings' }}.</p>
-    <p class="note">Whole shares only while fractional limit-order support is unverified. Existing cash floors and sleeve allocations still apply. Costs use the reviewed listed-equity schedule and expire on December 31, 2026; a new review is then required.</p>
+    <p class="note">Robinhood allows fractional quantities only on regular-hours market orders. With an applied market-order execution version, signal entries are market orders sent only while the fresh ask is at or below the profile's maximum entry and within the spread limit; they fill immediately at the ask plus slippage (at least {{ App\Services\PaperTrading\SignalOrderPrice::MARKET_SLIPPAGE_FLOOR_BPS }} basis points) and exits have no price floor. Fractional quantities also need Robinhood's current per-symbol eligibility, up to 6 decimals and a $1 minimum. Existing cash floors and sleeve allocations still apply. Costs use the reviewed listed-equity schedule and expire on December 31, 2026; a new review is then required.</p>
     @if($paper && $execution['applied'] && ($control['eligibility']['policy'] ?? null))
     <form method="post" action="{{ route('mcp.paper.signal-execution.apply') }}" class="stack">@csrf
         <input type="hidden" name="account_scope" value="{{ App\Services\Monitoring\AccountScope::key($connection) }}">
@@ -28,6 +28,13 @@
         @foreach(['risk_per_trade_pct' => 'Planned risk per trade (%) · maximum 1', 'max_position_pct' => 'Maximum position (%) · maximum 20', 'max_open_positions' => 'Maximum open positions · 1–8', 'slippage_bps' => 'Adverse slippage (basis points)', 'limit_offset_bps' => 'Limit offset (basis points)', 'quote_max_age_seconds' => 'Maximum quote age (seconds) · 1–60'] as $field => $label)
             <label class="field">{{ $label }}<input name="signal_execution[{{ $field }}]" required inputmode="decimal" value="{{ old('signal_execution.'.$field, $execution['signal_policy']?->payload[$field] ?? App\Services\PaperTrading\SignalExecutionPolicies::DEFAULTS[$field]) }}"></label>
         @endforeach
+        @php
+            $fractionalChosen = (string) old('signal_execution.allow_fractional', ($execution['signal_policy']?->payload['allow_fractional'] ?? false) ? '1' : '0');
+        @endphp
+        <label class="field">Fractional shares<select name="signal_execution[allow_fractional]">
+            <option value="0" @selected($fractionalChosen === '0')>Whole shares only</option>
+            <option value="1" @selected($fractionalChosen === '1')>Fractional on market orders (needs a market-order execution version)</option>
+        </select></label>
         <details><summary>Reviewed cost schedule and sources</summary><pre class="code-block">{{ json_encode(App\Services\PaperTrading\TradingCosts::reviewed(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre></details>
         <label class="check"><input type="checkbox" name="confirm_signal_paper" value="1" required><span>I reviewed these signal paper risk limits and the dated cost schedule. Apply them for the current allocation and execution versions without enabling any service.</span></label>
         <button class="btn btn-secondary" type="submit">Apply signal paper risk and costs</button>

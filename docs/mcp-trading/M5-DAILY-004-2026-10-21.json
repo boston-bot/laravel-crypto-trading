@@ -1,0 +1,424 @@
+{
+  "label": "retrospective_daily_replay_not_forward_results",
+  "experiment": "DAILY-004",
+  "as_of": "2026-10-21",
+  "replay_version": "daily_replay_v3",
+  "universe": {
+    "selection": "DAILY-002 revision 314 nominating symbols",
+    "symbols": [
+      "ADBE",
+      "AMAT",
+      "AVGO",
+      "AVUV",
+      "BKNG",
+      "BRK.B",
+      "HD",
+      "INTU",
+      "JNJ",
+      "JPM",
+      "LIN",
+      "MA",
+      "MSFT",
+      "NVDA",
+      "PEP",
+      "RSP",
+      "SCHD",
+      "UBER",
+      "VEA",
+      "VTI",
+      "VTV",
+      "VWO",
+      "VXUS"
+    ]
+  },
+  "benchmark": "SPY; QQQ price buy-and-hold for reference",
+  "data": {
+    "provider": "https://data.alpaca.markets/v2/stocks/bars",
+    "feed": "sip",
+    "adjustment": "split",
+    "timeframe": "1Day",
+    "snapshot_sha256": "8ea008c73170a2af81da6e711891191694bd00cbfa832b4a3c9068619137bd0d"
+  },
+  "initial_equity": "500",
+  "order_mode": "fractional_market",
+  "market_slippage_bps": "5",
+  "parameters": "swing_signal_parameters_v1 defaults",
+  "decision_rule": "A profile is a candidate for owner review only if it beats current on return in all three periods and its return/drawdown is not lower than current in at least two.",
+  "source_file_hashes": {
+    "app/Services/PaperTrading/StrategyReplay.php": "75078156c2c03c63da17fb289c18808390dd4aa15d11aedd874134bcb92fda3f",
+    "app/Services/PaperTrading/ResearchVariants.php": "3da3af5fae0c85fa1c67d2440d89f82b81e02c0b72d1b83f2fb7e3ed520ec8f5",
+    "app/Services/PaperTrading/RiskSizer.php": "9f3b6530367e6eb5361eebe71795ce4830529b0561f23d4da0b1daba00520266",
+    "app/Services/PaperTrading/SignalRules.php": "75e62c9c4c909bb6baf94ff5610d49545bcf8213e7fc82eb8278aacd4171a005",
+    "app/Services/PaperTrading/ProfileCalculator.php": "1ea896aea6871bb0bac7fd564cb99a3e7258286d50ec50db98451b848902f7a0",
+    "app/Services/PaperTrading/TradingCosts.php": "637ecc6fd44ebfac5460af2649cc3a398fc88327fd612f573a34527a0686c7fc",
+    "app/Services/PaperTrading/SignalParameters.php": "9ccf1b3be22e205afdbe6910904d671ebf7580fedc977ef3b1494b82937e906e",
+    "app/Services/MarketData/Alpaca/DailyBars.php": "ba901c8d8df549c8206827c7ff0397c58c186ecf910ffd2a3ef573be598900f2"
+  },
+  "runs": [
+    {
+      "period": "2021_2023",
+      "profile": "current",
+      "risk": {
+        "max_open_positions": 8,
+        "max_position_pct": "20",
+        "risk_per_trade_pct": "1"
+      },
+      "start": "2021-10-20",
+      "end": "2023-10-19",
+      "sessions": 503,
+      "final": "477.48",
+      "return_pct": "-4.5040",
+      "max_dd_pct": "16.5241",
+      "return_over_dd": "-0.273",
+      "worst_day_pct": "-2.9279",
+      "worst_trade": {
+        "symbol": "BKNG",
+        "entry_date": "2022-02-01",
+        "exit_date": "2022-02-24",
+        "reason": "initial_stop_hit",
+        "net": "-8.52",
+        "return_pct": "-12.5863"
+      },
+      "trades": 88,
+      "open": 4,
+      "hit_pct": "27.27",
+      "pf": "0.8446",
+      "counts": {
+        "setups": 1400,
+        "entries": 92,
+        "skipped_zero_size": 77,
+        "skipped_capacity": 11,
+        "skipped_chase_or_no_cross": 239,
+        "market_filter_off_days": 231
+      },
+      "spy_pct": "-5.48",
+      "qqq_pct": "-4.25"
+    },
+    {
+      "period": "2021_2023",
+      "profile": "moderate",
+      "risk": {
+        "max_open_positions": 5,
+        "max_position_pct": "35",
+        "risk_per_trade_pct": "2"
+      },
+      "start": "2021-10-20",
+      "end": "2023-10-19",
+      "sessions": 503,
+      "final": "510.32",
+      "return_pct": "2.0640",
+      "max_dd_pct": "21.6728",
+      "return_over_dd": "0.095",
+      "worst_day_pct": "-5.7323",
+      "worst_trade": {
+        "symbol": "BKNG",
+        "entry_date": "2022-02-01",
+        "exit_date": "2022-02-24",
+        "reason": "initial_stop_hit",
+        "net": "-16.65",
+        "return_pct": "-12.5863"
+      },
+      "trades": 60,
+      "open": 2,
+      "hit_pct": "25.00",
+      "pf": "1.0424",
+      "counts": {
+        "setups": 1400,
+        "entries": 62,
+        "skipped_zero_size": 119,
+        "skipped_capacity": 121,
+        "skipped_chase_or_no_cross": 282,
+        "market_filter_off_days": 231
+      },
+      "spy_pct": "-5.48",
+      "qqq_pct": "-4.25"
+    },
+    {
+      "period": "2021_2023",
+      "profile": "aggressive",
+      "risk": {
+        "max_open_positions": 3,
+        "max_position_pct": "50",
+        "risk_per_trade_pct": "3"
+      },
+      "start": "2021-10-20",
+      "end": "2023-10-19",
+      "sessions": 503,
+      "final": "496.39",
+      "return_pct": "-0.7220",
+      "max_dd_pct": "19.6413",
+      "return_over_dd": "-0.037",
+      "worst_day_pct": "-5.5254",
+      "worst_trade": {
+        "symbol": "BKNG",
+        "entry_date": "2022-02-01",
+        "exit_date": "2022-02-24",
+        "reason": "initial_stop_hit",
+        "net": "-24.68",
+        "return_pct": "-12.5863"
+      },
+      "trades": 42,
+      "open": 2,
+      "hit_pct": "30.95",
+      "pf": "0.9465",
+      "counts": {
+        "setups": 1400,
+        "entries": 44,
+        "skipped_zero_size": 22,
+        "skipped_capacity": 566,
+        "skipped_chase_or_no_cross": 104,
+        "market_filter_off_days": 231
+      },
+      "spy_pct": "-5.48",
+      "qqq_pct": "-4.25"
+    },
+    {
+      "period": "discovery",
+      "profile": "current",
+      "risk": {
+        "max_open_positions": 8,
+        "max_position_pct": "20",
+        "risk_per_trade_pct": "1"
+      },
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "584.11",
+      "return_pct": "16.8220",
+      "max_dd_pct": "11.2751",
+      "return_over_dd": "1.492",
+      "worst_day_pct": "-4.3261",
+      "worst_trade": {
+        "symbol": "NVDA",
+        "entry_date": "2025-01-22",
+        "exit_date": "2025-01-27",
+        "reason": "initial_stop_hit",
+        "net": "-9.08",
+        "return_pct": "-13.8150"
+      },
+      "trades": 110,
+      "open": 4,
+      "hit_pct": "34.55",
+      "pf": "1.3642",
+      "counts": {
+        "setups": 1322,
+        "entries": 114,
+        "skipped_zero_size": 69,
+        "skipped_capacity": 0,
+        "skipped_chase_or_no_cross": 241,
+        "market_filter_off_days": 50
+      },
+      "spy_pct": "55.97",
+      "qqq_pct": "68.01"
+    },
+    {
+      "period": "discovery",
+      "profile": "moderate",
+      "risk": {
+        "max_open_positions": 5,
+        "max_position_pct": "35",
+        "risk_per_trade_pct": "2"
+      },
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "667.42",
+      "return_pct": "33.4840",
+      "max_dd_pct": "12.3878",
+      "return_over_dd": "2.703",
+      "worst_day_pct": "-5.4614",
+      "worst_trade": {
+        "symbol": "NVDA",
+        "entry_date": "2025-09-11",
+        "exit_date": "2025-09-17",
+        "reason": "intraday_stop_hit",
+        "net": "-13.41",
+        "return_pct": "-6.0166"
+      },
+      "trades": 72,
+      "open": 4,
+      "hit_pct": "38.89",
+      "pf": "1.6280",
+      "counts": {
+        "setups": 1322,
+        "entries": 76,
+        "skipped_zero_size": 212,
+        "skipped_capacity": 19,
+        "skipped_chase_or_no_cross": 369,
+        "market_filter_off_days": 50
+      },
+      "spy_pct": "55.97",
+      "qqq_pct": "68.01"
+    },
+    {
+      "period": "discovery",
+      "profile": "aggressive",
+      "risk": {
+        "max_open_positions": 3,
+        "max_position_pct": "50",
+        "risk_per_trade_pct": "3"
+      },
+      "start": "2023-10-20",
+      "end": "2025-10-17",
+      "sessions": 500,
+      "final": "744.77",
+      "return_pct": "48.9540",
+      "max_dd_pct": "15.2518",
+      "return_over_dd": "3.210",
+      "worst_day_pct": "-5.9174",
+      "worst_trade": {
+        "symbol": "UBER",
+        "entry_date": "2025-05-27",
+        "exit_date": "2025-05-29",
+        "reason": "intraday_stop_hit",
+        "net": "-20.35",
+        "return_pct": "-6.9973"
+      },
+      "trades": 52,
+      "open": 3,
+      "hit_pct": "42.31",
+      "pf": "1.9268",
+      "counts": {
+        "setups": 1322,
+        "entries": 55,
+        "skipped_zero_size": 109,
+        "skipped_capacity": 393,
+        "skipped_chase_or_no_cross": 236,
+        "market_filter_off_days": 50
+      },
+      "spy_pct": "55.97",
+      "qqq_pct": "68.01"
+    },
+    {
+      "period": "holdout",
+      "profile": "current",
+      "risk": {
+        "max_open_positions": 8,
+        "max_position_pct": "20",
+        "risk_per_trade_pct": "1"
+      },
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "516.38",
+      "return_pct": "3.2760",
+      "max_dd_pct": "8.1201",
+      "return_over_dd": "0.403",
+      "worst_day_pct": "-2.7387",
+      "worst_trade": {
+        "symbol": "AMAT",
+        "entry_date": "2025-10-23",
+        "exit_date": "2025-11-14",
+        "reason": "initial_stop_hit",
+        "net": "-6.60",
+        "return_pct": "-10.2450"
+      },
+      "trades": 64,
+      "open": 2,
+      "hit_pct": "35.94",
+      "pf": "1.0263",
+      "counts": {
+        "setups": 792,
+        "entries": 66,
+        "skipped_zero_size": 29,
+        "skipped_capacity": 1,
+        "skipped_chase_or_no_cross": 163,
+        "market_filter_off_days": 13
+      },
+      "spy_pct": "14.86",
+      "qqq_pct": "18.32"
+    },
+    {
+      "period": "holdout",
+      "profile": "moderate",
+      "risk": {
+        "max_open_positions": 5,
+        "max_position_pct": "35",
+        "risk_per_trade_pct": "2"
+      },
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "541.27",
+      "return_pct": "8.2540",
+      "max_dd_pct": "12.7405",
+      "return_over_dd": "0.648",
+      "worst_day_pct": "-3.9014",
+      "worst_trade": {
+        "symbol": "AMAT",
+        "entry_date": "2025-10-23",
+        "exit_date": "2025-11-14",
+        "reason": "initial_stop_hit",
+        "net": "-13.18",
+        "return_pct": "-10.2450"
+      },
+      "trades": 45,
+      "open": 2,
+      "hit_pct": "40.00",
+      "pf": "1.1502",
+      "counts": {
+        "setups": 792,
+        "entries": 47,
+        "skipped_zero_size": 63,
+        "skipped_capacity": 109,
+        "skipped_chase_or_no_cross": 164,
+        "market_filter_off_days": 13
+      },
+      "spy_pct": "14.86",
+      "qqq_pct": "18.32"
+    },
+    {
+      "period": "holdout",
+      "profile": "aggressive",
+      "risk": {
+        "max_open_positions": 3,
+        "max_position_pct": "50",
+        "risk_per_trade_pct": "3"
+      },
+      "start": "2025-10-20",
+      "end": "2026-10-19",
+      "sessions": 251,
+      "final": "533.98",
+      "return_pct": "6.7960",
+      "max_dd_pct": "16.3358",
+      "return_over_dd": "0.416",
+      "worst_day_pct": "-4.2141",
+      "worst_trade": {
+        "symbol": "AMAT",
+        "entry_date": "2026-03-04",
+        "exit_date": "2026-03-06",
+        "reason": "intraday_stop_hit",
+        "net": "-16.50",
+        "return_pct": "-9.7457"
+      },
+      "trades": 37,
+      "open": 2,
+      "hit_pct": "35.14",
+      "pf": "1.1303",
+      "counts": {
+        "setups": 792,
+        "entries": 39,
+        "skipped_zero_size": 32,
+        "skipped_capacity": 303,
+        "skipped_chase_or_no_cross": 91,
+        "market_filter_off_days": 13
+      },
+      "spy_pct": "14.86",
+      "qqq_pct": "18.32"
+    }
+  ],
+  "limitations": [
+    "daily_bars_approximate_five_minute_triggers_and_stops",
+    "earnings_blackout_not_reconstructed",
+    "opening_delay_not_modeled",
+    "daily_loss_pause_not_modeled_in_daily_replay",
+    "current_watchlist_applied_to_past_selection_bias",
+    "current_fee_schedule_applied_across_history",
+    "market_order_slippage_assumed_not_measured",
+    "symbol_fractional_eligibility_assumed",
+    "benchmarks_exclude_dividends_and_costs",
+    "fewer_trades_under_concentration_increase_sampling_noise"
+  ],
+  "database_writes": false,
+  "broker_calls": false
+}

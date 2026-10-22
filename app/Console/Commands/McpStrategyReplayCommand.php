@@ -33,11 +33,13 @@ class McpStrategyReplayCommand extends Command
 
                 return self::FAILURE;
             }
-            $variant = ['id' => $m[1], 'parameters' => [], 'execution' => []];
+            $variant = ['id' => $m[1], 'parameters' => [], 'execution' => [], 'risk' => []];
             foreach (explode(',', $m[2]) as $pair) {
                 [$key, $value] = explode('=', $pair, 2);
                 if (in_array($key, ['order_mode', 'market_slippage_bps'], true)) {
                     $variant['execution'][$key] = $value;
+                } elseif (isset(ResearchVariants::RISK[$key])) {
+                    $variant['risk'][$key] = ResearchVariants::typed($key, $value);
                 } else {
                     $variant['parameters'][$key] = ResearchVariants::typed($key, $value);
                 }
@@ -51,7 +53,7 @@ class McpStrategyReplayCommand extends Command
             'window' => [$run->start_date?->toDateString(), $run->end_date?->toDateString()], 'symbols' => count($run->payload['symbols']),
             'excluded' => $run->payload['excluded'], 'settings' => $run->payload['settings_source'], 'final_equity' => $result['final_equity'] ?? null,
             'stats' => $result['stats'] ?? null, 'counts' => $result['counts'] ?? null, 'benchmarks' => $result['benchmarks'] ?? null,
-            'variants' => array_map(fn ($v) => ['id' => $v['id'], 'parameters' => $v['parameters'], 'execution' => $v['execution']] + $summary($v['result']), $run->payload['variants'] ?? [])], JSON_THROW_ON_ERROR));
+            'variants' => array_map(fn ($v) => ['id' => $v['id'], 'parameters' => $v['parameters'], 'execution' => $v['execution'], 'risk' => $v['risk'] ?? []] + $summary($v['result']), $run->payload['variants'] ?? [])], JSON_THROW_ON_ERROR));
 
         return $run->status === 'complete' ? self::SUCCESS : self::FAILURE;
     }

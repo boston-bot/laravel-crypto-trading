@@ -13,6 +13,7 @@ use App\Models\PaperTrading\SimulationObservation;
 use App\Models\PaperTrading\SimulationOrder;
 use App\Models\PaperTrading\SimulationPosition;
 use App\Models\User;
+use App\Services\Broker\Agentic\RobinhoodOrderContract;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\ExternalOrders;
 use App\Services\Monitoring\MarketCalendar;
@@ -104,6 +105,10 @@ final class OfflineSimulator
             $portfolio->ledger_version++;
             $portfolio->save();
             $this->event($portfolio, $order, 'accepted', 'accepted', null, ['marks' => $this->snapshots($marks)]);
+            if ($real && $order->type === 'market' && isset($intent['strategy_signal_id'])) {
+                // A market order executes on acceptance, against the same verified quote that passed the submission guard.
+                return $this->attempt($current, $portfolio, $order, $marks[$order->symbol], $marks, true);
+            }
 
             return $order;
         });
@@ -121,81 +126,89 @@ final class OfflineSimulator
             if ($reason = $this->invalidated($current, $portfolio, $order)) {
                 return $this->close($portfolio, $order, $reason === 'order_expired' ? 'expired' : 'cancelled', $reason);
             }
-            $real = $quote instanceof BrokerSimulationQuote;
-            abort_unless(($order->intent['origin'] === 'real_data_paper_simulation') === $real, 409, 'Synthetic and real-data paper observations cannot mix.');
-            $this->validateMarks($current, [$order->symbol => $quote] + $marks, $order->assumptions['quote_max_age_seconds'], $real);
-            $d = $quote->data;
-            abort_unless($d['symbol'] === $order->symbol, 422, 'Observation does not match order symbol.');
-            $fingerprintData = $real ? array_intersect_key($d, array_flip(['symbol', 'bid', 'ask', 'bid_size', 'ask_size', 'liquidity_key', 'provenance'])) : $d;
-            $fingerprint = hash('sha256', json_encode($fingerprintData, JSON_THROW_ON_ERROR));
-            $observation = SimulationObservation::where('paper_portfolio_id', $portfolio->id)->where('source_key', $d['key'])->first();
-            if ($observation) {
-                abort_unless(hash_equals($observation->fingerprint, $fingerprint), 409, 'Observation key already identifies different evidence.');
-            } else {
-                $sampleKey = hash('sha256', $real ? $d['liquidity_key'] : $d['symbol'].':'.($d['source_at'] ?? $d['key']));
-                abort_if(SimulationObservation::where('paper_portfolio_id', $portfolio->id)->where('sample_key', $sampleKey)->exists(), 409, 'This source sample already has another observation key.');
-                $observation = SimulationObservation::create(['paper_portfolio_id' => $portfolio->id, 'source_key' => $d['key'],
-                    'sample_key' => $sampleKey, 'fingerprint' => $fingerprint, 'snapshot' => $d, 'source_at' => $d['source_at'], 'retrieved_at' => $d['retrieved_at'], 'recorded_at' => now()]);
-            }
-            $eventKey = 'observation:'.$observation->id;
-            if (SimulationEvent::where('sim_order_id', $order->id)->where('event_key', $eventKey)->exists()) {
-                return $order;
-            }
-            $this->blockCorporateAction($portfolio, $quote, $order->sleeve);
-            $reason = $quote->reason(CarbonImmutable::now(), $order->assumptions['quote_max_age_seconds']);
-            if (! $reason && (CarbonImmutable::parse($d['source_at'])->lte($order->accepted_at) ||
-                ($order->last_source_at && CarbonImmutable::parse($d['source_at'])->lte($order->last_source_at)))) {
-                $reason = 'observation_not_after_order';
-            }
-            $session = $this->calendar->at(CarbonImmutable::now());
-            $evaluation = ['session' => $session, 'marks' => $this->snapshots([$order->symbol => $quote] + $marks)];
-            if (! $reason && ($session['status'] !== 'regular' || $this->calendar->at(CarbonImmutable::parse($d['source_at']))['status'] !== 'regular')) {
-                $reason = 'outside_verified_session';
-            }
-            if (! $reason) {
-                $reason = $this->admission($portfolio, $order, PolicyApplication::findOrFail($order->policy_application_id), [$order->symbol => $quote] + $marks, true);
-            }
-            $price = null;
-            $size = $d[$order->side === 'BUY' ? 'ask_size' : 'bid_size'];
-            if (! $reason && $size === null) {
-                $reason = 'liquidity_unknown';
-            }
-            if (! $reason) {
-                $price = $this->price($order, $quote);
-                if ($price->compareTo(Decimal::from('0')) <= 0 || ($order->side === 'BUY' ? $price->compareTo(Decimal::from($order->price_bound)) > 0 :
-                    $price->compareTo(Decimal::from($order->price_bound)) < 0)) {
-                    $reason = $order->type === 'limit' ? 'limit_not_marketable' : 'market_price_bound';
-                }
-            }
-            $quantity = Decimal::from('0');
-            if (! $reason) {
-                $used = Decimal::from('0');
-                // Eloquent decimal casts preserve strings; SQL/SQLite SUM would introduce floats.
-                $orderIds = SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('side', $order->side)->pluck('id');
-                foreach (SimulationEvent::where('observation_id', $observation->id)->whereIn('sim_order_id', $orderIds)->where('kind', 'fill')->get() as $fill) {
-                    $used = $used->plus(Decimal::from($fill->quantity));
-                }
-                $remaining = Decimal::from($order->quantity)->minus(Decimal::from($order->filled_quantity));
-                $fractional = $order->assumptions['allow_fractional'] && $d['fractional'] === true && ($order->type !== 'limit' || $order->assumptions['allow_fractional_limit']);
-                $quantity = $this->min($remaining, Decimal::from($size)->minus($used))->rounded($fractional ? 8 : 0, RoundingMode::DOWN);
-                if ($quantity->compareTo(Decimal::from('0')) <= 0) {
-                    $reason = 'liquidity_exhausted';
-                }
-            }
-            if ($reason) {
-                // Even a usable but unmarketable sample advances the source watermark.
-                if ($d['source_at'] !== null && CarbonImmutable::parse($d['source_at'])->gt($order->last_source_at ?? $order->accepted_at) &&
-                    CarbonImmutable::parse($d['source_at'])->lte(CarbonImmutable::parse($d['retrieved_at'])) && CarbonImmutable::parse($d['retrieved_at'])->lte(now())) {
-                    $order->update(['last_source_at' => $d['source_at']]);
-                }
-                $this->event($portfolio, $order, $eventKey, 'unfilled', $reason, $evaluation, $observation);
 
-                return $order;
+            return $this->attempt($current, $portfolio, $order, $quote, $marks, false);
+        });
+    }
+
+    /** One fill attempt. Only a market order's own submission may use the quote it was accepted on. */
+    private function attempt(McpConnection $current, Portfolio $portfolio, SimulationOrder $order, SimulationQuote|BrokerSimulationQuote $quote, array $marks, bool $atSubmission): SimulationOrder
+    {
+        $real = $quote instanceof BrokerSimulationQuote;
+        abort_unless(($order->intent['origin'] === 'real_data_paper_simulation') === $real, 409, 'Synthetic and real-data paper observations cannot mix.');
+        $this->validateMarks($current, [$order->symbol => $quote] + $marks, $order->assumptions['quote_max_age_seconds'], $real);
+        $d = $quote->data;
+        abort_unless($d['symbol'] === $order->symbol, 422, 'Observation does not match order symbol.');
+        $fingerprintData = $real ? array_intersect_key($d, array_flip(['symbol', 'bid', 'ask', 'bid_size', 'ask_size', 'liquidity_key', 'provenance'])) : $d;
+        $fingerprint = hash('sha256', json_encode($fingerprintData, JSON_THROW_ON_ERROR));
+        $observation = SimulationObservation::where('paper_portfolio_id', $portfolio->id)->where('source_key', $d['key'])->first();
+        if ($observation) {
+            abort_unless(hash_equals($observation->fingerprint, $fingerprint), 409, 'Observation key already identifies different evidence.');
+        } else {
+            $sampleKey = hash('sha256', $real ? $d['liquidity_key'] : $d['symbol'].':'.($d['source_at'] ?? $d['key']));
+            abort_if(SimulationObservation::where('paper_portfolio_id', $portfolio->id)->where('sample_key', $sampleKey)->exists(), 409, 'This source sample already has another observation key.');
+            $observation = SimulationObservation::create(['paper_portfolio_id' => $portfolio->id, 'source_key' => $d['key'],
+                'sample_key' => $sampleKey, 'fingerprint' => $fingerprint, 'snapshot' => $d, 'source_at' => $d['source_at'], 'retrieved_at' => $d['retrieved_at'], 'recorded_at' => now()]);
+        }
+        $eventKey = 'observation:'.$observation->id;
+        if (SimulationEvent::where('sim_order_id', $order->id)->where('event_key', $eventKey)->exists()) {
+            return $order;
+        }
+        $this->blockCorporateAction($portfolio, $quote, $order->sleeve);
+        $reason = $quote->reason(CarbonImmutable::now(), $order->assumptions['quote_max_age_seconds']);
+        if (! $reason && ((! $atSubmission && CarbonImmutable::parse($d['source_at'])->lte($order->accepted_at)) ||
+            ($order->last_source_at && CarbonImmutable::parse($d['source_at'])->lte($order->last_source_at)))) {
+            $reason = 'observation_not_after_order';
+        }
+        $session = $this->calendar->at(CarbonImmutable::now());
+        $evaluation = ['session' => $session, 'marks' => $this->snapshots([$order->symbol => $quote] + $marks)];
+        if (! $reason && ($session['status'] !== 'regular' || $this->calendar->at(CarbonImmutable::parse($d['source_at']))['status'] !== 'regular')) {
+            $reason = 'outside_verified_session';
+        }
+        if (! $reason) {
+            $reason = $this->admission($portfolio, $order, PolicyApplication::findOrFail($order->policy_application_id), [$order->symbol => $quote] + $marks, true);
+        }
+        $price = null;
+        $size = $d[$order->side === 'BUY' ? 'ask_size' : 'bid_size'];
+        if (! $reason && $size === null) {
+            $reason = 'liquidity_unknown';
+        }
+        if (! $reason) {
+            $price = $this->price($order, $quote);
+            if ($price->compareTo(Decimal::from('0')) <= 0 || ($order->side === 'BUY' ? $price->compareTo(Decimal::from($order->price_bound)) > 0 :
+                $price->compareTo(Decimal::from($order->price_bound)) < 0)) {
+                $reason = $order->type === 'limit' ? 'limit_not_marketable' : 'market_price_bound';
             }
-            $this->fill($portfolio, $order, $quantity, $price, $observation, $eventKey, $evaluation);
+        }
+        $quantity = Decimal::from('0');
+        if (! $reason) {
+            $used = Decimal::from('0');
+            // Eloquent decimal casts preserve strings; SQL/SQLite SUM would introduce floats.
+            $orderIds = SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('side', $order->side)->pluck('id');
+            foreach (SimulationEvent::where('observation_id', $observation->id)->whereIn('sim_order_id', $orderIds)->where('kind', 'fill')->get() as $fill) {
+                $used = $used->plus(Decimal::from($fill->quantity));
+            }
+            $remaining = Decimal::from($order->quantity)->minus(Decimal::from($order->filled_quantity));
+            $fractional = $order->assumptions['allow_fractional'] && $d['fractional'] === true && ($order->type !== 'limit' || $order->assumptions['allow_fractional_limit']);
+            // Broker-data orders follow Robinhood's fractional precision; synthetic scenarios keep the ledger's.
+            $quantity = $this->min($remaining, Decimal::from($size)->minus($used))->rounded($fractional ? ($real ? RobinhoodOrderContract::FRACTIONAL_MAX_DECIMALS : 8) : 0, RoundingMode::DOWN);
+            if ($quantity->compareTo(Decimal::from('0')) <= 0) {
+                $reason = 'liquidity_exhausted';
+            }
+        }
+        if ($reason) {
+            // Even a usable but unmarketable sample advances the source watermark.
+            if ($d['source_at'] !== null && CarbonImmutable::parse($d['source_at'])->gt($order->last_source_at ?? $order->accepted_at) &&
+                CarbonImmutable::parse($d['source_at'])->lte(CarbonImmutable::parse($d['retrieved_at'])) && CarbonImmutable::parse($d['retrieved_at'])->lte(now())) {
+                $order->update(['last_source_at' => $d['source_at']]);
+            }
+            $this->event($portfolio, $order, $eventKey, 'unfilled', $reason, $evaluation, $observation);
 
             return $order;
-        });
+        }
+        $this->fill($portfolio, $order, $quantity, $price, $observation, $eventKey, $evaluation);
+
+        return $order;
     }
 
     /** Close invalidated orders without requiring a usable quote or an enabled fill mode. */
@@ -400,6 +413,15 @@ final class OfflineSimulator
         if ($fractional && (! $order->assumptions['allow_fractional'] || $quote->data['fractional'] !== true ||
             ($order->type === 'limit' && ! $order->assumptions['allow_fractional_limit']))) {
             return 'fractional_order_unsupported';
+        }
+        if ($fractional && $quote instanceof BrokerSimulationQuote) {
+            // Robinhood: regular-hours market orders only, at most 6 decimals, and a $1 minimum order value for purchases.
+            if (! RobinhoodOrderContract::allowsFractional($order->type) || $quantity->compareTo($quantity->rounded(RobinhoodOrderContract::FRACTIONAL_MAX_DECIMALS, RoundingMode::DOWN)) !== 0) {
+                return 'fractional_order_unsupported';
+            }
+            if ($order->side === 'BUY' && $quantity->multipliedBy(Decimal::from($quote->data['ask']))->compareTo(Decimal::from(RobinhoodOrderContract::FRACTIONAL_MIN_NOTIONAL)) < 0) {
+                return 'below_fractional_minimum_order_value';
+            }
         }
 
         return null;
