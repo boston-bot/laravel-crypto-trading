@@ -739,3 +739,34 @@ No migration. To use guarded fractional market orders in forward paper trading:
 4. After the session closes, run `mcp:cadence-report` to measure quote age at evaluation.
 
 Paper only; no broker order. [Evidence and details](M5-FRACTIONAL-MARKET-PAPER-EVIDENCE.md).
+
+
+### Batch evaluation and midday additions (October 22 source increment)
+
+No migration. After deploying this increment, an enabled batched forward-paper cycle collects and evaluates each batch before reading the next. With signals/handoff/fills all enabled, the scheduler no longer performs a separate all-symbol market collection first. `mcp:market-cycle` remains read-only; `mcp:signal-paper-cycle` now includes collection when batch mode is enabled. Quote-age limits and submission-time checks stay in force.
+
+Enable intraday reference repair separately in the private runtime environment, using the normal backup/edit/config-cache/service-restart procedure:
+
+```dotenv
+MCP_INTRADAY_SYMBOL_WARMUP_ENABLED=true
+```
+
+The scheduler runs `mcp:symbol-warmup --once` every five minutes in the background. It uses the existing data/reference/SEC/profile permissions and account-scoped universe; it attempts at most three symbols with a two-minute stage budget and a ten-minute per-symbol retry throttle. Large backlogs need several cycles. Fresh benchmark/reference evidence is reused. Its printed profile count includes unavailable profiles; confirm actual profile/eligibility reasons before interpreting a symbol as ready. Data-only lists stay non-nominating. The daily premarket schedules remain in place.
+
+An explicit bounded diagnostic pass after enabling can use:
+
+```sh
+php artisan mcp:symbol-warmup --once --account=1
+```
+
+This command fetches permitted reference data and records profiles, without evaluating signals or creating orders. Do not use manual strategy-cycle runs as a connectivity test.
+
+A one-time read-only cadence capture is installed for **October 22, 2026 at 15:05 Central**, after the 15:00 close. It writes runtime `runtime/cadence-baseline-2026-10-22/cadence-2026-10-22.json` and `capture-metadata.json`, then removes/unloads its own LaunchAgent. Leave the Mac/user service available. Check the private capture logs if the report does not appear. The report was still pending when this source increment completed. Deploying the fixes before the capture creates a session with mixed behavior; retain the recorded revision and do not label it a wholly pre-change baseline.
+
+For a later stored-session comparison, run:
+
+```sh
+php artisan mcp:cadence-report --account=1 --date=2026-10-22
+```
+
+Compare completed-window coverage, quote ages **at evaluation**, within-age percentage, unavailable reasons and warm-up progress. Collection-time freshness alone does not establish evaluation-time freshness. [Implementation, test evidence and pending acceptance](M5-INTRADAY-COLLECTION-EVIDENCE.md).

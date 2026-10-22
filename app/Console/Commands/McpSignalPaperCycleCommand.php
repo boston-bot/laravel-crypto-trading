@@ -10,7 +10,7 @@ class McpSignalPaperCycleCommand extends Command
 {
     protected $signature = 'mcp:signal-paper-cycle {--once} {--account= : Local operator connection ID}';
 
-    protected $description = 'Process stored-data signal paper handoffs and later-observation fills; never broker orders';
+    protected $description = 'Collect batches when enabled, then evaluate signals and process paper handoffs/fills; never broker orders';
 
     public function handle(SignalPaperCycle $cycle): int
     {

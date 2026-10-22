@@ -133,6 +133,21 @@ class BatchMarketInputCollectorTest extends TestCase
         $this->assertSame('quote_component_time_unknown_or_stale', app(PaperMarketInputs::class)->executionReason($input, CarbonImmutable::now(), 20));
     }
 
+    public function test_deadline_after_partial_batch_still_delivers_only_recorded_symbols_to_callback(): void
+    {
+        $delivered = [];
+        $rows = app(PaperMarketInputs::class)->collectMany($this->connection, $this->connection->user_id, ['ALFA', 'BRAVO'], (string) Str::uuid(), function () {
+            if (MarketInput::where('origin', 'broker_read')->exists()) {
+                throw new ReadFailure(ReadError::Stale);
+            }
+        }, function ($batch) use (&$delivered) {
+            $delivered[] = array_keys($batch);
+        });
+        $this->assertSame(['ALFA'], array_keys($rows));
+        $this->assertSame([['ALFA']], $delivered);
+        $this->assertSame(1, MarketInput::where('origin', 'broker_read')->count());
+    }
+
     public function test_default_off_and_off_session_cadence_have_no_reads(): void
     {
         config(['paper.batch_collection_enabled' => false]);

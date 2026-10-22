@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'intraday_warmup_enabled' => filter_var(env('MCP_INTRADAY_SYMBOL_WARMUP_ENABLED', false), FILTER_VALIDATE_BOOL),
     'batch_collection_enabled' => filter_var(env('MCP_PAPER_BATCH_COLLECTION_ENABLED', false), FILTER_VALIDATE_BOOL),
     'session_valuations_enabled' => filter_var(env('MCP_PAPER_SESSION_VALUATIONS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'market_cycle_budget_seconds' => 240,

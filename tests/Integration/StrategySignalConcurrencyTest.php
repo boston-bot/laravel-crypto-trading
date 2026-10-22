@@ -7,6 +7,7 @@ use App\Models\PaperTrading\StrategySignal;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Process\Process;
 use Tests\Support\IntegrationCleanup;
 use Tests\Support\StrategySignalFixture as F;
@@ -32,7 +33,13 @@ class StrategySignalConcurrencyTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_duplicate_workers_commit_one_complete_cycle_and_database_constrains_outcomes(): void
+    public static function evaluationModes(): array
+    {
+        return ['whole universe' => [false], 'overlapping batches' => [true]];
+    }
+
+    #[DataProvider('evaluationModes')]
+    public function test_duplicate_workers_commit_one_complete_cycle_and_database_constrains_outcomes(bool $batch): void
     {
         [$c] = F::seed();
         $this->fixture = $c->id;
@@ -41,7 +48,7 @@ class StrategySignalConcurrencyTest extends TestCase
         DB::table('mcp_connections')->where('id', $c->id)->lockForUpdate()->first();
         try {
             for ($i = 0; $i < 3; $i++) {
-                $worker = new Process([PHP_BINARY, base_path('tests/Support/mcp-strategy-signal-worker.php'), (string) $c->id, now()->toISOString()], base_path(),
+                $worker = new Process([PHP_BINARY, base_path('tests/Support/mcp-strategy-signal-worker.php'), (string) $c->id, now()->toISOString(), $batch ? 'DEMO' : ''], base_path(),
                     ['APP_ENV' => 'testing', 'APP_KEY' => config('app.key'), 'DB_CONNECTION' => 'pgsql_test', 'DB_URL' => '', 'LOG_CHANNEL' => 'null']);
                 $worker->setTimeout(30);
                 $worker->start();

@@ -20,6 +20,7 @@ use App\Services\Monitoring\MonitoringScheduler;
 use App\Services\PaperTrading\BatchMarketInputCollector;
 use App\Services\PaperTrading\DecisionScheduler;
 use App\Services\PaperTrading\EarningsCalendar;
+use App\Services\PaperTrading\IntradaySymbolWarmup;
 use App\Services\PaperTrading\StrategyWatchlists;
 use App\Services\PaperTrading\SymbolProfiles;
 use App\Services\Research\ResearchScheduler;
@@ -145,7 +146,9 @@ Artisan::command('mcp:paper-decisions {--once} {--sync : Process the current win
     return 0;
 })->purpose('Bounded non-executable paper proposals; requires explicit enablement, applied policy and reviewed AI configuration');
 
-if (config('paper.market_collection_enabled') && config('paper.market_inputs_enabled')) {
+// The combined forward-paper cycle owns collection when all three gates are on.
+if (config('paper.market_collection_enabled') && config('paper.market_inputs_enabled') &&
+    ! (config('paper.batch_collection_enabled') && config('paper.signals_enabled') && config('paper.signal_handoff_enabled') && config('paper.real_data_fills_enabled'))) {
     Schedule::command(config('paper.batch_collection_enabled') ? 'mcp:market-cycle --once --scheduled' : 'mcp:paper-collect --once --scheduled')->everyFiveMinutes()->withoutOverlapping(10);
 }
 
@@ -178,6 +181,22 @@ if (config('paper.watchlist_intake_enabled')) {
 
 if (config('paper.signals_enabled') && config('paper.signal_handoff_enabled') && config('paper.real_data_fills_enabled')) {
     Schedule::command('mcp:signal-paper-cycle --once')->everyFiveMinutes()->withoutOverlapping(5);
+}
+
+Artisan::command('mcp:symbol-warmup {--once} {--account= : Local operator connection ID}', function (): int {
+    if (! $this->option('once') || ($this->option('account') !== null && ! ctype_digit($this->option('account')))) {
+        $this->error('Use --once and an optional numeric --account.');
+
+        return 1;
+    }
+    $result = app(IntradaySymbolWarmup::class)->tick($this->option('account') === null ? null : (int) $this->option('account'));
+    $this->line(json_encode($result, JSON_THROW_ON_ERROR));
+
+    return $result['failed'] === 0 ? 0 : 1;
+})->purpose('Bounded regular-session reference and profile warm-up; no signals, orders or policy changes');
+
+if (config('paper.intraday_warmup_enabled')) {
+    Schedule::command('mcp:symbol-warmup --once')->everyFiveMinutes()->runInBackground()->withoutOverlapping(10);
 }
 
 // Public SEC filings change slowly; one daily refresh keeps stored classifications inside their seven-day validity.

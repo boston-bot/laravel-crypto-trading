@@ -31,7 +31,7 @@ final class PaperMarketReferences
 
     public function __construct(private DailyBars $bars, private Listings $listings) {}
 
-    public function collect(McpConnection $connection, int $actor, array $symbols, string $requestId): Collection
+    public function collect(McpConnection $connection, int $actor, array $symbols, string $requestId, bool $includeBenchmark = true): Collection
     {
         Validator::make(['symbols' => $symbols, 'request_id' => $requestId], ['symbols' => ['present', 'array', 'max:100'],
             'symbols.*' => ['string', 'regex:/^[A-Z][A-Z0-9.-]{0,15}$/D'], 'request_id' => ['required', 'uuid']])->validate();
@@ -51,7 +51,7 @@ final class PaperMarketReferences
         }
         // The strategy benchmark's history is always read with the universe; it needs no listing of its own here.
         $benchmark = StrategyParameters::DEFAULTS['benchmark_symbol'];
-        if (! isset($requests[$benchmark])) {
+        if ($includeBenchmark && ! isset($requests[$benchmark])) {
             $requests[$benchmark]['daily_history'] = Uuid::uuid5(Uuid::NAMESPACE_URL, 'market-reference:'.$requestId.':daily_history:'.$benchmark)->toString();
         }
         $ids = $requests === [] ? [] : array_merge(...array_map('array_values', array_values($requests)));

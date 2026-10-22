@@ -22,4 +22,4 @@ config(['paper.signals_enabled' => true, 'paper.symbol_profiles_enabled' => true
     'paper.watchlist_intake_enabled' => true, 'mcp.external_order_detection_enabled' => true, 'paper.instrument_classification_enabled' => true,
     'paper.corporate_actions_enabled' => true, 'robinhood_mcp.earnings_enabled' => true, 'alpaca_data.reference_enabled' => true,
     'mcp.operator_emails' => [User::findOrFail($connection->user_id)->email]]);
-echo app(StrategySignals::class)->record($connection, $connection->user_id)->map(fn ($r) => $r->id.':'.$r->status.':'.$r->side)->implode(',');
+echo app(StrategySignals::class)->record($connection, $connection->user_id, ! empty($argv[3]) ? explode(',', $argv[3]) : null)->map(fn ($r) => $r->id.':'.$r->status.':'.$r->side)->implode(',');

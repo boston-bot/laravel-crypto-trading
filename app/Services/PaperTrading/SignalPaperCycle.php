@@ -7,8 +7,9 @@ use App\Models\PaperTrading\Portfolio;
 use App\Models\PaperTrading\SimulationOrder;
 use App\Models\User;
 use App\Services\Monitoring\AccountScope;
+use Carbon\CarbonImmutable;
 
-/** Uses later stored observations for old orders before creating any new intent. No collection or broker writes. */
+/** Uses later stored observations for old orders before creating any new intent. Batch collection, then local paper processing; never broker writes. */
 final class SignalPaperCycle
 {
     public function tick(?int $account = null): int
@@ -33,12 +34,47 @@ final class SignalPaperCycle
                     app(RealDataPaperFills::class)->process($connection, $connection->user_id, $order->id);
                 }
             }
-            foreach (app(StrategySignals::class)->record($connection, $connection->user_id) as $signal) {
-                app(SignalPaperHandoff::class)->process($connection, $connection->user_id, $signal->id);
-                $count++;
+            if (! config('paper.batch_collection_enabled')) {
+                $count += $this->evaluate($connection);
             }
         }
 
+        if (config('paper.batch_collection_enabled')) {
+            app(BatchMarketInputCollector::class)->tick($account, true, function ($connection, $symbols) use (&$count) {
+                // Opening evidence and old-order fills precede new intents. Existing order-type fill rules remain in force.
+                $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->first();
+                if (! $portfolio || ! RuleEligibilityPolicies::current($portfolio)) {
+                    return;
+                }
+                if (config('paper.session_valuations_enabled')) {
+                    app(PaperSessionValuations::class)->capture($connection, $connection->user_id);
+                }
+                foreach (SimulationOrder::where('paper_portfolio_id', $portfolio->id)->whereIn('symbol', $symbols)->whereIn('status', ['open', 'partial'])->orderBy('id')->get() as $order) {
+                    if (isset($order->intent['strategy_signal_id'])) {
+                        app(RealDataPaperFills::class)->process($connection, $connection->user_id, $order->id);
+                    }
+                }
+                $count += $this->evaluate($connection, $symbols);
+            });
+        }
+
         return $count;
+    }
+
+    private function evaluate(McpConnection $connection, ?array $symbols = null): int
+    {
+        if ($symbols !== null) {
+            // Membership may change during collection. Drop removed unheld symbols without delaying held-position exits.
+            $symbols = array_values(array_intersect($symbols, app(SymbolUniverse::class)->reads($connection, CarbonImmutable::now())));
+            if ($symbols === []) {
+                return 0;
+            }
+        }
+        $signals = app(StrategySignals::class)->record($connection, $connection->user_id, $symbols);
+        foreach ($signals as $signal) {
+            app(SignalPaperHandoff::class)->process($connection, $connection->user_id, $signal->id);
+        }
+
+        return $signals->count();
     }
 }

@@ -38,11 +38,11 @@ final class StrategySignals
         return $count;
     }
 
-    public function record(McpConnection $connection, int $actor)
+    public function record(McpConnection $connection, int $actor, ?array $batchSymbols = null)
     {
         abort_unless(config('paper.signals_enabled'), 409, 'Strategy signals are disabled.');
 
-        return DB::transaction(function () use ($connection, $actor) {
+        return DB::transaction(function () use ($connection, $actor, $batchSymbols) {
             $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
             abort_unless($current->user_id === $actor && User::whereKey($actor)->whereIn('email', config('mcp.operator_emails'))->exists(), 403);
             abort_unless($current->status === 'connected' && $current->account_role === 'agentic_monitoring' && $current->bound_account_id &&
@@ -54,7 +54,7 @@ final class StrategySignals
             $cycleAt = CarbonImmutable::createFromTimestampUTC(intdiv($cutoff->getTimestamp(), 300) * 300);
             $existing = StrategyCycle::where('mcp_connection_id', $current->id)->where('scope', $scope)->where('auth_generation', $current->auth_generation)
                 ->where('rule_version', SignalRules::VERSION)->where('cycle_at', $cycleAt->format('Y-m-d H:i:s.u'))->first();
-            if ($existing) {
+            if ($existing && $batchSymbols === null) {
                 return StrategySignal::where('cycle_id', $existing->id)->orderBy('symbol')->get();
             }
             $execution = ExecutionPolicies::current($portfolio);
@@ -62,18 +62,27 @@ final class StrategySignals
             $parameters = SignalParameters::current();
             $membership = app(StrategyWatchlists::class)->nominations($current, $cutoff);
             $symbols = app(SymbolUniverse::class)->reads($current, $cutoff);
+            if ($batchSymbols !== null) {
+                abort_if(array_diff($batchSymbols, $symbols), 409, 'Batch symbols are no longer in the selected universe.');
+            }
+            $selected = $batchSymbols === null ? $symbols : array_values(array_intersect($symbols, $batchSymbols));
             $session = $this->session($cutoff);
             $snapshot = Snapshot::where('mcp_connection_id', $current->id)->where('scope', $scope)->where('status', 'complete')
                 ->whereIn('run_id', Run::where('mcp_connection_id', $current->id)->where('auth_generation', $current->auth_generation)->select('id'))
                 ->where('published_at', '<=', $cutoff->format('Y-m-d H:i:s.u'))->where('retrieved_at', '<=', $cutoff->format('Y-m-d H:i:s.u'))->latest('publication_version')->first();
             $orderRead = BrokerOrderRead::where('mcp_connection_id', $current->id)->where('scope', $scope)->where('auth_generation', $current->auth_generation)
                 ->where('recorded_at', '<=', $cutoff->format('Y-m-d H:i:s.u'))->latest('id')->first();
-            $cycle = StrategyCycle::create(['mcp_connection_id' => $current->id, 'paper_portfolio_id' => $portfolio->id, 'scope' => $scope,
+            $cycle = $existing ?? StrategyCycle::create(['mcp_connection_id' => $current->id, 'paper_portfolio_id' => $portfolio->id, 'scope' => $scope,
                 'auth_generation' => $current->auth_generation, 'actor_id' => $actor, 'rule_version' => SignalRules::VERSION,
                 'cycle_at' => $cycleAt, 'cutoff' => $cutoff, 'recorded_at' => now(), 'payload' => ['symbols' => $symbols,
                     'ledger_version' => $portfolio->ledger_version, 'execution_version_id' => $execution->id, 'session' => $session,
-                    'snapshot_id' => $snapshot?->id, 'order_read_id' => $orderRead?->id, 'parameters' => $parameters, 'mode' => 'paper_signal_evidence']]);
-            foreach ($symbols as $symbol) {
+                    'snapshot_id' => $snapshot?->id, 'order_read_id' => $orderRead?->id, 'parameters' => $parameters,
+                    'evaluation_mode' => $batchSymbols === null ? 'whole_universe' : 'incremental_batches', 'mode' => 'paper_signal_evidence']]);
+            foreach ($selected as $symbol) {
+                // The connection lock serializes overlapping batches and retries within this window.
+                if (StrategySignal::where('cycle_id', $cycle->id)->where('symbol', $symbol)->exists()) {
+                    continue;
+                }
                 $input = app(PaperMarketInputs::class)->latest($current, $symbol, $cutoff);
                 $profile = app(SymbolProfiles::class)->latest($current, $symbol, $cutoff);
                 $position = app(SignalPositionFacts::class)->inspect($portfolio, $symbol, $cutoff);
@@ -147,7 +156,7 @@ final class StrategySignals
                     'cutoff' => $cutoff, 'recorded_at' => now()]);
             }
 
-            return StrategySignal::where('cycle_id', $cycle->id)->orderBy('symbol')->get();
+            return StrategySignal::where('cycle_id', $cycle->id)->whereIn('symbol', $selected)->orderBy('symbol')->get();
         });
     }
 
