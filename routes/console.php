@@ -15,6 +15,7 @@ use App\Jobs\SyncRobinhoodOrdersJob;
 use App\Jobs\SyncRobinhoodPositionsJob;
 use App\Models\McpConnection;
 use App\Models\User;
+use App\Services\Crypto\CryptoMarketCollector;
 use App\Services\Monitoring\MarketCalendarSync;
 use App\Services\Monitoring\MonitoringScheduler;
 use App\Services\PaperTrading\BatchMarketInputCollector;
@@ -302,6 +303,23 @@ Artisan::command('mcp:market-cycle {--once} {--scheduled} {--account= : Local co
 
     return 0;
 })->purpose('Read-only batched quote and exact-symbol evidence collection; separate default-off gate, no signals or orders');
+
+Artisan::command('mcp:crypto-market {--once} {--scheduled}', function (): int {
+    if (! $this->option('once')) {
+        $this->error('Use --once; long-running work belongs to the scheduler.');
+
+        return 1;
+    }
+    $result = app(CryptoMarketCollector::class)->tick((bool) $this->option('scheduled'));
+    $this->line(json_encode($result, JSON_THROW_ON_ERROR));
+
+    return in_array($result['status'], ['complete', 'disabled', 'busy'], true) ? 0 : 1;
+})->purpose('Crypto C1: read-only Coinbase public market data (products, best bid/ask, closed candles); no credentials, signals or orders');
+
+// Crypto runs 24/7, independent of the equity session calendar.
+if (config('crypto.market_data_enabled')) {
+    Schedule::command('mcp:crypto-market --once --scheduled')->everyFiveMinutes()->withoutOverlapping(10);
+}
 
 if (! config('mcp.legacy_schedules_enabled')) {
     return;

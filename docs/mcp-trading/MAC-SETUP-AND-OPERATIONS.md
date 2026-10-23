@@ -365,6 +365,8 @@ ROBINHOOD_CRYPTO_WRITES_ENABLED=false
 
 The two crypto venue flags (added October 22, crypto C0) gate the legacy Coinbase and Robinhood Crypto clients independently of `BROKERAGE_WRITES_ENABLED`. Keep them false: no application code currently submits crypto orders, and legacy live submission is retired. To check a configured Coinbase key's own permissions without changing anything, run `php artisan broker:key-permissions`; a view-only key is recommended until an authorized crypto pilot.
 
+Crypto C1 (source only, October 22) adds `CRYPTO_MARKET_DATA_ENABLED` (default false) and `COINBASE_MARKET_DATA_PRODUCTS` for read-only Coinbase public market data, with additive migration `2026_10_22_000028`. Enabling steps and verification: [C1 evidence](CRYPTO-C1-MARKET-DATA-EVIDENCE.md#deployment-owner-action-not-performed).
+
 Set `MCP_OPERATOR_EMAILS` to explicitly trusted local operators. This grants access to **all legacy accounts**. Only operator emails also listed in `TRADING_APPROVER_EMAILS` may approve/reject decisions. After migrations, provision each local login with `php artisan mcp:operator-create <email> <name>`; the password prompt is hidden and existing users are not overwritten. Visit `/login`. Financial endpoints keep `/api/...` URLs but require session cookies and CSRF tokens for mutations. No registration endpoint exists.
 
 Run `vendor/bin/phpunit` for memory-only tests and `vendor/bin/phpunit -c phpunit.pgsql.xml` for the dedicated PostgreSQL fixture. The latter requires `mcp_trading_test` and its quoted `"mcp_trading"` schema; configure `TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_USERNAME`, `TEST_DB_PASSWORD` independently of runtime. The default socket is `/tmp` with the local PHP file owner. Tests refresh that fixture's tables. Never configure runtime to use that database. Clear cached runtime configuration before testing. Existing lockfile dependency advisories are recorded in the evidence and require review before unattended deployment.
@@ -774,3 +776,31 @@ php artisan mcp:cadence-report --account=1 --date=2026-10-22
 ```
 
 Compare completed-window coverage, quote ages **at evaluation**, within-age percentage, unavailable reasons and warm-up progress. Collection-time freshness alone does not establish evaluation-time freshness. [Implementation, test evidence and pending acceptance](M5-INTRADAY-COLLECTION-EVIDENCE.md).
+
+
+### Owner-authorized home-LAN HTTP access, October 22
+
+The owner explicitly chose HTTP for phone access on the home network, overriding the initial loopback-only/HTTPS prerequisite for this scoped use. The running Nginx configuration now listens on `0.0.0.0:8080`, with server-level access restricted to loopback `127.0.0.1` and the observed home LAN `192.168.4.0/22`. Other source networks are denied. No router forwarding, public tunnel, firewall, application authentication, session, brokerage or strategy settings were changed.
+
+On a phone connected to the same home Wi-Fi, open **http://192.168.4.45:8080** and use the existing application login. The address is the Mac's current Wi-Fi address and may change with DHCP. Guest Wi-Fi/client isolation can prevent access. The Mac and service must remain available. HTTP does not encrypt the session; this is the explicitly requested private-network configuration.
+
+The runtime configuration was backed up before editing to `runtime/private-config-backups/nginx-before-lan-http-20261022T203820Z.conf` (private permissions). Nginx syntax validation passed and a graceful reload succeeded. Checks from the Mac to its LAN address confirmed login HTTP 200, readiness HTTP 200, unauthenticated Control Center redirecting to the same LAN login URL, and `/.env` HTTP 403. Loopback login also remains available. Phone-side access has not been independently verified.
+
+This is a persistent runtime configuration override; ordinary source deployments do not render Nginx again. The checked-in install template remains loopback-only by default. Re-running the installer can reset this override; review and deliberately reapply it if required. A different network requires reviewing both the address and source-network allowlist. To return to loopback-only operation, restore the private backup, validate the exact runtime configuration with `nginx -t`, and reload the dedicated Nginx instance.
+
+No application code, frontend assets or database migration changed. No PHPUnit run was needed for this Nginx-only operational change; syntax, routing, authentication redirect and private-file protection were checked directly.
+
+
+### Visual Paper Trading dashboard (October 22 source increment)
+
+After deploying the dashboard source, select **Paper Trading** in the menu or open `/mcp/paper`. On the currently configured home Wi-Fi address this will be **http://192.168.4.45:8080/mcp/paper**. No migration or new environment flag is required. The running app will not have this route until deployment.
+
+The page combines virtual ledger totals, a recorded opening-equity chart, session evaluation/blocker counts, quote/collection health, positions, order executions, recorded checks and reference/profile readiness. Choose an activity session, optional uppercase ticker and optional order state. Current portfolio totals and readiness remain current even when viewing a past session; historical tables and chart endpoint follow the selected date. Tables paginate independently. On a phone, swipe inside a wide table to see its remaining columns. Expand fill records or recorded checks for details.
+
+Prices in the execution table are quantity-weighted actual simulated fills; unfilled orders show **No fill**. Buy and sell orders have separate rows. Marks require fresh scoped evidence and action clearance. Unknown equity remains unknown when a position cannot be marked. Initial/trailing stops are rule thresholds, not sale projections. Broker holdings remain separate from paper positions.
+
+The chart contains only verified recorded session-opening valuations for the current authorization. Missing sessions are gaps, and no chart is drawn if there are no valid records. This is not an intraday/closing equity history or a performance benchmark. Use **Historical experiments** for retrospective runs; those balances/results are separate.
+
+Refresh reloads stored data only. It does not collect quotes, repair profiles, run signals, fill orders or modify settings. Existing menu/header actions retain their documented behavior. Enabled warm-up/evaluation switches are configuration indicators; actual readiness and recorded outcomes determine whether data is available. The present warm-up failure is not fixed by adding this page.
+
+[Accounting, privacy, tests and visual verification](M5-PAPER-DASHBOARD-EVIDENCE.md).

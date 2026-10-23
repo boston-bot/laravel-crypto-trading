@@ -208,7 +208,8 @@ class OperationsTest extends TestCase
     {
         $health = app(OperationsHealth::class);
         $checks = $health->evaluate();
-        $this->assertSame(['critical', 'ok', 'ok', 'ok', 'ok', 'disabled', 'ok', 'warning', 'ok', 'ok'], array_column($checks, 'status'));
+        $this->assertSame(['critical', 'ok', 'ok', 'ok', 'ok', 'disabled', 'disabled', 'ok', 'warning', 'ok', 'ok'], array_column($checks, 'status'));
+        $this->assertSame('disabled', $checks['crypto_data']['status']);
         ComponentStatus::record('scheduler', 'ticked');
         $this->assertSame('ok', $health->evaluate()['scheduler']['status']);
         $this->travel(4)->minutes();

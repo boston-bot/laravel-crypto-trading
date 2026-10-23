@@ -1,3 +1,7 @@
+<x-panel title="Forward paper dashboard" subtitle="Virtual portfolio, executions, recorded evaluations and data readiness." icon="wallet">
+    <a class="btn btn-secondary" href="{{ route('mcp.paper') }}">Open Paper Trading</a>
+</x-panel>
+
 <x-panel title="Historical simulation results" subtitle="Explore experiments separately from broker-confirmed performance." icon="performance">
     <a class="btn btn-secondary" href="{{ route('mcp.experiments.index') }}">View experiment comparisons and trades</a>
 </x-panel>

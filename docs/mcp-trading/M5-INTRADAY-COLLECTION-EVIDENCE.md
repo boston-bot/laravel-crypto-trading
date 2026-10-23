@@ -46,3 +46,34 @@ Private output directory: `/Users/joe/Services/investing-ops/runtime/cadence-bas
 ## Next
 
 Deploy the source through the normal procedure, then enable the new warm-up flag and recache configuration/restart services through the operator procedure. Keep today's pre-change baseline and compare a later completed session's quote ages at evaluation and within-age percentage, alongside membership and reference-read progress. Real provider warm-up, post-change latency and forward-paper acceptance remain unverified. M5 remains partial; M6 remains unstarted.
+
+
+## Owner deployment verification, October 22 at 12:53–12:57 Central
+
+The owner deployed `213411c`; both checkouts match and were clean at verification. The warm-up flag was already true in cached runtime configuration; no environment edit or service restart was necessary. Database doctor verified `postgres` / `mcp_trading` on restricted role `mcp_trading_runtime`, and `/ready` passed. `schedule:list` includes the combined five-minute forward-paper cycle and the background warm-up, without a separate market-collection pass. Forward-paper gates remain on; brokerage writes and AI research/decisions remain off. No manual signal cycle or warm-up was invoked for verification.
+
+Observed the natural **12:55** incremental batch cycle complete with 31 evaluations: **27/31 quote source ages within 20 seconds**, median **12.894538 seconds**. The immediately preceding **12:50** whole-universe cycle had **1/31 within 20 seconds**, median **51.912485 seconds**. These are actual source ages at evaluation, not a claim that every quote passed every admission/eligibility check or that a full session is accepted. All 31 outcomes remain unavailable: 29 eligibility unavailable and two external broker positions outside strategy management.
+
+The configured nomination lists now contain 17 symbols, with twelve data-only symbols. Warm-up has started and stored complete AMT daily history and listing evidence; no new classification/profile had been recorded at 12:57:24. Those stages remain pending, not a completed provider end-to-end acceptance claim. Private first-cycle evidence is runtime `runtime/intraday-activation-2026-10-22/first-cycle.json`.
+
+The one-time **15:05 Central** cadence job remains installed with zero runs. Because deployment occurred during the session, today's report will contain pre- and post-deployment observations and cannot be described as wholly pre-change. The capture records its runtime source revision. No implementation change, migration, policy application, paper/broker order or extra live provider test was performed during this read-only deployment verification. No full test rerun was necessary. Next: confirm complete warm-up evidence and compare later cycles/full-session results.
+
+
+## Completed October 22 session and post-close capture
+
+At 15:05 Central the one-time capture completed successfully against `213411cd2ee6a482086d169f84daf87f2dd99f57`, saved the measured/complete report and provenance, and removed its LaunchAgent plist. The private capture logs are empty. Completed-session data: **1,518 observations, 38 distinct symbols, 75/78 collection windows (96.2%)**, 1,490 quotes admitted at recording and 28 not admitted. Thirty-seven forward-paper cycles recorded 1,002 unavailable evaluations and no trade signals; the forward path began during the session, so 37 must not be compared with 78 as if it had been enabled all day. The 68.4% full-day known-quote-age figure combines pre/post-deployment behavior.
+
+A separate read-only review split cycles by their persisted evaluation mode:
+
+| Mode | Cycles | Evaluations | Known source times | Within 20 seconds | Median source age at evaluation |
+|---|---:|---:|---:|---:|---:|
+| Before: whole universe | 12 | 323 | 309 | 20/309 (6.5%) | 45.350148 s |
+| After: incremental batches | 25 | 679 | 679 | 656/679 (96.6%) | 13.161786 s |
+
+This supports the latency improvement, while retaining the four percent of post-change evaluations outside the age limit. These are source-age measurements; other admission/eligibility gates still apply.
+
+**Warm-up did not complete.** Across the post-deployment period there is only one new pair of complete reference reads (AMT history/listing), **zero new SEC classification records and zero new profiles**. DDOG and other newly nominated symbols still lacked their reference/classification evidence at the final cycle. Scheduled background launches appear in the scheduler log, but their output is redirected to `/dev/null` and no warm-up process remains at review time. The exact termination cause is unconfirmed; the runtime CLI memory limit is 128M, which is an observation, not a proven diagnosis. Warm-up must not be marked accepted based on the passed synthetic tests or on successful listing/history reads alone.
+
+Paper state at review: **$500 cash, zero reserved cash, zero orders and zero positions**. Latest stored outcomes retain membership, classification, history/listing and occasional action/spread blockers; XLE/XLV remain outside strategy management. No live read, manual strategy/warm-up invocation, runtime setting, policy, code or ledger mutation occurred during review. The diagnostic process used an explicit PostgreSQL read-only transaction. Private evidence: `runtime/intraday-activation-2026-10-22/session-review.json`; original capture: `runtime/cadence-baseline-2026-10-22/cadence-2026-10-22.json`.
+
+Next: diagnose and repair the background warm-up failure with visible bounded failure/progress evidence, then verify real reference/classification/profile completion. Keep the completed mixed-session report and the separate pre/post groups. M5 acceptance remains partial; no profitability or live readiness claim is supported.

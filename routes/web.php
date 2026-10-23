@@ -7,6 +7,7 @@ use App\Http\Controllers\McpConnectionController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\OperationsSetupController;
 use App\Http\Controllers\OperatorActionController;
+use App\Http\Controllers\PaperDashboardController;
 use App\Http\Controllers\PaperExecutionController;
 use App\Http\Controllers\ReadinessController;
 use App\Http\Controllers\ResearchController;
@@ -36,6 +37,7 @@ Route::prefix('mcp/robinhood')->middleware([McpResponsePrivacy::class, 'auth', F
 });
 
 Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAccess::class.':operate-finances'])->group(function (): void {
+    Route::get('/paper', PaperDashboardController::class)->name('mcp.paper');
     Route::get('/experiments', [ExperimentController::class, 'index'])->name('mcp.experiments.index');
     Route::post('/experiments', [ExperimentController::class, 'store'])->middleware('throttle:10,1')->name('mcp.experiments.store');
     Route::get('/experiments/{experiment}', [ExperimentController::class, 'show'])->whereUuid('experiment')->name('mcp.experiments.show');

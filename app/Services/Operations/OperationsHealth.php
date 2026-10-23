@@ -8,6 +8,7 @@ use App\Models\Monitoring\Snapshot;
 use App\Models\Operations\ComponentStatus;
 use App\Models\Operations\NotificationDelivery;
 use App\Models\User;
+use App\Services\Crypto\CryptoMarketData;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\MarketCalendar;
 use Carbon\CarbonImmutable;
@@ -18,7 +19,7 @@ final class OperationsHealth
 {
     public const QUEUES = ['monitoring' => 'mcp_monitoring', 'reconciliation' => 'mcp_monitoring', 'research' => 'mcp_research'];
 
-    public function __construct(private DiskSpace $disk, private MarketCalendar $calendar, private NtfyNotifier $ntfy, private HeartbeatPing $heartbeat) {}
+    public function __construct(private DiskSpace $disk, private MarketCalendar $calendar, private NtfyNotifier $ntfy, private HeartbeatPing $heartbeat, private CryptoMarketData $cryptoData) {}
 
     /** Queues one probe per queue unless one is still waiting; a probe left unprocessed means its worker is down. */
     public function probeQueues(): void
@@ -60,6 +61,7 @@ final class OperationsHealth
         $failed = DB::table('failed_jobs')->where('failed_at', '>=', now()->subDay())->count();
         $checks['failed_jobs'] = ['status' => $failed > 0 ? 'warning' : 'ok', 'detail' => ['last_24h' => $failed]];
         $checks['data_age'] = $this->dataAge();
+        $checks['crypto_data'] = $this->cryptoData->health();
         $free = $this->disk->freeBytes(storage_path());
         $gib = $free === null ? null : round($free / 1024 ** 3, 1);
         $checks['disk'] = ['status' => $gib === null ? 'warning' : ($gib < $t['disk_critical_gib'] ? 'critical' : ($gib < $t['disk_warning_gib'] ? 'warning' : 'ok')), 'detail' => ['free_gib' => $gib]];

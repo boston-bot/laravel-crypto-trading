@@ -1,6 +1,6 @@
 # Crypto automation plan (Coinbase and Robinhood Crypto)
 
-Status: **adopted by the owner October 22, 2026; C0 done in source, except the live key-permission check, which is blocked (no crypto credentials configured).** C1–C7 are planned work, not implemented functionality. This plan does not authorize brokerage mutations, live mode, API-key permission changes or resuming any legacy schedule. [AGENTS.md](../../AGENTS.md#crypto-track-adopted-october-22-2026) records the standing constraints; the [checklist](DEVELOPMENT-CHECKLIST.md#crypto-track--coinbase-and-robinhood-crypto) records evidence.
+Status: **adopted by the owner October 22, 2026; C0 done in source, except the live key-permission check, which is blocked (no crypto credentials configured).** C1 (Coinbase public market data) is complete in source and not deployed; C2–C7 are planned work, not implemented functionality. This plan does not authorize brokerage mutations, live mode, API-key permission changes or resuming any legacy schedule. [AGENTS.md](../../AGENTS.md#crypto-track-adopted-october-22-2026) records the standing constraints; the [checklist](DEVELOPMENT-CHECKLIST.md#crypto-track--coinbase-and-robinhood-crypto) records evidence.
 
 ## Summary
 
@@ -45,11 +45,11 @@ Every invariant in AGENTS.md applies unchanged: exact decimals, deterministic ve
 | Decision | Needed by | Safe behavior until decided |
 |---|---|---|
 | ~~Adopt this plan; amend AGENTS.md, the index and the implementation-plan non-goals~~ Adopted October 22 | C0 | — |
-| Venue(s): Coinbase, Robinhood Crypto or both; which is first | C1 | Read-only design only |
+| ~~Venue(s)~~ Coinbase first (October 22) | C1 | — |
 | Symbol universe: allowlisted pairs, or a crypto watchlist | C2 | No crypto signals |
 | Crypto sleeve: virtual capital, risk per trade, maximum position, maximum open positions, daily loss pause | C2 | Paper evaluation blocked |
 | Order with respect to equity M6: before or after | C4 | Shared execution boundary follows the equity schedule |
-| API-key permissions: view-only keys until the pilot | C0 | Treat keys as trade-capable |
+| API keys: owner declined adding a key for now (October 22) | C1/C5 | Public market data only; no balances, orders, unrecognized-order detection or reconciliation, so C5/C7 stay blocked until a key exists |
 | Always-on hosting: the Mac with sleep disabled, or another host making outbound connections only | C6 | No unattended overnight operation |
 | Live pilot limits and explicit authorization | C7 | Paper only |
 
@@ -69,7 +69,12 @@ Original scope:
 
 Acceptance: tests show that no code path reaches `placeOrder` on either client while the new flags are off, including with `BROKER_MODE=live` and `BROKERAGE_WRITES_ENABLED=true`.
 
-### C1 — Read-only crypto market data (1–2 weeks)
+### C1 — Read-only crypto market data (1–2 weeks) — Coinbase done in source October 22, not deployed
+
+Delivered for Coinbase using public endpoints only, because no key is configured: products, best bid/ask, closed five-minute and daily candles, immutable reads with provenance, a `crypto_data` health check, and migration `000028`. Account and order reads wait for a key. [Evidence](CRYPTO-C1-MARKET-DATA-EVIDENCE.md).
+
+Original scope:
+
 
 - Read-only gateways for both venues with a tool/endpoint allowlist, reusing the existing signers.
 - Batched best bid/ask and candles for allowlisted pairs and held positions, saved to `mcp_trading` as decimal strings with source time, retrieval time, completeness and provenance. Additive migrations only.

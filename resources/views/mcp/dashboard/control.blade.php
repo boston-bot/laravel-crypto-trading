@@ -1,3 +1,7 @@
+<x-panel title="Forward paper dashboard" subtitle="Virtual portfolio, executions, recorded evaluations and data readiness." icon="wallet">
+    <a class="btn btn-secondary" href="{{ route('mcp.paper') }}">Open Paper Trading</a>
+</x-panel>
+
 @php
     $latest = $control['latest'];
     $saved = $latest?->payload ?? [];

@@ -33,6 +33,8 @@
         <env name="BROKERAGE_WRITES_ENABLED" value="false" force="true"/>
         <env name="COINBASE_WRITES_ENABLED" value="false" force="true"/>
         <env name="ROBINHOOD_CRYPTO_WRITES_ENABLED" value="false" force="true"/>
+        <env name="CRYPTO_MARKET_DATA_ENABLED" value="false" force="true"/>
+        <env name="COINBASE_MARKET_DATA_PRODUCTS" value="" force="true"/>
         <env name="MCP_RESEARCH_ENABLED" value="false" force="true"/>
         <env name="MCP_STRATEGY_WATCHLIST_ENABLED" value="false" force="true"/>
         <env name="MCP_RULE_ELIGIBILITY_ENABLED" value="false" force="true"/>

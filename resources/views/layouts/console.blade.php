@@ -32,6 +32,7 @@
                 @if($key === 'health' && ($openIncidents ?? 0) > 0)<span class="nav-badge" title="Open incidents">{{ $openIncidents }}</span>@endif
             </a>
         @endforeach
+        <a href="{{ route('mcp.paper') }}" class="nav-item" @if($active === 'paper') aria-current="page" @endif><x-icon name="wallet" /><span>Paper Trading</span></a>
         <p class="nav-label">Strategy research</p>
         <a href="{{ route('mcp.experiments.index') }}" class="nav-item" @if($active === 'experiments') aria-current="page" @endif><x-icon name="performance" /><span>Experiments</span></a>
         <p class="nav-label">Brokerage</p>
