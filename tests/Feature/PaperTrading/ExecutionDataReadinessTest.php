@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Services\Broker\Agentic\BrokerGateway;
 use App\Services\Broker\Agentic\BrokerRecord;
 use App\Services\Broker\Agentic\Operation;
+use App\Services\Broker\Agentic\ReadError;
+use App\Services\Broker\Agentic\ReadFailure;
 use App\Services\Broker\Agentic\ReadResult;
 use App\Services\Broker\Agentic\TrustedHttp;
 use App\Services\PaperTrading\BookQuoteMatcher;
@@ -105,6 +107,98 @@ class ExecutionDataReadinessTest extends TestCase
         $this->assertSame('observed_tradeable_source_time_unknown', $report['checks']['broker_tradability']);
         $this->assertSame('no_complete_corporate_action_coverage', $report['checks']['corporate_actions']);
         $this->assertSame('instrument_eligibility_unverified', app(PaperMarketInputs::class)->executionReason($input, CarbonImmutable::now(), 20));
+    }
+
+    private function movingMarket(string $mode): PaperMarketGateway
+    {
+        config(['paper.market_inputs_enabled' => true, 'robinhood_mcp.execution_inputs_enabled' => true]);
+        $this->connection->update(['capability_manifest' => ['get_equity_price_book' => ['semantic_fingerprint' => $mode === 'untrusted' ? str_repeat('0', 64) : config('robinhood_mcp.operations.price_book.semantic_fingerprint')]]]);
+        $quotes = 0;
+        $gateway = new PaperMarketGateway;
+        $gateway->respond = function ($connection, $operation) use ($mode, &$quotes) {
+            $fields = match ($operation) {
+                Operation::Quotes => ['symbol' => 'DEMO', 'bid' => '99', 'ask' => '100',
+                    'bid_as_of' => now()->toIso8601String(), 'ask_as_of' => now()->toIso8601String()],
+                Operation::Instruments => ['symbol' => 'DEMO', 'id' => 'synthetic-instrument'],
+                Operation::PriceBook => ['symbol' => 'DEMO', 'book_bid' => '99.1', 'book_ask' => '100',
+                    'book_bid_quantity' => '20', 'book_ask_quantity' => '40', 'book_quantity_unit' => 'shares'],
+                Operation::Tradability => ['symbol' => 'DEMO', 'account_id' => $connection->bound_account_id, 'broker_tradeable' => true],
+                default => throw new \RuntimeException('Unexpected read.'),
+            };
+            if ($operation === Operation::Quotes && ++$quotes === 2) {
+                if ($mode === 'rate_limit') {
+                    throw new ReadFailure(ReadError::RateLimited);
+                }
+                if ($mode === 'incomplete') {
+                    return new ReadResult(TrustedHttp::RESOURCE, now()->toDateTimeImmutable(), [], false);
+                }
+                $fields['bid'] = $mode === 'moving' ? '99.2' : '99.1';
+                if ($mode === 'wrong_symbol') {
+                    $fields['symbol'] = 'OTHER';
+                }
+                if (in_array($mode, ['stale', 'future'], true)) {
+                    $fields['bid_as_of'] = ($mode === 'stale' ? now()->subMinutes(5) : now()->addSecond())->toIso8601String();
+                }
+            }
+
+            return new ReadResult(TrustedHttp::RESOURCE, now()->toDateTimeImmutable(), [BrokerRecord::from($operation, $fields,
+                $operation === Operation::PriceBook ? now()->toDateTimeImmutable() : null)], true);
+        };
+        $this->app->instance(BrokerGateway::class, $gateway);
+
+        return $gateway;
+    }
+
+    public function test_one_quote_refresh_can_match_a_moving_book_without_inventing_prices_or_a_new_session(): void
+    {
+        $gateway = $this->movingMarket('match');
+        $request = (string) Str::uuid();
+        $input = app(PaperMarketInputs::class)->collect($this->connection, $this->connection->user_id, 'DEMO', $request);
+        $this->assertSame('matched', $input->payload['book_quote_match']['status']);
+        $this->assertSame('99', $input->payload['quote_refresh']['initial_quote']['bid']);
+        $this->assertSame('99.1', $input->payload['quote']['bid']);
+        $this->assertSame('20', $input->payload['quote']['bid_size']);
+        $this->assertSame('40', $input->payload['quote']['ask_size']);
+        $this->assertSame([Operation::Quotes, Operation::Instruments, Operation::Tradability, Operation::PriceBook, Operation::Quotes], array_column($gateway->calls, 0));
+        $this->assertSame(1, $gateway->scopes);
+        $this->assertSame(array_fill(0, 5, true), $gateway->inside);
+        $this->assertSame($input->id, app(PaperMarketInputs::class)->collect($this->connection, $this->connection->user_id, 'DEMO', $request)->id);
+        $this->assertCount(5, $gateway->calls);
+        $this->assertDatabaseCount('mcp_paper_sim_orders', 0);
+        Http::assertNothingSent();
+    }
+
+    public function test_refresh_failures_and_continuing_movement_never_grant_liquidity_or_loop(): void
+    {
+        foreach (['moving', 'stale', 'future', 'wrong_symbol', 'incomplete', 'rate_limit', 'untrusted'] as $mode) {
+            $gateway = $this->movingMarket($mode);
+            $input = app(PaperMarketInputs::class)->collect($this->connection, $this->connection->user_id, 'DEMO', (string) Str::uuid());
+            $this->assertSame('unavailable', $input->payload['book_quote_match']['status'], $mode);
+            $this->assertNull($input->payload['quote']['bid_size'], $mode);
+            $this->assertNull($input->payload['quote']['ask_size'], $mode);
+            $this->assertCount($mode === 'untrusted' ? 4 : 5, $gateway->calls, $mode);
+            if (in_array($mode, ['wrong_symbol', 'incomplete', 'rate_limit'], true)) {
+                $this->assertNotNull($input->payload['quote_refresh']['error'], $mode);
+                $this->assertSame('99', $input->payload['quote']['bid'], $mode);
+            }
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_batch_deadline_prevents_the_optional_refresh(): void
+    {
+        config(['paper.batch_collection_enabled' => true]);
+        $gateway = $this->movingMarket('match');
+        $budget = function () use ($gateway) {
+            if (count($gateway->calls) >= 4) {
+                throw new ReadFailure(ReadError::Timeout);
+            }
+        };
+        $rows = app(PaperMarketInputs::class)->collectMany($this->connection, $this->connection->user_id, ['DEMO'], (string) Str::uuid(), $budget);
+        $this->assertSame('timeout', $rows['DEMO']->payload['quote_refresh']['error']);
+        $this->assertNull($rows['DEMO']->payload['quote']['bid_size']);
+        $this->assertCount(4, $gateway->calls);
+        Http::assertNothingSent();
     }
 
     public function test_synthetic_missing_and_late_inputs_never_report_real_execution_readiness(): void

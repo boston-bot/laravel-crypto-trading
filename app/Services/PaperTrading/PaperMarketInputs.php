@@ -164,6 +164,40 @@ final class PaperMarketInputs
             $execution = $portfolio ? ExecutionPolicies::current($portfolio) : null;
             if ($execution) {
                 $payload['book_quote_match'] = app(BookQuoteMatcher::class)->match($payload, CarbonImmutable::now(), $execution->payload['quote_max_age_seconds']);
+                if ($payload['book_quote_match']['reason'] === 'book_prices_or_quantities_do_not_match_quote') {
+                    // One bounded read in the caller's existing session. Never copy book prices into a quote,
+                    // relax equality, or keep retrying a moving market. Preserve the original observation.
+                    $payload['quote_refresh'] = ['initial_quote' => $payload['quote'], 'status' => 'unavailable', 'error' => null];
+                    try {
+                        if ($beforeRead) {
+                            $beforeRead();
+                        }
+                        $fresh = $this->broker->read($connection, Operation::Quotes, ['symbol' => $symbol]);
+                        if ($fresh->source !== TrustedHttp::RESOURCE || ! $fresh->complete || $fresh->continuation !== null || count($fresh->records) !== 1 ||
+                            $fresh->records[0]->operation !== Operation::Quotes || ($fresh->records[0]->fields['symbol'] ?? null) !== $symbol) {
+                            throw new ReadFailure(ReadError::Incomplete);
+                        }
+                        $fields = $fresh->records[0]->fields;
+                        $replacement = $payload['quote'];
+                        foreach (['bid', 'ask'] as $field) {
+                            $replacement[$field] = isset($fields[$field]) ? (string) $fields[$field] : null;
+                        }
+                        foreach (['bid_as_of', 'ask_as_of'] as $field) {
+                            $replacement[$field] = isset($fields[$field]) ? CarbonImmutable::parse($fields[$field])->utc()->toIso8601String() : null;
+                        }
+                        $replacement['retrieved_at'] = CarbonImmutable::instance($fresh->retrievedAt)->toIso8601String();
+                        $payload['quote'] = $replacement;
+                        $times = [$replacement['bid_as_of'], $replacement['ask_as_of']];
+                        $source = in_array(null, $times, true) ? null : CarbonImmutable::parse(min($times));
+                        $retrieved = $retrieved->max(CarbonImmutable::instance($fresh->retrievedAt));
+                        $payload['quote_refresh']['status'] = 'read_complete';
+                    } catch (ReadFailure $failure) {
+                        $payload['quote_refresh']['error'] = $failure->reason->value;
+                    } catch (\InvalidArgumentException) {
+                        $payload['quote_refresh']['error'] = 'broker_timestamp_malformed';
+                    }
+                    $payload['book_quote_match'] = app(BookQuoteMatcher::class)->match($payload, CarbonImmutable::now(), $execution->payload['quote_max_age_seconds']);
+                }
                 foreach (['bid_size', 'ask_size'] as $field) {
                     $payload['quote'][$field] = $payload['book_quote_match'][$field];
                 }
