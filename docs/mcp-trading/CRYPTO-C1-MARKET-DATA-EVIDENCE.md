@@ -1,6 +1,6 @@
 # Crypto C1: read-only Coinbase market data — evidence
 
-Status: **source complete October 22, 2026; not deployed or enabled.** Part of the [crypto automation plan](CRYPTO-AUTOMATION-PLAN.md). Collects no account data and produces no signals or orders.
+Status: **committed and deployed in `261de7e` October 22, 2026; collection remains disabled.** Part of the [crypto automation plan](CRYPTO-AUTOMATION-PLAN.md). Collects no account data and produces no signals or orders.
 
 ## Owner decisions applied
 
@@ -37,7 +37,13 @@ After implementation, the gateway alone ran against the live API (no database wr
 
 Results on the working tree, which also contains another session's uncommitted paper-dashboard work: SQLite **645 passed / 40 PostgreSQL-only skips**; PostgreSQL **685 tests / 4,751 assertions, 1 existing environment skip**. Composer validation and Pint passed on the changed files.
 
-## Deployment (owner action; not performed)
+## Deployment
+
+Completed October 22 in `261de7e`: migration `000028` applied in batch 13 after owner backup and reviewed dry run; no pending migrations. Doctor and readiness passed. [Recovery evidence](MAC-SETUP-AND-OPERATIONS.md#october-22-release-261de7e-migration-recovery-and-dashboard-deployment). Collection has not been activated.
+
+The owner subsequently added Coinbase and Robinhood Crypto keys to the development `.env`; a subsequent presence-only check confirms both are now recognized by runtime configuration. A bounded Coinbase key-permission GET succeeded with `can_view`, `can_trade` and `can_transfer` all true. Only permission booleans were reported, with no credential or account data. Robinhood key permissions remain unverified. C1 remains public-only; authenticated monitoring/reconciliation is additional work.
+
+Original deployment/activation procedure (steps 2–3 remain unperformed):
 
 1. Take the normal encrypted backup and review the pending migration, then deploy the committed release with `deploy.sh <committed-release> --migrate`. Only `2026_10_22_000028` should be new for this increment.
 2. Set `COINBASE_MARKET_DATA_PRODUCTS` (for example `BTC-USD,ETH-USD`; at most 25) and `CRYPTO_MARKET_DATA_ENABLED=true`, then recache the configuration. This is a data-collection list, not a trading universe.
@@ -47,7 +53,7 @@ Disable by setting `CRYPTO_MARKET_DATA_ENABLED=false`; stored data remains.
 
 ## Limitations
 
-- No authenticated Coinbase reads (owner decision), so no balances, orders or unrecognized-order detection.
+- C1 remains public-only: authenticated balance/order monitoring and unrecognized-order detection are not implemented by adding credentials.
 - Best bid/ask is one request per product (no public batch endpoint); 25 products cost about 51–76 requests per cycle. Public rate limits were not measured; a 429 marks the product, and so the read, partial.
 - Unattended 24/7 operation (sleep, restart, overnight alerting) is C6 work. The schedule runs whenever the Mac's scheduler runs.
-- Nothing consumes this data yet; eligibility, profiles and rules are C2.
+- Nothing consumes this data yet; eligibility, profiles and rules are C2; the source-only [C2 evaluator](CRYPTO-C2-RULES-EVIDENCE.md) is now available but not deployed.

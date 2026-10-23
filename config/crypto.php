@@ -1,6 +1,8 @@
 <?php
 
 return [
+    // C2 stored-data evidence only. No schedule, paper handoff or broker mutation is attached to this switch.
+    'strategy_evaluation_enabled' => filter_var(env('CRYPTO_STRATEGY_EVALUATION_ENABLED', false), FILTER_VALIDATE_BOOL),
     // Crypto track C1 (CRYPTO-AUTOMATION-PLAN.md): read-only Coinbase public market data. Default off.
     // Never used by an execution adapter; no credentials are sent.
     'market_data_enabled' => filter_var(env('CRYPTO_MARKET_DATA_ENABLED', false), FILTER_VALIDATE_BOOL),

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Crypto;
 
 use App\Support\Mcp\Decimal;
+use Brick\Math\BigDecimal;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -187,6 +188,8 @@ final class CryptoMarketCollector
     /** PostgreSQL numeric values come back with trailing zeros; SQLite may return integers. */
     public static function plain(string $value): string
     {
-        return str_contains($value, '.') ? rtrim(rtrim($value, '0'), '.') : $value;
+        // SQLite may serialize tiny fixture numerics using an exponent. This boundary normalizes database
+        // serialization only; domain interfaces continue to reject exponents and unquoted decimal inputs.
+        return (string) BigDecimal::of($value)->stripTrailingZeros();
     }
 }

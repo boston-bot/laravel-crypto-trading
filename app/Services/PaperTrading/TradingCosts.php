@@ -33,6 +33,15 @@ final class TradingCosts
     /** A displayed-book paper fill is modeled as one execution. Thresholds, caps and cent rounding apply per execution. */
     public function fee(array $schedule, string $side, Decimal $quantity, Decimal $price): Decimal
     {
+        if (($schedule['kind'] ?? null) === 'venue_notional_rate_v1') {
+            // Resting and immediately matched limit fills can have different roles. Until role-specific
+            // fills are verified, reserve the greater rate; maker is not always cheaper than taker.
+            $maker = Decimal::from($schedule['maker_rate']);
+            $taker = Decimal::from($schedule['taker_rate']);
+            $rate = $maker->compareTo($taker) > 0 ? $maker : $taker;
+
+            return $quantity->multipliedBy($price)->multipliedBy($rate)->rounded(18, RoundingMode::CEILING);
+        }
         $zero = Decimal::from('0');
         $notional = $quantity->multipliedBy($price);
         $commission = $quantity->multipliedBy(Decimal::from($schedule['commission_per_share']));
@@ -56,6 +65,10 @@ final class TradingCosts
     /** Upper bound for a buy reservation, independent of later partial execution boundaries. */
     public function buyReserve(array $schedule, Decimal $quantity): Decimal
     {
+        if (($schedule['kind'] ?? null) === 'venue_notional_rate_v1') {
+            throw new \InvalidArgumentException('Notional fees require a price; use the instrument-aware sizer.');
+        }
+
         return $quantity->multipliedBy(Decimal::from($schedule['commission_per_share'])->plus(Decimal::from($schedule['cat_per_share'])))
             ->plus($quantity->multipliedBy(Decimal::from('0.005')))->rounded(18, RoundingMode::CEILING);
     }

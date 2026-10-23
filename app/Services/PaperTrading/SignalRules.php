@@ -44,7 +44,7 @@ final class SignalRules
             return self::result('wait', 'maximum_chase_exceeded');
         }
         // The profile stop is indicative; an actual fill must pin its own entry-minus-ATR stop at the future handoff.
-        $stop = $price->minus($atr->multipliedBy(Decimal::from($p['initial_stop_atr'])))->rounded(4, RoundingMode::UP);
+        $stop = $price->minus($atr->multipliedBy(Decimal::from($p['initial_stop_atr'])))->rounded($p['price_scale'] ?? 4, RoundingMode::UP);
         if ($stop->compareTo(Decimal::from('0')) <= 0 || $stop->compareTo($price) >= 0) {
             return self::result('unavailable', 'initial_stop_invalid');
         }

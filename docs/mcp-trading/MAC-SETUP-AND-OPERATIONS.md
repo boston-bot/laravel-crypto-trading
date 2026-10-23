@@ -804,3 +804,67 @@ The chart contains only verified recorded session-opening valuations for the cur
 Refresh reloads stored data only. It does not collect quotes, repair profiles, run signals, fill orders or modify settings. Existing menu/header actions retain their documented behavior. Enabled warm-up/evaluation switches are configuration indicators; actual readiness and recorded outcomes determine whether data is available. The present warm-up failure is not fixed by adding this page.
 
 [Accounting, privacy, tests and visual verification](M5-PAPER-DASHBOARD-EVIDENCE.md).
+
+### October 22 release `261de7e`: migration recovery and dashboard deployment
+
+The owner's encrypted backup `mcp-trading-20261023T012251Z.dump.enc` completed before the initial schema deployment failed. Recovery supplied the existing private credential path explicitly for both the migration dry run and deployment:
+
+```sh
+MCP_MIGRATION_CREDENTIALS_FILE="$HOME/.config/investing-ops/migration.json" \
+  ./deploy/macos/deploy.sh 261de7e --migrate
+```
+
+The dry run verified the configured database/schema owner and reviewed only additive migration `2026_10_22_000028_create_mcp_crypto_market_data`. Deployment succeeded; the migration is recorded in batch 13, with no pending migrations. Its four tables are in database `postgres`, schema `mcp_trading`, owned by `admin`, with runtime DML privileges. No backfill was required.
+
+Post-deployment `mcp:doctor` passed, `/ready` returned 200, LAN login returned 200, `/mcp/paper` redirected unauthenticated requests to the LAN login, and `/.env` returned 403. The Paper Trading dashboard is now deployed. These checks do not constitute a fresh authenticated browser review. Existing forward-paper flags remain enabled; crypto market collection, both crypto venue write flags, agentic brokerage writes, legacy schedules and in-app AI remain disabled. No crypto collection or trade was triggered. No application code changed during recovery, so the source increment's existing test evidence applies; deployment rebuilt frontend assets successfully.
+
+### Crypto C2 stored-data evaluation (October 22 source increment)
+
+Source only; not included in deployed `261de7e`. Commit/review the increment, take the normal encrypted backup and deploy the committed revision with `--migrate` and the explicit private migration credential path. Pending migration `000029` extends shared paper tables with instrument identity and standalone operator-owned crypto sleeves. It is forward-only; review its nullable connections, constraints and partial indexes. It does not create a portfolio or change an existing equity balance during migration.
+
+After deployment, this explicit command records the owner-confirmed $400 crypto virtual sleeve and a versioned policy. Replace the operator ID and UUID with real local values; use the same UUID when retrying the same request. It creates no order and enables no service:
+
+```sh
+php artisan mcp:crypto-policy --actor=1 --request=YOUR-STABLE-UUID --base=0
+```
+
+The command returns portfolio/policy IDs and version. For a subsequent version, use a new request UUID and the current version as `--base`. The optional `--costs=/private/path/crypto-fees.json` accepts a JSON array of explicit product fee observations, each with these fields:
+
+```json
+{
+  "version": "your-reviewed-fee-observation-version",
+  "product_id": "BTC-USD",
+  "cost_scope": "product_all_in",
+  "maker_rate": "REPLACE_WITH_OBSERVED_DECIMAL_FRACTION",
+  "taker_rate": "REPLACE_WITH_OBSERVED_DECIMAL_FRACTION",
+  "observed_at": "REPLACE_WITH_OBSERVATION_TIME_IN_ISO_8601",
+  "valid_until": "REPLACE_WITH_EXPIRY_WITHIN_ONE_DAY_OF_OBSERVATION",
+  "source": "Your verified source and product applicability"
+}
+```
+
+The placeholders deliberately fail validation. Never substitute a guessed account tier. `cost_scope=product_all_in` is the applying operator's confirmation that the quoted rates cover that particular pair's percentage charges, including applicable taxes/commissions, and no unmodeled fixed charge applies. Both timestamps require explicit ISO 8601 timezones. Without a verified, current product fee schedule the policy can exist, but entry evidence remains unavailable. The code reserves the greater of maker and taker rates on both sides, since maker is not necessarily cheaper. Actual fee/tax rounding verification is still pending; this is research evidence.
+
+The October 23 source increment provides an independent, manual read-only fee-tier report:
+
+```sh
+php artisan mcp:crypto-fees --actor=1
+```
+
+An optional `--credential=ID` selects a specific active Coinbase credential; otherwise the existing resolver uses an active configured credential. This makes one fixed spot/CBE transaction-summary GET without redirect or retry. Output excludes balances and credentials, and includes decimal rate strings, a response hash and retrieval time. It never creates a policy or opening balance, changes flags, or calls the broker's order/preview endpoints. It is not scheduled and does not run during evaluation. A successful report says `requires_product_review`: compare each pair with the signed-in Coinbase Advanced fee page, including separate pair schedules, taxes and commissions, before creating the product-specific fee observation. Include the report hash in the source reference. Unknown tax or cost-plus commission remains a blocker; never copy account rates blindly across products.
+
+`COINBASE_MARKET_DATA_PRODUCTS` bounds evaluation to 1–25 collected pairs. Any eligible USD spot coin can be included, with `BTC-USD` also collected for the benchmark; this is not automatic whole-exchange discovery. C1 collection has its own opt-in. After a separately deliberate configuration/cache refresh, the new default-off setting permits a manual stored-data evaluation:
+
+```dotenv
+CRYPTO_STRATEGY_EVALUATION_ENABLED=true
+```
+
+```sh
+php artisan mcp:crypto-evaluate --actor=1 --portfolio=THE_RETURNED_PORTFOLIO_ID
+```
+
+There is no C2 evaluation schedule or paper-order handoff. The command returns statuses/reasons and stores immutable shared profile/signal evidence; it does not fetch data, call an LLM, reserve cash, fill orders or submit to a broker. Same-window retries return the frozen first result. Changed/funded/exposed portfolios require C3 valuation and lifecycle integration and are blocked. Disabling the switch preserves all history. Existing equity paper flags are independent.
+
+Follow-up presence-only checks confirm both venue credentials are now recognized by the deployed app. No new authenticated call was made after private keys appeared in the IDE context; rotate exposed keys at the venues and replace local configuration. No key permission or write flag was changed by C2 development.
+
+[Source behavior, migration review, tests and remaining C2/C3 acceptance](CRYPTO-C2-RULES-EVIDENCE.md).

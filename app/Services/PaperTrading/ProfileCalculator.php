@@ -19,6 +19,8 @@ final class ProfileCalculator
     /** @param array|null $earnings result of EarningsCalendar::status(); null means no earnings source */
     public function compute(array $bars, array $benchmark, array $p, ?array $earnings = null): array
     {
+        $scale = $p['price_scale'] ?? 8;
+        $levelScale = $p['price_scale'] ?? 4;
         $result = ['profile_version' => self::VERSION, 'session_date' => $bars === [] ? null : $bars[array_key_last($bars)][0],
             'status' => 'unavailable', 'reason' => null, 'setup' => null, 'indicators' => null, 'market' => null, 'checks' => [], 'levels' => null,
             'earnings' => $earnings ?? ['status' => 'unavailable', 'reason' => 'earnings_source_unconfigured'], 'entry_blockers' => []];
@@ -35,15 +37,15 @@ final class ProfileCalculator
         }
         $closes = array_map(fn ($bar) => Decimal::from($bar[4]), $bars);
         $close = $closes[array_key_last($closes)];
-        $smaFast = $this->sma($closes, $p['fast_sma_sessions']);
-        $smaSlow = $this->sma($closes, $p['slow_sma_sessions']);
-        $ema = $this->ema($closes, $p['ema_sessions']);
-        $atr = $this->atr($bars, $p['atr_sessions']);
-        $return = $this->change($closes, $p['relative_strength_sessions']);
+        $smaFast = $this->sma($closes, $p['fast_sma_sessions'], $scale);
+        $smaSlow = $this->sma($closes, $p['slow_sma_sessions'], $scale);
+        $ema = $this->ema($closes, $p['ema_sessions'], $scale);
+        $atr = $this->atr($bars, $p['atr_sessions'], $scale);
+        $return = $this->change($closes, $p['relative_strength_sessions'], $scale);
         $benchCloses = array_map(fn ($bar) => Decimal::from($bar[4]), $benchmark);
         $benchClose = $benchCloses[array_key_last($benchCloses)];
-        $benchSma = $this->sma($benchCloses, $p['market_filter_sma_sessions']);
-        $benchReturn = $this->change($benchCloses, $p['relative_strength_sessions']);
+        $benchSma = $this->sma($benchCloses, $p['market_filter_sma_sessions'], $scale);
+        $benchReturn = $this->change($benchCloses, $p['relative_strength_sessions'], $scale);
         $range = array_slice($bars, -$p['breakout_range_sessions']);
         $high = $this->extreme($range, 2, 1);
         $low = $this->extreme($range, 3, -1);
@@ -56,7 +58,7 @@ final class ProfileCalculator
         $atrOf = fn (string $multiple) => $atr->multipliedBy(Decimal::from($multiple));
         $checks = [
             'uptrend' => $close->compareTo($smaSlow) > 0 && $smaFast->compareTo($smaSlow) > 0,
-            'relative_strength' => $return->compareTo($benchReturn) > 0,
+            'relative_strength' => $return->compareTo($benchReturn) >= (($p['relative_strength_inclusive'] ?? false) ? 0 : 1),
             // ATR / close * 100 <= maximum, cross-multiplied.
             'volatility' => $atr->multipliedBy(Decimal::from('100'))->compareTo(Decimal::from($p['max_atr_pct'])->multipliedBy($close)) <= 0,
             'tight_range' => $high->minus($low)->compareTo($atrOf($p['breakout_max_range_atr'])) <= 0,
@@ -84,8 +86,8 @@ final class ProfileCalculator
         if ($trigger !== null) {
             // Rounded toward less risk: a lower maximum entry and a higher reference stop.
             $result['levels'] = ['trigger' => (string) $trigger,
-                'max_entry' => (string) $trigger->plus($atrOf($p['max_chase_atr']))->rounded(4, RoundingMode::DOWN),
-                'initial_stop' => (string) $trigger->minus($atrOf($p['initial_stop_atr']))->rounded(4, RoundingMode::UP)];
+                'max_entry' => (string) $trigger->plus($atrOf($p['max_chase_atr']))->rounded($levelScale, RoundingMode::DOWN),
+                'initial_stop' => (string) $trigger->minus($atrOf($p['initial_stop_atr']))->rounded($levelScale, RoundingMode::UP)];
         }
         $earningsBlocker = match ($result['earnings']['status']) {
             'pass' => null,
@@ -97,25 +99,26 @@ final class ProfileCalculator
         return $result;
     }
 
-    private function sma(array $values, int $n): Decimal
+    private function sma(array $values, int $n, int $scale = 8): Decimal
     {
-        return $this->sum(array_slice($values, -$n))->dividedBy(Decimal::from((string) $n), 8);
+        return $this->sum(array_slice($values, -$n))->dividedBy(Decimal::from((string) $n), $scale);
     }
 
     /** Seeded with the first window's simple average; every step rounds to 12 places so results are reproducible. */
-    private function ema(array $values, int $n): Decimal
+    private function ema(array $values, int $n, int $scale = 8): Decimal
     {
-        $k = Decimal::from('2')->dividedBy(Decimal::from((string) ($n + 1)), 12);
-        $ema = $this->sum(array_slice($values, 0, $n))->dividedBy(Decimal::from((string) $n), 12);
+        $internalScale = $scale === 8 ? 12 : $scale + 6;
+        $k = Decimal::from('2')->dividedBy(Decimal::from((string) ($n + 1)), $internalScale);
+        $ema = $this->sum(array_slice($values, 0, $n))->dividedBy(Decimal::from((string) $n), $internalScale);
         foreach (array_slice($values, $n) as $value) {
-            $ema = $ema->plus($k->multipliedBy($value->minus($ema)))->rounded(12, RoundingMode::HALF_EVEN);
+            $ema = $ema->plus($k->multipliedBy($value->minus($ema)))->rounded($internalScale, RoundingMode::HALF_EVEN);
         }
 
-        return $ema->rounded(8, RoundingMode::HALF_EVEN);
+        return $ema->rounded($scale, RoundingMode::HALF_EVEN);
     }
 
     /** Simple mean of the last n true ranges. */
-    private function atr(array $bars, int $n): Decimal
+    private function atr(array $bars, int $n, int $scale = 8): Decimal
     {
         $ranges = [];
         for ($i = count($bars) - $n; $i < count($bars); $i++) {
@@ -127,14 +130,14 @@ final class ProfileCalculator
             $ranges[] = $range;
         }
 
-        return $this->sum($ranges)->dividedBy(Decimal::from((string) $n), 8);
+        return $this->sum($ranges)->dividedBy(Decimal::from((string) $n), $scale);
     }
 
-    private function change(array $values, int $n): Decimal
+    private function change(array $values, int $n, int $scale = 8): Decimal
     {
         $last = $values[array_key_last($values)];
 
-        return $last->dividedBy($values[count($values) - 1 - $n], 8)->minus(Decimal::from('1'));
+        return $last->dividedBy($values[count($values) - 1 - $n], $scale)->minus(Decimal::from('1'));
     }
 
     private function extreme(array $bars, int $index, int $direction): Decimal

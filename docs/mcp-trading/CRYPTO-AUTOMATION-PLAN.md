@@ -1,6 +1,6 @@
 # Crypto automation plan (Coinbase and Robinhood Crypto)
 
-Status: **adopted by the owner October 22, 2026; C0 done in source, except the live key-permission check, which is blocked (no crypto credentials configured).** C1 (Coinbase public market data) is complete in source and not deployed; C2–C7 are planned work, not implemented functionality. This plan does not authorize brokerage mutations, live mode, API-key permission changes or resuming any legacy schedule. [AGENTS.md](../../AGENTS.md#crypto-track-adopted-october-22-2026) records the standing constraints; the [checklist](DEVELOPMENT-CHECKLIST.md#crypto-track--coinbase-and-robinhood-crypto) records evidence.
+Status: **adopted by the owner October 22, 2026; C0 and C1 are deployed in `261de7e`, with crypto collection disabled.** C2 stored-data evaluation and virtual-sleeve code is now implemented in source, with runtime/replay acceptance still pending; C3–C7 remain planned work. Coinbase key permissions were read successfully from development configuration; Robinhood permissions remain unverified. Credentials are now recognized in both development and deployed configuration (presence-only follow-up); no additional authenticated request was made. This plan does not authorize brokerage mutations, live mode, API-key permission changes or resuming any legacy schedule. [AGENTS.md](../../AGENTS.md#crypto-track-adopted-october-22-2026) records the standing constraints; the [checklist](DEVELOPMENT-CHECKLIST.md#crypto-track--coinbase-and-robinhood-crypto) records evidence.
 
 ## Summary
 
@@ -46,18 +46,18 @@ Every invariant in AGENTS.md applies unchanged: exact decimals, deterministic ve
 |---|---|---|
 | ~~Adopt this plan; amend AGENTS.md, the index and the implementation-plan non-goals~~ Adopted October 22 | C0 | — |
 | ~~Venue(s)~~ Coinbase first (October 22) | C1 | — |
-| Symbol universe: allowlisted pairs, or a crypto watchlist | C2 | No crypto signals |
-| Crypto sleeve: virtual capital, risk per trade, maximum position, maximum open positions, daily loss pause | C2 | Paper evaluation blocked |
+| Any coins (owner, October 22): no owner-imposed coin restriction; venue tradability and deterministic eligibility/data-quality checks still apply. Evaluation is bounded to the configured collection universe (at most 25 products); automatic discovery remains unimplemented. | C2 | No crypto signals; do not interpret this as an unbounded API scan |
+| Paper sleeve (owner, October 22): $400 starting virtual cash, 5% risk per trade, 25% maximum position, 3 open positions, 5% daily loss pause | C2 | Source policy/ledger support implemented; no runtime crypto policy or opening balance applied yet |
 | Order with respect to equity M6: before or after | C4 | Shared execution boundary follows the equity schedule |
-| API keys: owner declined adding a key for now (October 22) | C1/C5 | Public market data only; no balances, orders, unrecognized-order detection or reconciliation, so C5/C7 stay blocked until a key exists |
+| Keys added to development `.env` (owner, October 22); runtime subsequently recognizes both (presence check only). Coinbase permission GET confirms view/trade/transfer all true; Robinhood permissions unverified. | C1/C5 | C1 still uses public endpoints. Authenticated monitoring/reconciliation is not implemented by configuring keys; C5/C7 gates remain incomplete |
 | Always-on hosting: the Mac with sleep disabled, or another host making outbound connections only | C6 | No unattended overnight operation |
 | Live pilot limits and explicit authorization | C7 | Paper only |
 
 ## Milestones
 
-### C0 — Adoption and containment (1–2 days) — done in source October 22, key check blocked
+### C0 — Adoption and containment (1–2 days) — deployed October 22, Robinhood permissions unverified
 
-Delivered: the plan was adopted and the documents amended; venue flags `COINBASE_WRITES_ENABLED` and `ROBINHOOD_CRYPTO_WRITES_ENABLED` were added; the live branch of `TradeExecutionService` was removed (any non-paper mode is refused before a broker call); the approval API and command refuse outside paper mode; and `php artisan broker:key-permissions` was added. Blocked: no Coinbase or Robinhood Crypto credentials exist in `.env` or `broker_credentials`, so no key's actual permissions could be read. Run the command after any key is configured. Robinhood Crypto documents no permission read, so its key's permissions stay unverified. [Evidence](DEVELOPMENT-CHECKLIST.md#crypto-track--coinbase-and-robinhood-crypto).
+Delivered: the plan was adopted and the documents amended; venue flags `COINBASE_WRITES_ENABLED` and `ROBINHOOD_CRYPTO_WRITES_ENABLED` were added; the live branch of `TradeExecutionService` was removed (any non-paper mode is refused before a broker call); the approval API and command refuse outside paper mode; and `php artisan broker:key-permissions` was added. October 22 follow-up: both keys now exist in development and are recognized in runtime configuration (presence-only follow-up). A bounded Coinbase permission read succeeded: view, trade and transfer are all permitted. Robinhood Crypto documents no permission read, so its key's permissions stay unverified. Configuring a key does not enable application writes. [Evidence](DEVELOPMENT-CHECKLIST.md#crypto-track--coinbase-and-robinhood-crypto).
 
 Original scope:
 
@@ -69,9 +69,9 @@ Original scope:
 
 Acceptance: tests show that no code path reaches `placeOrder` on either client while the new flags are off, including with `BROKER_MODE=live` and `BROKERAGE_WRITES_ENABLED=true`.
 
-### C1 — Read-only crypto market data (1–2 weeks) — Coinbase done in source October 22, not deployed
+### C1 — Read-only crypto market data (1–2 weeks) — deployed October 22, collection off
 
-Delivered for Coinbase using public endpoints only, because no key is configured: products, best bid/ask, closed five-minute and daily candles, immutable reads with provenance, a `crypto_data` health check, and migration `000028`. Account and order reads wait for a key. [Evidence](CRYPTO-C1-MARKET-DATA-EVIDENCE.md).
+Delivered for Coinbase using public endpoints only (new development credentials do not change this gateway): products, best bid/ask, closed five-minute and daily candles, immutable reads with provenance, a `crypto_data` health check, and migration `000028`. Authenticated account and order monitoring remain to be implemented and verified. [Evidence](CRYPTO-C1-MARKET-DATA-EVIDENCE.md).
 
 Original scope:
 
@@ -83,7 +83,15 @@ Original scope:
 
 Acceptance: fake-client unit tests that reject unexpected network calls; PostgreSQL integration tests for persistence and concurrency; one bounded live read-only check per venue, recorded as evidence.
 
-### C2 — Eligibility, profiles, rules and costs (1–2 weeks)
+### C2 — Eligibility, profiles, rules and costs (1–2 weeks) — stored-data source increment October 22
+
+Owner inputs confirmed October 22: any coins subject to venue eligibility, $400 starting virtual cash, 5% risk per trade, 25% maximum position, at most 3 open positions, and a 5% daily loss pause. Initial dollar equivalents are $20 risk, $100 position cap and $20 daily loss pause. Risk is the maximum planned stop loss including modeled costs, not a required spend; the position/cash caps may bind first. A pause blocks new entries while exits continue. These are paper research inputs, not live authorization or an applied policy. Parameter validation/replay and cost verification remain required.
+
+Source increment: the shared profile/signal/sizing/cost engine now supports a separate crypto virtual sleeve and immutable stored-data evaluations. Default off; migration `000029` pending deployment. Product-specific fee verification, held-portfolio lifecycle and replay remain incomplete. [Implementation, tests and exact boundaries](CRYPTO-C2-RULES-EVIDENCE.md).
+
+October 23 source follow-up adds a manual, read-only Coinbase spot/CBE fee-tier report for operator review, explicit product-all-in cost scope and timezone-qualified fee observations. Crypto sizing uses the greater maker/taker rate because either liquidity role may be more expensive. Account rates still require pair-specific applicability/tax/commission review; no real schedule or runtime policy has been applied. C2's actual fee-verification gate remains open; lifecycle/replay belongs to C3.
+
+Original scope:
 
 - Add an asset-class/venue dimension to eligibility, profiles, signals, sizing and paper accounting; generalize session and quantity-unit assumptions.
 - Crypto eligibility rules, profile calculator inputs on the UTC daily boundary, and a crypto playbook with its own parameter versions.

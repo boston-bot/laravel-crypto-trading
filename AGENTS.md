@@ -25,6 +25,7 @@ The owner adopted [the crypto automation plan](docs/mcp-trading/CRYPTO-AUTOMATIO
 
 ## Working agreement
 
+- Do not check Hjarni or invoke its recall/remember skills for this repository. Use repository documentation, Git history and verified local state for session continuity unless the owner explicitly requests Hjarni.
 - Inspect current code and Git changes before editing. Preserve unrelated work.
 - Implement one milestone at a time, with migrations, meaningful tests, and documentation together. Do not treat unchecked roadmap items as implemented functionality.
 - Continue routine local implementation and verification without repeatedly asking permission. Stop only for missing essential information or consequential actions outside the request.
