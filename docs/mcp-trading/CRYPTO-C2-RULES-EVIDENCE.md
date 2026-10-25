@@ -1,6 +1,6 @@
 # Crypto C2: stored-data rules and virtual sleeve
 
-Status: **source implementation, October 22–23, 2026; not committed, deployed or enabled.** Requires migration `2026_10_22_000029_add_crypto_strategy_context`. No runtime policy, virtual opening balance, signal, order or fill was created by this development work.
+Status: **implementation committed in `e597630`; schema installed October 25, 2026, still disabled.** During deployment of `3012873`, the owner separately authorized the previously pending migration `2026_10_22_000029_add_crypto_strategy_context` after a dry run and verified encrypted backup/restore. It applied in batch 14 in `postgres` / `mcp_trading`; existing equity records and the paper ledger are unchanged. The instrument-policy table is empty, crypto collection/evaluation and all live writes remain off, and no crypto virtual opening balance, policy, signal, order or fill was created. Product-specific all-in fee review and remaining C2 acceptance are still pending. [Deployment evidence](M5-SYMBOL-EVALUATION-AND-SCHEDULER-EVIDENCE.md#owner-authorized-deployment--october-25).
 
 ## Owner inputs
 

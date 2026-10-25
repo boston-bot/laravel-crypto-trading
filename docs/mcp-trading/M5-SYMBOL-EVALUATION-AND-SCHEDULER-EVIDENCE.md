@@ -1,6 +1,6 @@
 # Immediate symbol evaluation and wall-clock scheduling — October 25, 2026
 
-M5 source increment; not committed or deployed by this task. Builds on the [Friday review](M5-OCT23-FORWARD-PAPER-REVIEW.md). No live execution authorization.
+M5 increment, deployed after the source verification below; see the deployment follow-up. Builds on the [Friday review](M5-OCT23-FORWARD-PAPER-REVIEW.md). No live execution authorization.
 
 ## Diagnosed causes
 
@@ -29,3 +29,15 @@ The runtime diagnosis read stored observations/cycles and monitoring outcomes un
 Deploy a reviewed committed source revision using the existing application deploy procedure. Separately back up the installed scheduler plist, replace only its elapsed scheduling key with the wildcard calendar dictionary, validate it, and reload only `local.investing-ops.scheduler` through launchctl. Preserve its dedicated PHP path, environment, log paths and all private runtime configuration. Do not rerun the full installer merely to update scheduling; the installer could overwrite the existing LAN/Nginx configuration. This source task did not deploy code or change the installed LaunchAgent.
 
 Observe several minute boundaries and a full market session: scheduler starts, expected five-minute cycles, quote source age at recording/evaluation, local processing time, quote/book matches and provider backoff. Measure rather than asserting a recovered cycle or freshness improvement. Next M5 work also includes verifying the PLTR/ELV profiles against their newer reference data and reviewing TMO/ELV corporate-action reconciliation. M6 remains unstarted.
+
+## Owner-authorized deployment — October 25
+
+Committed as **`30128733cf88fcf3901c10d96371bc0a691b4996`** and deployed using the normal script. Focused tests were repeated before deployment: 18 / 189 assertions passed; Composer validation and plist syntax passed. Full-suite results above remain applicable.
+
+Preflight discovered runtime source `e597630` already contained pending crypto migration `000029`, and the deploy guard correctly refused a migration-free path. The owner separately authorized applying that migration after review. The owner-scoped dry run passed. A fresh encrypted backup `mcp-trading-20261025T210824Z.dump.enc` (SHA-256 `5b00b15b26897b4e0cd519735e9713a7e3885be26293493ed715bc0d17ecbd13`) was created and copied to the configured offsite folder; independent cloud retrieval was not tested. Its isolated restore drill verified **91 tables / 25,183 rows**, readable encrypted columns and scratch cleanup. The initial drill invocation passed only a basename and found no matching manifest; rerunning with the absolute path passed.
+
+The reviewed forward-only migration applied in **batch 14**, database `postgres`, schema `mcp_trading`. All existing portfolio/profile/cycle/signal rows have equity/Robinhood-agentic context; their counts remain 1 / 183 / 136 / 4,319. The new instrument-policy table is owner-owned (`admin`), runtime SELECT/INSERT privileges are present, and it has zero rows. No crypto opening cash, policy or activation was applied. No migrations remain pending.
+
+Runtime code is clean at `3012873`; `/ready` returned 200, unauthenticated `/mcp/paper` returned 302, and `/.env` returned 403. Doctor verifies the expected database/schema/runtime role/owner. Exact before/after comparison confirms an unchanged private `.env` hash, all trading flags, virtual cash `$449.692859`, CRWD quantity `0.201128`, basis `$50.307141`, ledger version 3, one paper order and one fill. Agentic/Coinbase/Robinhood Crypto live writes, legacy schedules, crypto collection/evaluation and AI decisions/research remain off. Existing forward-paper gates stay on.
+
+Only the installed scheduler's timing key changed at **21:13:43 UTC** (16:13:43 Central). Its PHP path, environment, logs, label and other fields compare exactly to the private backup at `runtime/private-config-backups/scheduler-before-calendar-20261025T211343Z.plist`. Plist validation and scheduler-only bootout/bootstrap passed. Observed invocations were 21:13:43 (`RunAtLoad`), **21:14:05** and **21:15:03 UTC**, confirming firing in consecutive wall-clock minutes. Normal launchd dispatch latency is not a guarantee of execution exactly at second zero. Full market-session coverage and freshness remain to be measured after reopening. No full installer or Nginx override change was performed.
