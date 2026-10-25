@@ -43,8 +43,8 @@ final class PaperMarketInputs
         return $this->record($connection, $actor, $symbol, $requestId, 'broker_read', $payload, $source, $retrieved, $reason);
     }
 
-    /** One shared MCP session; quotes batched, other contracts remain exact-symbol reads. */
-    public function collectMany(McpConnection $connection, int $actor, array $symbols, string $requestId, callable $beforeRead, ?callable $afterBatch = null): array
+    /** One shared MCP session; quotes batched, other contracts remain exact-symbol reads. Local consumers may run after each stored row. */
+    public function collectMany(McpConnection $connection, int $actor, array $symbols, string $requestId, callable $beforeRead, ?callable $afterBatch = null, ?callable $afterRecord = null): array
     {
         Validator::make(['symbols' => $symbols, 'request_id' => $requestId], [
             'symbols' => ['required', 'array', 'min:1', 'max:250'], 'symbols.*' => ['required', 'string', 'distinct', 'regex:/^[A-Z][A-Z0-9.-]{0,15}$/D'],
@@ -57,7 +57,7 @@ final class PaperMarketInputs
         abort_if(array_diff($symbols, $allowed), 422, 'Collect current watchlist symbols or holdings only.');
         $rows = [];
         $size = max(1, min(25, (int) config('paper.market_batch_symbols', 5)));
-        $this->broker->within($connection, function () use ($connection, $actor, $symbols, $requestId, $beforeRead, $afterBatch, $size, &$rows) {
+        $this->broker->within($connection, function () use ($connection, $actor, $symbols, $requestId, $beforeRead, $afterBatch, $afterRecord, $size, &$rows) {
             foreach (array_chunk($symbols, $size) as $chunk) {
                 $pending = [];
                 $batchRows = [];
@@ -66,6 +66,9 @@ final class PaperMarketInputs
                     $key = Uuid::uuid5($requestId, $symbol)->toString();
                     if ($repeat = $this->repeat($connection, $symbol, $key)) {
                         $rows[$symbol] = $batchRows[$symbol] = $repeat;
+                        if ($afterRecord) {
+                            $afterRecord([$symbol => $repeat]);
+                        }
                     } else {
                         $pending[$symbol] = $key;
                     }
@@ -94,6 +97,9 @@ final class PaperMarketInputs
                     $quote = $batch['quotes'][$symbol] ?? new ReadResult(TrustedHttp::RESOURCE, CarbonImmutable::now(), [], false);
                     [$payload, $source, $retrieved, $reason] = $this->gather($connection, $symbol, $quote, $beforeRead);
                     $rows[$symbol] = $batchRows[$symbol] = $this->record($connection, $actor, $symbol, $key, 'broker_read', $payload, $source, $retrieved, $reason);
+                    if ($afterRecord) {
+                        $afterRecord([$symbol => $rows[$symbol]]);
+                    }
                 }
                 if ($afterBatch && $batchRows) {
                     $afterBatch($batchRows);

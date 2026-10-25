@@ -9,7 +9,7 @@ use App\Models\User;
 use App\Services\Monitoring\AccountScope;
 use Carbon\CarbonImmutable;
 
-/** Uses later stored observations for old orders before creating any new intent. Batch collection, then local paper processing; never broker writes. */
+/** Uses later stored observations for old orders before new intents. Batched quotes, per-record local paper processing; never broker writes. */
 final class SignalPaperCycle
 {
     public function tick(?int $account = null): int
@@ -41,6 +41,7 @@ final class SignalPaperCycle
 
         if (config('paper.batch_collection_enabled')) {
             app(BatchMarketInputCollector::class)->tick($account, true, function ($connection, $symbols) use (&$count) {
+                // Consume each stored symbol before gathering the next, even within a quote batch.
                 // Opening evidence and old-order fills precede new intents. Existing order-type fill rules remain in force.
                 $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->first();
                 if (! $portfolio || ! RuleEligibilityPolicies::current($portfolio)) {

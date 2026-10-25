@@ -17,7 +17,7 @@ use Ramsey\Uuid\Uuid;
 /** Bounded full-universe attempts; completion never implies that quotes satisfy execution freshness. */
 final class BatchMarketInputCollector
 {
-    public function tick(?int $account = null, bool $scheduled = false, ?callable $afterBatch = null): array
+    public function tick(?int $account = null, bool $scheduled = false, ?callable $afterRecord = null): array
     {
         $result = ['recorded' => 0, 'selected' => 0, 'stopped' => null];
         if (! config('paper.batch_collection_enabled') || ! config('paper.market_collection_enabled') || ! config('paper.market_inputs_enabled')) {
@@ -71,7 +71,8 @@ final class BatchMarketInputCollector
                     continue;
                 }
                 $request = Uuid::uuid5(Uuid::NAMESPACE_URL, 'batch-paper-market:'.$connection->id.':'.AccountScope::key($connection).':'.$connection->auth_generation.':'.intdiv($now->getTimestamp(), 300))->toString();
-                $rows = app(PaperMarketInputs::class)->collectMany($connection, $connection->user_id, $symbols, $request, $beforeRead, $afterBatch ? fn ($rows) => $afterBatch($connection, array_keys($rows)) : null);
+                $rows = app(PaperMarketInputs::class)->collectMany($connection, $connection->user_id, $symbols, $request, $beforeRead,
+                    afterRecord: $afterRecord ? fn ($rows) => $afterRecord($connection, array_keys($rows)) : null);
                 $result['recorded'] += count($rows);
                 try {
                     $beforeRead();

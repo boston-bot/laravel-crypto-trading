@@ -85,6 +85,35 @@ class BatchMarketInputCollectorTest extends TestCase
         $this->assertSame([Operation::Quotes, ['symbols' => ['DEMO', 'BRAVO', 'ALFA']]], $this->gateway->calls[0]);
     }
 
+    public function test_record_consumer_failure_keeps_the_input_and_retry_resumes_without_refetching_it(): void
+    {
+        $request = (string) Str::uuid();
+        $seen = [];
+        $consumer = function ($rows) use (&$seen) {
+            $seen[] = array_key_first($rows);
+            throw new \RuntimeException('Synthetic consumer crash.');
+        };
+        try {
+            app(PaperMarketInputs::class)->collectMany($this->connection, $this->connection->user_id, ['DEMO', 'ALFA'], $request, fn () => null, afterRecord: $consumer);
+            $this->fail('Expected consumer failure.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('Synthetic consumer crash.', $e->getMessage());
+        }
+        $input = MarketInput::where('origin', 'broker_read')->sole();
+        $this->assertSame(['DEMO'], $seen);
+        $this->gateway->calls = [];
+        $rows = app(PaperMarketInputs::class)->collectMany($this->connection, $this->connection->user_id, ['DEMO', 'ALFA'], $request, fn () => null,
+            afterRecord: function ($rows) use (&$seen) {
+                $seen[] = array_key_first($rows);
+            });
+        $this->assertSame(['DEMO', 'DEMO', 'ALFA'], $seen);
+        $this->assertSame($input->id, $rows['DEMO']->id);
+        $this->assertSame([Operation::Quotes, ['symbol' => 'ALFA']], $this->gateway->calls[0]);
+        $this->assertSame(2, MarketInput::where('origin', 'broker_read')->count());
+        $this->assertSame(0, SimulationOrder::count());
+        Http::assertNothingSent();
+    }
+
     public function test_missing_symbol_stays_unknown_and_the_next_batch_does_not_borrow_another_price(): void
     {
         $this->gateway->respond = fn ($c, $op, $filters) => $this->response($op, $filters, $op === Operation::Quotes ? ['DEMO', 'ALFA'] : null);

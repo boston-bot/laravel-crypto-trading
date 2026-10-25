@@ -16,7 +16,8 @@
         <key>PATH</key><string>@@BREW@@/bin:@@BREW@@/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
     <key>RunAtLoad</key><true/>
-    <key>StartInterval</key><integer>60</integer>
+    <!-- All calendar fields omitted means every wall-clock minute; an elapsed interval drifts past due minutes. -->
+    <key>StartCalendarInterval</key><dict/>
     <key>StandardOutPath</key><string>@@LOGS@@/scheduler.out.log</string>
     <key>StandardErrorPath</key><string>@@LOGS@@/scheduler.err.log</string>
 </dict>
