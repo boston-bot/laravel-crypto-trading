@@ -23,6 +23,9 @@ Carbon::setTestNow(CarbonImmutable::parse($argv[4]));
 config(['mcp.operator_emails' => [$user->email], 'crypto.strategy_evaluation_enabled' => true, 'crypto.coinbase_products' => ['BTC-USD']]);
 if ($argv[1] === 'policy') {
     echo app(CryptoPolicies::class)->apply($actor, $argv[3])->id;
+} elseif ($argv[1] === 'paper') {
+    config(['crypto.paper_enabled' => true]);
+    echo app(CryptoStrategyEvaluation::class)->evaluate($actor, (int) $argv[3])['cycle_id'];
 } else {
     echo app(CryptoStrategyEvaluation::class)->evaluate($actor, (int) $argv[3])['cycle_id'];
 }

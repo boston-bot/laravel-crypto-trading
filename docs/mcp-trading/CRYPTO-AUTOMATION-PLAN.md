@@ -1,6 +1,6 @@
 # Crypto automation plan (Coinbase and Robinhood Crypto)
 
-Status: **adopted by the owner October 22, 2026; C0 and C1 are deployed in `261de7e`, with crypto collection disabled.** C2 stored-data evaluation and virtual-sleeve code is now implemented in source, with runtime/replay acceptance still pending; C3–C7 remain planned work. Coinbase key permissions were read successfully from development configuration; Robinhood permissions remain unverified. Credentials are now recognized in both development and deployed configuration (presence-only follow-up); no additional authenticated request was made. This plan does not authorize brokerage mutations, live mode, API-key permission changes or resuming any legacy schedule. [AGENTS.md](../../AGENTS.md#crypto-track-adopted-october-22-2026) records the standing constraints; the [checklist](DEVELOPMENT-CHECKLIST.md#crypto-track--coinbase-and-robinhood-crypto) records evidence.
+Status: **adopted by the owner October 22, 2026; C0 and C1 are deployed in `261de7e`. October 26: owner-authorized crypto paper collection (25 pairs) and manual stored-data evaluation are on, with a $400 virtual sleeve; no paper orders until C3.** C2 stored-data evaluation and virtual-sleeve code is now implemented in source, with runtime/replay acceptance still pending; C3–C7 remain planned work. Coinbase key permissions were read successfully from development configuration; Robinhood permissions remain unverified. Credentials are now recognized in both development and deployed configuration (presence-only follow-up); no additional authenticated request was made. This plan does not authorize brokerage mutations, live mode, API-key permission changes or resuming any legacy schedule. [AGENTS.md](../../AGENTS.md#crypto-track-adopted-october-22-2026) records the standing constraints; the [checklist](DEVELOPMENT-CHECKLIST.md#crypto-track--coinbase-and-robinhood-crypto) records evidence.
 
 ## Summary
 
@@ -99,7 +99,11 @@ Original scope:
 
 Acceptance: exact-decimal unit tests; immutable signal records carrying rule and parameter versions, symbol profile and input fingerprint; equity tests unchanged.
 
-### C3 — Replay and forward paper (about 1 week to build, at least 4 weeks to observe)
+### C3 — Replay and forward paper (about 1 week to build, at least 4 weeks to observe) — lifecycle increment in source October 26
+
+First increment (source only, not deployed): scheduled 24/7 paper cycle, simulated limit orders with displayed-book fills, exits through the shared rules, UTC loss baseline/latch, position cap, cooldown, held-product collection, scheduled read-only fee-tier refresh with an owner tier review, health check and additive migration `000035`. Replay and the dashboard section remain. [Evidence and deployment steps](CRYPTO-C3-PAPER-EVIDENCE.md).
+
+Original scope:
 
 - Candle-based replay over stored history, labeled separately from forward results.
 - A five-minute forward-paper cycle running 24/7, with realistic bid/ask fills, fees and slippage.

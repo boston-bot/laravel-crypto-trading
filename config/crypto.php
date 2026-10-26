@@ -3,6 +3,13 @@
 return [
     // C2 stored-data evidence only. No schedule, paper handoff or broker mutation is attached to this switch.
     'strategy_evaluation_enabled' => filter_var(env('CRYPTO_STRATEGY_EVALUATION_ENABLED', false), FILTER_VALIDATE_BOOL),
+    // C3 scheduled 24/7 paper cycle: collection, evaluation, simulated orders and fills. No broker order path. Default off.
+    'paper_enabled' => filter_var(env('CRYPTO_PAPER_ENABLED', false), FILTER_VALIDATE_BOOL),
+    // C3 read-only account fee-tier refresh (one fixed GET) at most every refresh_after_hours. Default off.
+    'fee_refresh_enabled' => filter_var(env('CRYPTO_FEE_REFRESH_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'fee_refresh_after_hours' => 12,
+    // Health turns critical when no paper cycle completed this recently while the paper cycle is enabled.
+    'paper_cycle_max_age_minutes' => 15,
     // Crypto track C1 (CRYPTO-AUTOMATION-PLAN.md): read-only Coinbase public market data. Default off.
     // Never used by an execution adapter; no credentials are sent.
     'market_data_enabled' => filter_var(env('CRYPTO_MARKET_DATA_ENABLED', false), FILTER_VALIDATE_BOOL),

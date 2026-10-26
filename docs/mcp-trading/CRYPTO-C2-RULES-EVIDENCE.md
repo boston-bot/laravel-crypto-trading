@@ -81,3 +81,35 @@ Exactly one Coinbase fee-tier GET completed with HTTP **200**, request start **2
 These are observed account-tier rates, not verified all-in fees for any individual pair. Tax treatment remains unresolved; the report does not establish that tax is zero or that an additional tax applies. Do not import an all-in product schedule from this report alone. No policy, virtual cash, signal, order, fill, migration, deployment, credential or flag change was made. The helper only performed database reads and the one fixed remote GET; no order or preview endpoint was used.
 
 C2 now has verified authenticated fee-tier connectivity and actual account-rate evidence. Remaining fee acceptance: confirm pair applicability and tax/commission treatment against the venue's signed-in product fee information, then explicitly apply current product-specific observations. The one-day policy validity limit still applies; this observation cannot become an indefinite fee default. No tests were rerun for this evidence-only follow-up; the preceding source verification remains applicable.
+
+## Owner-supplied signed-in fee page — October 26
+
+The owner pasted three sections of Coinbase's signed-in Advanced fee page into the development session. No authenticated request, policy, cash, signal, order or flag change was made.
+
+| Finding | Evidence |
+|---|---|
+| Account tier | Spot `Intro` (30-day volume ≥ $0): maker 0.5000%, taker 0.9000%. This matches the October 23 API read (`"0.005"` / `"0.009"`). |
+| Next tier | `Advanced 1` requires ≥ $10K 30-day spot volume (0.3500% / 0.7500%). With a $400 sleeve and $100 position cap, the paper sleeve is not expected to leave `Intro`. |
+| Product exceptions | 27 listed pairs, all stablecoin, FX or wrapped/staked-equivalent pairs: AUDD-USDC, CBETH-ETH, DAI-USD, DAI-USDC, EURC-USDC, GUSD-USD, GYEN-USD, LSETH-ETH, PAX-USD, PAX-USDC, PYUSD-USD, TGBP-USDC, USD1-USD, USDC-AUD/BRL/CAD/EUR/GBP/INR/SGD, USDS-USD, USDT-EUR, USDT-GBP, USDT-USDC, WBTC-BTC, XSGD-USDC at 0.000% / 0.001%, and USDT-USD at 0.005% / 0.010%. |
+| Volatile USD pairs | No listed exception. The account-tier rate applies to them according to the page. |
+| Tax / commission | Not shown on the pasted page; still requires the owner's `product_all_in` attestation (for example from a filled-order receipt that shows no charge other than the fee). |
+
+Consequences for the policy: exclude every listed exception pair from the crypto collection universe, or give it its own observation; never apply the account-tier rate to them. For volatile USD pairs, the modeled round trip is 1.80% at the reserved taker rate on both sides, 1.00% if both sides fill as maker, and 1.40% for a maker entry with a taker exit. The swing hypothesis (2.5 ATR initial stop on daily candles, 14-day time exit) can absorb this better than a short-horizon strategy, but replay and forward paper must report results after these costs.
+
+Operational gap for C3: the one-day fee-observation limit means a manually applied schedule expires after 24 hours and blocks entries. Continuous 24/7 paper evaluation needs a scheduled read-only tier refresh (the existing fixed GET) combined with a stored, owner-reviewed exception list, producing a fresh dated observation. A tier change or an unreadable tier must make entries unavailable, never fall back to an older rate.
+
+## Owner-authorized crypto paper activation — October 26
+
+The owner granted permission to turn crypto paper on, directed that taxes be left out of the fee model for now, and asked for a proposed coin list. Runtime revision `656fc2f` was unchanged; no deployment or migration was needed.
+
+**Coin list (25, the configured maximum).** Chosen from Coinbase's public USD spot product list at 22:4x UTC, ranked by approximate 24-hour quote volume, keeping coins that can plausibly meet the $10M volume and 200-day history rules: BTC, ETH, SOL, XRP, ZEC, NEAR, QNT, HYPE, SUI, ENA, LINK, LTC, HBAR, ADA, AERO, INJ, TAO, UNI, AVAX, XLM, DOGE, ONDO, ETC, BCH, AAVE (all `-USD`). Excluded: USDT-USD (stablecoin with its own fee exception), PAXG-USD (gold-backed), and recently listed or memecoin pairs that ranked in the volume list (DOOD, USELESS, PUMP, IRYS, VVV, CHIP, CAP, RLS, LIGHTER, PEPE). The owner can change the list; a change also needs fee observations for any new pair in the next policy version.
+
+**Runtime changes.** Preserved private backup `runtime/private-config-backups/env-before-crypto-paper-20261026T224330Z` (`0600`). Appended to the runtime `.env` only: `COINBASE_WRITES_ENABLED=false`, `ROBINHOOD_CRYPTO_WRITES_ENABLED=false` (now explicit rather than default), `CRYPTO_MARKET_DATA_ENABLED=true`, the 25-product `COINBASE_MARKET_DATA_PRODUCTS`, and `CRYPTO_STRATEGY_EVALUATION_ENABLED=true`. Ran `optimize` and `queue:restart` and restarted FPM after the US close (22:43 UTC). Readiness returned 200. Cached configuration confirmed collection/evaluation on, 25 products, both crypto venue write flags false and `BROKER_MODE=paper`. Equity settings were not changed.
+
+**Policy and virtual cash.** Private fee file `runtime/crypto-fees-20261026.json` (`0600`) holds one observation per collected pair: version `cb-spot-intro-2026-10-26`, maker `0.005`, taker `0.009`, `cost_scope=product_all_in` (taxes excluded by owner direction), observed `2026-10-26T22:43:49Z`, valid until `2026-10-27T22:43:49Z`, source citing the owner's signed-in fee page and the October 23 tier-read hash. `mcp:crypto-policy --actor=1 --base=0` with a stored private request UUID returned crypto portfolio **2**, policy **1**, version **1**, mode `paper`, `broker_executable=false`, and the one-time $400 opening cash entry.
+
+**Collection.** The scheduled 22:45:13 UTC `mcp:crypto-market` run (read 1) finished `complete` at 22:45:35. It stored 400 closed daily candles for 24 pairs (from 2025-09-21) and 263 for HYPE-USD (from 2026-02-05), plus the trailing two hours of five-minute candles. `mcp:health --no-ping` reported `crypto_data=ok`.
+
+**First evaluation.** Manual `mcp:crypto-evaluate --actor=1 --portfolio=2` recorded cycle **270** (`paper_signal_evidence`, not broker executable). Nine pairs cleared eligibility: BTC, NEAR and ZEC `wait/trigger_not_crossed`; ETH, HYPE, QNT, SOL, SUI and XRP `wait/no_setup`. The other 16 were `unavailable/quote_volume_too_low` (under $10M in 24 hours). No entry candidate, paper order, fill, broker request or order resulted.
+
+**Limits.** Evaluation has no schedule and no paper-order handoff until C3. The fee observation expires at `2026-10-27T22:43:49Z`; after that, entries are unavailable until a new policy version with a fresh observation is applied (or C3's scheduled refresh exists). Disable by setting `CRYPTO_MARKET_DATA_ENABLED=false` / `CRYPTO_STRATEGY_EVALUATION_ENABLED=false` and recaching; stored history remains.

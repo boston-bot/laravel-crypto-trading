@@ -16,12 +16,19 @@ use Illuminate\Support\Facades\Validator;
 /** Owner-applied, standalone virtual sleeve. No brokerage binding, permission change, scheduler or submission. */
 final class CryptoPolicies
 {
-    public const VERSION = 'crypto_paper_policy_v2';
+    public const VERSION = 'crypto_paper_policy_v3';
 
     public const OWNER = ['initial_cash' => '400', 'risk_per_trade_pct' => '5', 'max_position_pct' => '25',
         'max_open_positions' => 3, 'daily_loss_pause_pct' => '5', 'universe' => 'any_eligible_spot_usd'];
 
-    public function apply(int $actor, string $request, int $base = 0, array $costs = []): InstrumentPolicy
+    /** Simulated limit orders against the stored displayed book; never a venue order. */
+    public const EXECUTION = ['order_type' => 'limit', 'order_ttl_seconds' => 600, 'fill_model' => 'displayed_best_bid_ask_v1',
+        'day_boundary' => 'UTC', 'baseline_mark' => 'first_five_minute_open_v1'];
+
+    /** Fee-tier read reasons an owner review can accept. A cost-plus or unknown commission is never accepted. */
+    public const REVIEWABLE_FEE_REASONS = ['product_applicability_requires_owner_review', 'tax_unknown_or_requires_all_in_review'];
+
+    public function apply(int $actor, string $request, int $base = 0, array $costs = [], ?array $feeReview = null): InstrumentPolicy
     {
         Validator::make(['request' => $request, 'base' => $base], ['request' => 'required|uuid', 'base' => 'integer|min:0'])->validate();
         abort_if(count($costs) > 25, 422, 'At most 25 product fee schedules per policy.');
@@ -34,6 +41,7 @@ final class CryptoPolicies
         ksort($schedules);
         $payload = ['version' => self::VERSION, 'asset_class' => 'crypto', 'venue' => 'coinbase', 'mode' => 'paper',
             'owner' => self::OWNER, 'parameters' => CryptoParameters::current(), 'costs' => $schedules,
+            'fee_review' => $feeReview === null ? null : $this->review($feeReview), 'execution' => self::EXECUTION,
             'broker_executable' => false, 'purpose' => 'unvalidated_research'];
         $fingerprint = hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
 
@@ -63,6 +71,29 @@ final class CryptoPolicies
             return InstrumentPolicy::create(['paper_portfolio_id' => $portfolio->id, 'actor_id' => $actor, 'version' => $base + 1,
                 'request_id' => $request, 'fingerprint' => $fingerprint, 'payload' => $payload, 'applied_at' => now()]);
         });
+    }
+
+    /**
+     * The owner's review of one account pricing tier: which pairs it covers and how unreported charges are treated.
+     * Scheduled tier observations supply the rates; a different tier or an exception pair yields no fee schedule.
+     */
+    public function review(array $input): array
+    {
+        $rules = ['pricing_tier' => 'required|string|max:128', 'excluded_products' => 'present|array|max:200',
+            'excluded_products.*' => ['string', 'distinct', 'regex:'.CoinbasePublicMarketData::PRODUCT_PATTERN],
+            'cost_scope' => 'required|in:product_all_in', 'tax_treatment' => 'required|in:excluded_by_owner_direction,verified_zero',
+            'reviewed_at' => ['required', 'string', 'date', 'regex:/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/D'],
+            'source' => 'required|string|max:256'];
+        abort_if(array_diff(array_keys($input), array_keys($rules)), 422, 'Unsupported fee review field.');
+        $data = Validator::make($input, $rules)->validate();
+        abort_unless(CarbonImmutable::parse($data['reviewed_at'])->lte(CarbonImmutable::now()), 422, 'Fee review cannot be in the future.');
+        $excluded = $data['excluded_products'];
+        sort($excluded);
+
+        return ['kind' => 'coinbase_account_tier_review_v1', 'pricing_tier' => $data['pricing_tier'], 'excluded_products' => $excluded,
+            'cost_scope' => $data['cost_scope'], 'tax_treatment' => $data['tax_treatment'], 'accepted_reasons' => self::REVIEWABLE_FEE_REASONS,
+            'modeled_fee_role' => 'maximum_maker_taker_v1', 'max_observation_age_seconds' => 86400,
+            'reviewed_at' => CarbonImmutable::parse($data['reviewed_at'])->utc()->toISOString(), 'source' => $data['source']];
     }
 
     /** A rate is an explicit product-specific observation, never an assumed default fee tier. */

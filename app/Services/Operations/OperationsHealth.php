@@ -7,8 +7,11 @@ use App\Models\McpConnection;
 use App\Models\Monitoring\Snapshot;
 use App\Models\Operations\ComponentStatus;
 use App\Models\Operations\NotificationDelivery;
+use App\Models\PaperTrading\CryptoFeeObservation;
+use App\Models\PaperTrading\StrategyCycle;
 use App\Models\User;
 use App\Services\Crypto\CryptoMarketData;
+use App\Services\Crypto\CryptoStrategyEvaluation;
 use App\Services\Execution\AutomaticTrading;
 use App\Services\Execution\ExecutionControls;
 use App\Services\Monitoring\AccountScope;
@@ -65,6 +68,7 @@ final class OperationsHealth
         $checks['data_age'] = $this->dataAge();
         $checks['automatic_trading'] = $this->automaticHealth();
         $checks['crypto_data'] = $this->cryptoData->health();
+        $checks['crypto_paper'] = $this->cryptoPaper();
         $free = $this->disk->freeBytes(storage_path());
         $gib = $free === null ? null : round($free / 1024 ** 3, 1);
         $checks['disk'] = ['status' => $gib === null ? 'warning' : ($gib < $t['disk_critical_gib'] ? 'critical' : ($gib < $t['disk_warning_gib'] ? 'warning' : 'ok')), 'detail' => ['free_gib' => $gib]];
@@ -77,6 +81,26 @@ final class OperationsHealth
         $checks['heartbeat'] = ['status' => $this->heartbeat->configured() ? 'ok' : 'unconfigured', 'detail' => ['last_result' => ComponentStatus::where('component', 'heartbeat')->value('status')]];
 
         return $checks;
+    }
+
+    /** A stopped 24/7 paper cycle is critical (exits wait on it); a stale fee observation blocks entries only. */
+    private function cryptoPaper(): array
+    {
+        if (! config('crypto.paper_enabled')) {
+            return ['status' => 'disabled', 'detail' => []];
+        }
+        $limit = (int) config('crypto.paper_cycle_max_age_minutes');
+        $latest = StrategyCycle::where('asset_class', 'crypto')->where('rule_version', CryptoStrategyEvaluation::VERSION)->max('recorded_at');
+        $age = $latest === null ? null : (int) CarbonImmutable::parse($latest)->diffInMinutes(now(), true);
+        $fee = config('crypto.fee_refresh_enabled') ? CryptoFeeObservation::where('status', 'complete')->max('retrieved_at') : null;
+        $feeAge = $fee === null ? null : (int) CarbonImmutable::parse($fee)->diffInHours(now(), true);
+        $status = match (true) {
+            $age === null || $age > $limit => 'critical',
+            config('crypto.fee_refresh_enabled') && ($feeAge === null || $feeAge >= 24) => 'warning',
+            default => 'ok',
+        };
+
+        return ['status' => $status, 'detail' => ['cycle_age_minutes' => $age, 'limit_minutes' => $limit, 'fee_observation_age_hours' => $feeAge]];
     }
 
     /** Expected cadence: five-minute slots in a verified regular session, hourly otherwise (unknown calendar included). */

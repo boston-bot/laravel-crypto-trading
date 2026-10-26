@@ -323,7 +323,15 @@ Artisan::command('mcp:crypto-market {--once} {--scheduled}', function (): int {
 
 // Crypto runs 24/7, independent of the equity session calendar.
 if (config('crypto.market_data_enabled')) {
-    Schedule::command('mcp:crypto-market --once --scheduled')->everyFiveMinutes()->withoutOverlapping(10);
+    if (config('crypto.paper_enabled')) {
+        // The paper cycle owns collection so each evaluation follows a fresh read; no legacy crypto job is involved.
+        Schedule::command('mcp:crypto-paper --once --scheduled')->everyFiveMinutes()->runInBackground()->withoutOverlapping(10);
+    } else {
+        Schedule::command('mcp:crypto-market --once --scheduled')->everyFiveMinutes()->withoutOverlapping(10);
+    }
+}
+if (config('crypto.fee_refresh_enabled')) {
+    Schedule::command('mcp:crypto-fees --scheduled')->hourlyAt(7)->withoutOverlapping(10);
 }
 
 if (! config('mcp.legacy_schedules_enabled')) {

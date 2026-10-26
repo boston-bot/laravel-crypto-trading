@@ -17,7 +17,7 @@ class SimulationOrder extends Model
     protected static function booted(): void
     {
         static::updating(function (self $order) {
-            if ($order->isDirty(['paper_portfolio_id', 'policy_application_id', 'execution_version_id', 'actor_id', 'request_id', 'intent_hash', 'intent', 'assumptions',
+            if ($order->isDirty(['paper_portfolio_id', 'policy_application_id', 'instrument_policy_id', 'execution_version_id', 'actor_id', 'request_id', 'intent_hash', 'intent', 'assumptions',
                 'auth_generation', 'symbol', 'sleeve', 'side', 'type', 'quantity', 'price_bound', 'accepted_at', 'expires_at'])) {
                 throw new \LogicException('Append a new scenario intent instead of changing accepted evidence.');
             }
@@ -27,7 +27,7 @@ class SimulationOrder extends Model
 
     protected function casts(): array
     {
-        return ['execution_version_id' => 'integer', 'intent' => 'encrypted:array', 'assumptions' => 'encrypted:array', 'auth_generation' => 'integer',
+        return ['execution_version_id' => 'integer', 'instrument_policy_id' => 'integer', 'intent' => 'encrypted:array', 'assumptions' => 'encrypted:array', 'auth_generation' => 'integer',
             'quantity' => 'decimal:18', 'filled_quantity' => 'decimal:18', 'price_bound' => 'decimal:18', 'reserved_cash' => 'decimal:18',
             'accepted_at' => 'immutable_datetime', 'expires_at' => 'immutable_datetime', 'last_source_at' => 'immutable_datetime'];
     }

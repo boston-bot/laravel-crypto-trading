@@ -5,6 +5,7 @@ namespace Tests\Feature\Crypto;
 use App\Models\PaperTrading\CashEntry;
 use App\Models\PaperTrading\InstrumentPolicy;
 use App\Models\PaperTrading\Portfolio;
+use App\Models\PaperTrading\SimulationPosition;
 use App\Models\PaperTrading\StrategySignal;
 use App\Models\PaperTrading\SymbolProfile;
 use App\Models\User;
@@ -115,7 +116,10 @@ class CryptoStrategyEvaluationTest extends TestCase
         $this->assertSame(['signal', 'BUY', 'breakout_trigger_crossed'], [$signal->status, $signal->side, $signal->reason]);
         $this->assertSame(['crypto', 'coinbase', null, CryptoParameters::VERSION], [$signal->asset_class, $signal->venue, $signal->mcp_connection_id, $signal->parameters_version]);
         $this->assertFalse($signal->payload['broker_executable']);
-        $this->assertCount(200, $signal->payload['evidence']['inputs']['evidence']['history_ids']);
+        // History is pinned once per UTC day on the profile; each signal references it with its own quote and product row.
+        $this->assertCount(200, SymbolProfile::first()->payload['evidence']['history_ids']);
+        $this->assertSame(SymbolProfile::first()->input_fingerprint, $signal->payload['evidence']['profile_fingerprint']);
+        $this->assertArrayNotHasKey('history_ids', $signal->payload['evidence']['input_ids']);
         $this->assertSame($signal->input_fingerprint, hash('sha256', json_encode($signal->payload['evidence'], JSON_THROW_ON_ERROR)));
         $this->assertSame('complete', SymbolProfile::first()->status);
         $this->assertDatabaseCount('mcp_paper_sim_orders', 0);
@@ -150,7 +154,7 @@ class CryptoStrategyEvaluationTest extends TestCase
         $this->assertDatabaseCount('mcp_paper_cash_entries', 1);
     }
 
-    public function test_unknown_or_expired_fees_and_post_opening_ledger_do_not_generate_entries(): void
+    public function test_unknown_or_expired_fees_and_unvalued_holdings_do_not_generate_entries(): void
     {
         $policy = $this->policy(false);
         $this->market();
@@ -161,9 +165,11 @@ class CryptoStrategyEvaluationTest extends TestCase
         app(CryptoStrategyEvaluation::class)->evaluate($this->owner->id, $policy->paper_portfolio_id);
         $this->assertSame('product_fee_schedule_unavailable_or_expired', StrategySignal::latest('id')->first()->reason);
         app(CryptoPolicies::class)->apply($this->owner->id, (string) Str::uuid(), 2, [$this->cost()]);
-        Portfolio::whereKey($policy->paper_portfolio_id)->update(['ledger_version' => 2]);
+        // A holding without a fresh stored quote leaves equity unknown, never valued at zero.
+        SimulationPosition::create(['paper_portfolio_id' => $policy->paper_portfolio_id, 'symbol' => 'SOL-USD', 'sleeve' => 'active',
+            'quantity' => '1', 'reserved_quantity' => '0', 'cost_basis' => '10', 'realized_pnl' => '0']);
         app(CryptoStrategyEvaluation::class)->evaluate($this->owner->id, $policy->paper_portfolio_id);
-        $this->assertSame('portfolio_valuation_unavailable', StrategySignal::latest('id')->first()->reason);
+        $this->assertSame('portfolio_valuation_unavailable', StrategySignal::where('symbol', 'BTC-USD')->latest('id')->first()->reason);
     }
 
     public function test_quote_age_uses_microseconds_and_future_retrievals_are_not_visible(): void

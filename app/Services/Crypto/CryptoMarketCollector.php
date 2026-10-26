@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Crypto;
 
+use App\Models\PaperTrading\Portfolio;
+use App\Models\PaperTrading\SimulationPosition;
 use App\Support\Mcp\Decimal;
 use Brick\Math\BigDecimal;
 use Carbon\CarbonImmutable;
@@ -14,7 +16,8 @@ use Illuminate\Support\Str;
 /**
  * Crypto C1: one bounded read of Coinbase public market data for the configured products. Each read is an
  * immutable record; a product's metadata, quote and candles are stored together or not at all. Continuous
- * 24/7 cadence, independent of the equity session calendar. No signal, order, credential or account read.
+ * 24/7 cadence, independent of the equity session calendar. Held crypto paper positions are always included.
+ * No signal, order, credential or account read.
  */
 final class CryptoMarketCollector
 {
@@ -40,6 +43,10 @@ final class CryptoMarketCollector
                 return ['status' => 'invalid_configuration'];
             }
         }
+        // Held simulated positions stay collected after removal from the list so their exits never wait on configuration.
+        $held = SimulationPosition::where('quantity', '>', 0)->whereIn('paper_portfolio_id', Portfolio::where(['asset_class' => 'crypto', 'venue' => 'coinbase'])->select('id'))
+            ->orderBy('symbol')->pluck('symbol')->unique()->filter(fn ($id) => preg_match(CoinbasePublicMarketData::PRODUCT_PATTERN, $id))->all();
+        $products = array_values(array_unique([...$products, ...$held]));
         $lock = Cache::lock('crypto-market-collector', 600);
         if (! $lock->get()) {
             return ['status' => 'busy'];

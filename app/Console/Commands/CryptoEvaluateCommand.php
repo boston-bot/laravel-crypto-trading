@@ -10,7 +10,7 @@ class CryptoEvaluateCommand extends Command
 {
     protected $signature = 'mcp:crypto-evaluate {--actor= : Configured local operator ID} {--portfolio= : Crypto virtual portfolio ID}';
 
-    protected $description = 'Record C2 crypto rule evidence from stored data; no network, order or fill';
+    protected $description = 'One crypto cycle from stored data; simulated paper orders only while CRYPTO_PAPER_ENABLED is on; no network or venue order';
 
     public function handle(CryptoStrategyEvaluation $evaluation): int
     {

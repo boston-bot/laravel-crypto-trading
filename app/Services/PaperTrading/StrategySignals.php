@@ -272,15 +272,18 @@ final class StrategySignals
         return $count;
     }
 
-    private function exitContext(Portfolio $portfolio, string $symbol, array $context, array $bars, CarbonImmutable $cutoff, string $positionSource = 'paper'): array
+    /** Shared trailing-stop/progress reconstruction. Crypto passes UTC so each bar is one UTC day. */
+    public function exitContext(Portfolio $portfolio, string $symbol, array $context, array $bars, CarbonImmutable $cutoff, string $positionSource = 'paper', string $timezone = 'America/New_York'): array
     {
-        $date = CarbonImmutable::parse($context['entry_at'])->setTimezone('America/New_York')->toDateString();
+        $date = CarbonImmutable::parse($context['entry_at'])->setTimezone($timezone)->toDateString();
         $trail = Decimal::from($context['initial_stop']);
         $progressed = false;
         $latched = null;
         $previous = StrategySignal::where('position_source', $positionSource)->where('symbol', $symbol)
             ->when($positionSource === 'paper', fn ($q) => $q->where('paper_portfolio_id', $portfolio->id),
                 fn ($q) => $q->whereIn('cycle_id', StrategyCycle::where('scope', $portfolio->scope)->where('position_source', 'live')->select('id')))
+            // Signals before the entry fill cannot describe this episode; a one-day margin tolerates broker clock skew.
+            ->where('recorded_at', '>=', CarbonImmutable::parse($context['entry_at'])->subDay()->format('Y-m-d H:i:s.u'))
             ->where('recorded_at', '<=', $cutoff->format('Y-m-d H:i:s.u'))->orderByDesc('id')->get();
         foreach ($previous as $row) {
             $old = $row->payload['evidence']['report']['position']['context'] ?? null;
