@@ -113,4 +113,57 @@ class IntradayQuoteReplayTest extends TestCase
         $this->assertCount(2, $open['fills']);
         $this->assertSame('initial_stop_hit', $open['trades'][0]['reason']);
     }
+
+    public function test_fractional_market_orders_execute_on_their_own_fresh_submission_quote_and_stop_at_the_bid(): void
+    {
+        $settings = array_replace(F::settings(), ['allow_fractional' => true, 'slippage_bps' => '5']);
+        $engine = app(StrategyReplay::class);
+        $data = F::data();
+        $r = $engine->runQuotes($data, SignalParameters::current()['values'], $settings, '500');
+        $this->assertCount(2, $r['fills']);
+        $this->assertCount(1, $r['trades']);
+        $this->assertSame('initial_stop_hit', $r['trades'][0]['reason']);
+        $this->assertSame('market', $r['orders'][0]['type']);
+        $this->assertSame($r['orders'][0]['accepted_at'], $r['fills'][0]['at']);
+        $this->assertSame($data['frames'][0]['quotes']['DEMO']['timestamp_ns'], $r['fills'][0]['source_ns']);
+        $this->assertSame('101.25060000', $r['fills'][0]['price']);
+        $this->assertSame('97.95100000', $r['fills'][1]['price']);
+        $this->assertLessThan(0, Decimal::from($r['fills'][0]['quantity'])->compareTo(Decimal::from('1')));
+        $this->assertSame($r, $engine->runQuotes($data, SignalParameters::current()['values'], $settings, '500'));
+        $this->assertContains('symbol_fractional_eligibility_assumed', $r['limitations']);
+        $this->assertSame([], $r['open_positions']);
+    }
+
+    public function test_fractional_partial_market_fills_consume_each_displayed_quote_only_once(): void
+    {
+        $at = '2026-10-19T13:45:00Z';
+        $q = F::quote($at, size: '1');
+        $data = F::data([F::frame($at, quote: $q), F::frame('2026-10-19T13:45:01Z', 'fill', $q),
+            F::frame('2026-10-19T13:45:02Z', 'fill', F::quote('2026-10-19T13:45:02Z', size: '1'))]);
+        $r = app(StrategyReplay::class)->runQuotes($data, SignalParameters::current()['values'],
+            array_replace(F::settings(), ['allow_fractional' => true, 'slippage_bps' => '5', 'risk_per_trade_pct' => '0.1']), '10000');
+        $this->assertCount(2, $r['fills']);
+        $this->assertSame(['1.000000', '1.000000'], array_column($r['fills'], 'quantity'));
+        $this->assertSame('partial', $r['orders'][0]['status']);
+        $this->assertSame('2.000000', $r['open_positions']['DEMO']['quantity']);
+    }
+
+    public function test_fractional_research_preserves_freshness_minimum_order_value_and_slippage_floor(): void
+    {
+        $settings = array_replace(F::settings(), ['allow_fractional' => true, 'slippage_bps' => '5']);
+        $engine = app(StrategyReplay::class);
+        $p = SignalParameters::current()['values'];
+        $at = '2026-10-19T13:45:00Z';
+        foreach (['2026-10-19T13:44:39.000000000Z', '2026-10-19T13:45:00.000000001Z'] as $stamp) {
+            $q = F::quote($at);
+            $q['timestamp_ns'] = $stamp;
+            $r = $engine->runQuotes(F::data([F::frame($at, quote: $q)]), $p, $settings, '500');
+            $this->assertSame([], $r['orders']);
+        }
+        $r = $engine->runQuotes(F::data([F::frame($at)]), $p, $settings, '1');
+        $this->assertSame([], $r['orders']);
+        $this->assertSame('below_fractional_minimum_order_value', $r['events'][0]['reason']);
+        $this->expectException(\InvalidArgumentException::class);
+        $engine->runQuotes(F::data(), $p, array_replace($settings, ['slippage_bps' => '1']), '500');
+    }
 }

@@ -72,9 +72,9 @@
     </div>
     @endif
     @if($result)
-    <x-panel title="Order intents" subtitle="Limit bounds and accepted times are not fill prices or execution times." icon="orders" flush id="order-intents">
-        <div class="table-wrap"><table class="data"><thead><tr><th>Ticker</th><th>Side / state</th><th>Quantity / filled</th><th>Limit bound</th><th>Accepted (Central)</th><th>Reason</th></tr></thead><tbody>
-            @forelse($orderRows as $order)<tr><td>{{ $order['symbol'] }}</td><td>{{ $order['side'] }} · {{ App\Support\Mcp\DisplayFormat::humanize($order['status']) }}</td><td><x-quantity :value="$order['quantity']" /> / <x-quantity :value="$order['filled_quantity']" /></td><td><x-money :value="$order['limit']" /></td><td><x-time :at="$order['accepted_at']" :relative="false" /></td><td>{{ App\Support\Mcp\DisplayFormat::humanize($order['reason']) }}</td></tr>
+    <x-panel title="Order intents" subtitle="Price bounds constrain simulated fills; recorded fills show execution prices and times." icon="orders" flush id="order-intents">
+        <div class="table-wrap"><table class="data"><thead><tr><th>Ticker</th><th>Type / side / state</th><th>Quantity / filled</th><th>Price bound</th><th>Accepted (Central)</th><th>Reason</th></tr></thead><tbody>
+            @forelse($orderRows as $order)<tr><td>{{ $order['symbol'] }}</td><td>{{ ucfirst($order['type'] ?? 'limit') }} · {{ $order['side'] }} · {{ App\Support\Mcp\DisplayFormat::humanize($order['status']) }}</td><td><x-quantity :value="$order['quantity']" /> / <x-quantity :value="$order['filled_quantity']" /></td><td><x-money :value="$order['limit']" /></td><td><x-time :at="$order['accepted_at']" :relative="false" /></td><td>{{ App\Support\Mcp\DisplayFormat::humanize($order['reason']) }}</td></tr>
             @empty<tr><td colspan="6" class="empty-cell">No order intents for this variant.</td></tr>@endforelse
         </tbody></table></div>
     {{ $orderRows->fragment('order-intents')->links('mcp.pagination') }}

@@ -79,6 +79,9 @@ class HistoricalQuoteReplaysTest extends TestCase
         $this->assertSame('complete', $run->status, $run->reason);
         $this->assertSame(StrategyReplay::INTRADAY_VERSION, $run->replay_version);
         $this->assertNotEmpty($run->payload['result']['fills']);
+        $opening = array_values(array_filter($run->payload['data']['frames'], fn ($frame) => $frame['kind'] === 'opening_valuation'));
+        $this->assertCount(1, $opening);
+        $this->assertSame('2026-10-19T13:30:30.000000Z', $opening[0]['at']);
         $this->assertFalse($run->payload['broker_executable']);
         $this->assertSame($p->cash, $p->fresh()->cash);
         $this->assertSame(0, SimulationOrder::count());

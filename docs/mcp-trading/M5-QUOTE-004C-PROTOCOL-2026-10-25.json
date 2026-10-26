@@ -1,0 +1,53 @@
+{
+  "experiment": "QUOTE-004C",
+  "registered_before_acquisition": "2026-10-25",
+  "name": "Current fractional policy with first-minute opening observations",
+  "hypothesis": "Correct the exact-open sampling limitation identified in QUOTE-004B, preserving the same symbols, dates, frozen policy, rules and parameters. Test whether data-only quotes 30 seconds after the open supply valid first-minute baselines and allow the unchanged gates to evaluate later entries.",
+  "symbols": [
+    "CRM",
+    "MSFT"
+  ],
+  "universe_selection": "Extension of the existing CRM/MSFT quote trial, selected after QUOTE-004 failed before any quote acquisition or replay because CRWD has an unsupported July 2026 split. No performance results were inspected to choose this replacement; no historical watchlist claim.",
+  "sessions": [
+    "2026-10-01",
+    "2026-10-02",
+    "2026-10-05",
+    "2026-10-06",
+    "2026-10-07",
+    "2026-10-08",
+    "2026-10-09",
+    "2026-10-12",
+    "2026-10-13",
+    "2026-10-14",
+    "2026-10-15",
+    "2026-10-16",
+    "2026-10-19",
+    "2026-10-20",
+    "2026-10-21",
+    "2026-10-22",
+    "2026-10-23"
+  ],
+  "date_boundary": "All 17 completed sessions covered by the reviewed October-December cost schedule; do not extrapolate that schedule into September.",
+  "baseline": "current_fractional",
+  "variants": [
+    {
+      "id": "current_fractional",
+      "equity": "500"
+    }
+  ],
+  "settings": "Freeze current applied signal execution and allocation settings, rule/parameter/profile versions and source hashes. No overrides, funding change, parameter search or forced terminal exit.",
+  "data": "Reuse every original complete QUOTE-004B session unchanged except inserting one explicitly labeled data-only opening_valuation frame at exchange open plus 30 seconds, acquired as two additional historical quote GETs per session. Retain all original frames and hashes. Opening equity requires valid held marks inside the first minute and no prior session fill; the valuation frame cannot create signals or fills.",
+  "success_criterion": "Verify first-minute baseline availability without guessing quotes, late marks or changed accounting; repeat deterministic replay and independent exact accounting. Keep the original result. Report outcomes without applying policy or forcing exits.",
+  "limits": "Historical earnings, listing/classification and per-symbol fractional permission are research assumptions; quote sampling does not reproduce continuous order books or historical arrival latency. No strategy edge or forward-paper acceptance is established.",
+  "execution_boundary": "Local research artifacts only; no deployment, runtime configuration, forward-paper ledger, broker order or watchlist mutation. Existing forward paper scheduling remains enabled.",
+  "prior_attempt": {
+    "experiment": "QUOTE-004",
+    "status": "acquisition_rejected",
+    "reason": "raw_history_action_requires_adjustment",
+    "symbol": "CRWD",
+    "event": "4-for-1 forward split, ex/process date 2026-07-02",
+    "frames_acquired": 0,
+    "performance": null
+  },
+  "post_result_protocol": "Registered after QUOTE-004B completed: all 16 held-position sessions lacked opening equity and 55 triggered evaluations were blocked. This is a data-acquisition correction, not a new holdout, rule variant or profitability selection."
+}

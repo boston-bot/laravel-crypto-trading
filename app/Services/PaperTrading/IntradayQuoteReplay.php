@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\PaperTrading;
 
+use App\Services\Broker\Agentic\RobinhoodOrderContract;
 use App\Services\MarketData\Alpaca\HistoricalQuotes;
 use App\Support\Mcp\Decimal;
 use Brick\Math\RoundingMode;
@@ -25,8 +26,11 @@ trait IntradayQuoteReplay
         }
         $open = CarbonImmutable::parse($data['session']['opens_at']);
         $end = CarbonImmutable::parse($data['window_end']);
+        $market = ($settings['allow_fractional'] ?? false) === true;
+        $scale = $market ? RobinhoodOrderContract::FRACTIONAL_MAX_DECIMALS : 0;
         if (! TradingCosts::valid($settings['cost_schedule'], $open) || Decimal::from($initial)->compareTo(Decimal::from('0')) <= 0 ||
-            $settings['allow_fractional'] !== false || $settings['max_open_positions'] > 8 || $settings['max_open_positions'] < 1 ||
+            ! is_bool($settings['allow_fractional']) || ($market && (! RobinhoodOrderContract::allowsFractional('market') ||
+                Decimal::from($settings['slippage_bps'])->compareTo(Decimal::from(SignalOrderPrice::MARKET_SLIPPAGE_FLOOR_BPS)) < 0)) || $settings['max_open_positions'] > 8 || $settings['max_open_positions'] < 1 ||
             Decimal::from($settings['max_position_pct'])->compareTo(Decimal::from('20')) > 0 || Decimal::from($settings['risk_per_trade_pct'])->compareTo(Decimal::from('1')) > 0) {
             throw new \InvalidArgumentException('Unsupported historical research settings.');
         }
@@ -57,6 +61,7 @@ trait IntradayQuoteReplay
         $curve = $state['curve'] ?? [];
         $events = $state['events'] ?? [];
         $pending = [];
+        $liquidity = [];
         $exited = $state['exited'] ?? [];
         $last = null;
         $seq = $state['seq'] ?? 0;
@@ -66,6 +71,8 @@ trait IntradayQuoteReplay
         $known = $state['known'] ?? 0;
         $total = $state['total'] ?? 0;
         $openingEquity = $state === null ? $initial : null;
+        $openingFillCount = count($fills);
+        $openingOrderCount = count($orders);
         $lossPaused = false;
         if ($state !== null) {
             // Only the preceding completed session changes held-position state; never today's close.
@@ -102,101 +109,106 @@ trait IntradayQuoteReplay
                 }
             }
             if ($sessionIndex !== null) {
-                if ($last->eq($open) && $openingEquity === null) {
+                if ($at->lt($open->addMinute()) && $openingEquity === null && count($fills) === $openingFillCount && count($orders) === $openingOrderCount) {
                     $opening = $this->intradayEquity($cash, $positions, $quotes);
                     $openingEquity = $opening === null ? null : (string) $opening;
                 }
                 $currentValue = $this->intradayEquity($cash, $positions, $quotes);
-                $lossPaused = $lossPaused || $openingEquity === null || Decimal::from($openingEquity)->compareTo($zero) <= 0 ||
-                    ($currentValue !== null && $this->intradayLossPaused($currentValue, $openingEquity, $settings));
+                $lossPaused = $lossPaused || ($openingEquity !== null && (Decimal::from($openingEquity)->compareTo($zero) <= 0 ||
+                    ($currentValue !== null && $this->intradayLossPaused($currentValue, $openingEquity, $settings))));
             }
-            // Previously accepted orders may fill before the new cycle decides. A later intraday sale never
-            // funds an earlier decision. Each quote watermark is consumed once per immutable intent.
-            foreach ($frame['kind'] === 'mark' ? [] : $pending as $symbol => $id) {
-                $q = $quotes[$symbol];
-                $order = &$orders[$id];
-                if ($q === null || $q['timestamp_ns'] <= HistoricalQuotes::timestamp($order['accepted_at']) || $q['timestamp_ns'] <= ($order['last_quote_ns'] ?? '')) {
-                    unset($order);
-
-                    continue;
-                }
-                $order['last_quote_ns'] = $q['timestamp_ns'];
-                $side = $order['side'];
-                $buy = $side === 'BUY';
-                $price = PaperFillPrice::calculate($side, $q[$buy ? 'ask' : 'bid'], $settings['slippage_bps']);
-                $remaining = Decimal::from($order['quantity'])->minus(Decimal::from($order['filled_quantity']));
-                $size = Decimal::from($q[$buy ? 'ask_size' : 'bid_size']);
-                $quantity = ($remaining->compareTo($size) < 0 ? $remaining : $size)->rounded(0, RoundingMode::DOWN);
-                $marketable = $buy ? $price->compareTo(Decimal::from($order['limit'])) <= 0 : $price->compareTo(Decimal::from($order['limit'])) >= 0;
-                if (! $marketable || $quantity->compareTo($zero) <= 0) {
-                    unset($order);
-
-                    continue;
-                }
-                if ($buy) {
-                    $value = $this->intradayEquity($cash, $positions, $quotes);
-                    [$available, $capacity] = $this->intradayCapacity($cash, $value, $positions, $quotes, $orders, $settings, $id);
-                    $stop = Decimal::from($order['limit'])->minus(Decimal::from($order['atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
-                    $sized = $value ? $this->sizer->calculate($value, $available, Decimal::from($order['limit']), $stop, $settings, $capacity) : ['quantity' => '0'];
-                    $check = app(EligibilityRules::class)->thresholds($q, $facts[$symbol], RuleEligibilityPolicies::DEFAULTS);
-                    $signal = $this->rules->entry($profiles[$symbol], $q['ask'], $p);
-                    if ($value === null || ($sessionIndex === null ? $this->intradayLossPaused($value, $initial, $settings) : $lossPaused) || $signal['status'] !== 'signal' ||
-                        array_filter($check, fn ($c) => $c['status'] !== 'pass') || $remaining->compareTo(Decimal::from($sized['quantity'])) > 0 ||
-                        Decimal::from($order['quantity'])->multipliedBy(Decimal::from($order['limit']))->multipliedBy(Decimal::from('100'))->compareTo($value->multipliedBy(Decimal::from($settings['max_position_pct']))) > 0) {
+            // The same fill/accounting step handles later observations and a market order's own acceptance quote.
+            $fillOrders = function (array $candidates, bool $atSubmission = false) use (&$orders, &$pending, &$liquidity, &$cash, &$positions, &$fills, &$trades, &$exited, &$lossPaused,
+                $quotes, $at, $settings, $zero, $p, $facts, $profiles, $data, $sessionIndex, $initial, $openingEquity, $scale): void {
+                foreach ($candidates as $symbol => $id) {
+                    $q = $quotes[$symbol];
+                    $order = &$orders[$id];
+                    if ($q === null || (! $atSubmission && $q['timestamp_ns'] <= HistoricalQuotes::timestamp($order['accepted_at'])) || $q['timestamp_ns'] <= ($order['last_quote_ns'] ?? '')) {
                         unset($order);
 
                         continue;
                     }
-                }
-                $fee = $this->costs->fee($settings['cost_schedule'], $side, $quantity, $price);
-                $notional = $quantity->multipliedBy($price);
-                if ($buy && $notional->plus($fee)->compareTo($cash) > 0) {
-                    unset($order);
+                    $order['last_quote_ns'] = $q['timestamp_ns'];
+                    $side = $order['side'];
+                    $buy = $side === 'BUY';
+                    $price = PaperFillPrice::calculate($side, $q[$buy ? 'ask' : 'bid'], $settings['slippage_bps']);
+                    $remaining = Decimal::from($order['quantity'])->minus(Decimal::from($order['filled_quantity']));
+                    $liquidityKey = $symbol.':'.$side.':'.$q['timestamp_ns'];
+                    $size = Decimal::from($q[$buy ? 'ask_size' : 'bid_size'])->minus($liquidity[$liquidityKey] ?? $zero);
+                    $quantity = ($remaining->compareTo($size) < 0 ? $remaining : $size)->rounded($scale, RoundingMode::DOWN);
+                    $marketable = $buy ? $price->compareTo(Decimal::from($order['limit'])) <= 0 : $price->compareTo(Decimal::from($order['limit'])) >= 0;
+                    if (! $marketable || $quantity->compareTo($zero) <= 0) {
+                        unset($order);
 
-                    continue;
-                }
-                if ($buy) {
-                    $cash = $cash->minus($notional)->minus($fee);
-                    $pos = $positions[$symbol] ?? ['quantity' => '0', 'entry_price' => '0', 'buy_cost' => '0', 'sold_net' => '0', 'entry_quantity' => '0', 'entry_date' => $data['date'],
-                        'entry_atr' => $order['atr'], 'setup' => $profiles[$symbol]['setup'], 'latched_exit_signal_id' => null, 'sessions_held' => 0, 'progressed' => false];
-                    $old = Decimal::from($pos['quantity']);
-                    $new = $old->plus($quantity);
-                    $pos['entry_price'] = (string) Decimal::from($pos['entry_price'])->multipliedBy($old)->plus($notional)->dividedBy($new, 18);
-                    $pos['quantity'] = (string) $new;
-                    $pos['entry_quantity'] = (string) Decimal::from($pos['entry_quantity'])->plus($quantity);
-                    $pos['buy_cost'] = (string) Decimal::from($pos['buy_cost'])->plus($notional)->plus($fee);
-                    $pos['initial_stop'] = $pos['trailing_stop'] = (string) Decimal::from($pos['entry_price'])->minus(Decimal::from($pos['entry_atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
-                    $positions[$symbol] = $pos;
-                } else {
-                    $cash = $cash->plus($notional)->minus($fee);
-                    $positions[$symbol]['sold_net'] = (string) Decimal::from($positions[$symbol]['sold_net'])->plus($notional)->minus($fee);
-                    $positions[$symbol]['quantity'] = (string) Decimal::from($positions[$symbol]['quantity'])->minus($quantity);
-                    if (Decimal::from($positions[$symbol]['quantity'])->compareTo($zero) === 0) {
-                        $pos = $positions[$symbol];
-                        $net = Decimal::from($pos['sold_net'])->minus(Decimal::from($pos['buy_cost']));
-                        $trades[] = ['symbol' => $symbol, 'setup' => $pos['setup'], 'quantity' => $pos['entry_quantity'], 'entry_date' => $pos['entry_date'], 'exit_date' => $data['date'],
-                            'reason' => $order['reason'], 'net' => (string) $net->rounded(2, RoundingMode::HALF_EVEN),
-                            'return_pct' => (string) $net->multipliedBy(Decimal::from('100'))->dividedBy(Decimal::from($pos['buy_cost']), 4)];
-                        if ($sessionIndex !== null) {
-                            $trades[array_key_last($trades)]['net_exact'] = (string) $net;
+                        continue;
+                    }
+                    if ($buy) {
+                        $value = $this->intradayEquity($cash, $positions, $quotes);
+                        [$available, $capacity] = $this->intradayCapacity($cash, $value, $positions, $quotes, $orders, $settings, $id);
+                        $stop = Decimal::from($order['limit'])->minus(Decimal::from($order['atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
+                        $sized = $value ? $this->sizer->calculate($value, $available, Decimal::from($order['limit']), $stop, $settings, $capacity, $scale) : ['quantity' => '0'];
+                        $check = app(EligibilityRules::class)->thresholds($q, $facts[$symbol], RuleEligibilityPolicies::DEFAULTS);
+                        $signal = $this->rules->entry($profiles[$symbol], $q['ask'], $p);
+                        if ($value === null || ($sessionIndex === null ? $this->intradayLossPaused($value, $initial, $settings) : ($lossPaused || $openingEquity === null)) || $signal['status'] !== 'signal' ||
+                            array_filter($check, fn ($c) => $c['status'] !== 'pass') || $remaining->compareTo(Decimal::from($sized['quantity'])) > 0 ||
+                            Decimal::from($order['quantity'])->multipliedBy(Decimal::from($order['limit']))->multipliedBy(Decimal::from('100'))->compareTo($value->multipliedBy(Decimal::from($settings['max_position_pct']))) > 0) {
+                            unset($order);
+
+                            continue;
                         }
-                        unset($positions[$symbol]);
-                        $exited[$symbol] = $sessionIndex ?? 0;
+                    }
+                    $fee = $this->costs->fee($settings['cost_schedule'], $side, $quantity, $price);
+                    $notional = $quantity->multipliedBy($price);
+                    if ($buy && $notional->plus($fee)->compareTo($cash) > 0) {
+                        unset($order);
+
+                        continue;
+                    }
+                    $liquidity[$liquidityKey] = ($liquidity[$liquidityKey] ?? $zero)->plus($quantity);
+                    if ($buy) {
+                        $cash = $cash->minus($notional)->minus($fee);
+                        $pos = $positions[$symbol] ?? ['quantity' => '0', 'entry_price' => '0', 'buy_cost' => '0', 'sold_net' => '0', 'entry_quantity' => '0', 'entry_date' => $data['date'],
+                            'entry_atr' => $order['atr'], 'setup' => $profiles[$symbol]['setup'], 'latched_exit_signal_id' => null, 'sessions_held' => 0, 'progressed' => false];
+                        $old = Decimal::from($pos['quantity']);
+                        $new = $old->plus($quantity);
+                        $pos['entry_price'] = (string) Decimal::from($pos['entry_price'])->multipliedBy($old)->plus($notional)->dividedBy($new, 18);
+                        $pos['quantity'] = (string) $new;
+                        $pos['entry_quantity'] = (string) Decimal::from($pos['entry_quantity'])->plus($quantity);
+                        $pos['buy_cost'] = (string) Decimal::from($pos['buy_cost'])->plus($notional)->plus($fee);
+                        $pos['initial_stop'] = $pos['trailing_stop'] = (string) Decimal::from($pos['entry_price'])->minus(Decimal::from($pos['entry_atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
+                        $positions[$symbol] = $pos;
+                    } else {
+                        $cash = $cash->plus($notional)->minus($fee);
+                        $positions[$symbol]['sold_net'] = (string) Decimal::from($positions[$symbol]['sold_net'])->plus($notional)->minus($fee);
+                        $positions[$symbol]['quantity'] = (string) Decimal::from($positions[$symbol]['quantity'])->minus($quantity);
+                        if (Decimal::from($positions[$symbol]['quantity'])->compareTo($zero) === 0) {
+                            $pos = $positions[$symbol];
+                            $net = Decimal::from($pos['sold_net'])->minus(Decimal::from($pos['buy_cost']));
+                            $trades[] = ['symbol' => $symbol, 'setup' => $pos['setup'], 'quantity' => $pos['entry_quantity'], 'entry_date' => $pos['entry_date'], 'exit_date' => $data['date'],
+                                'reason' => $order['reason'], 'net' => (string) $net->rounded(2, RoundingMode::HALF_EVEN),
+                                'return_pct' => (string) $net->multipliedBy(Decimal::from('100'))->dividedBy(Decimal::from($pos['buy_cost']), 4)];
+                            if ($sessionIndex !== null) {
+                                $trades[array_key_last($trades)]['net_exact'] = (string) $net;
+                            }
+                            unset($positions[$symbol]);
+                            $exited[$symbol] = $sessionIndex ?? 0;
+                        }
+                    }
+                    $order['filled_quantity'] = (string) Decimal::from($order['filled_quantity'])->plus($quantity);
+                    $order['status'] = Decimal::from($order['quantity'])->compareTo(Decimal::from($order['filled_quantity'])) === 0 ? 'filled' : 'partial';
+                    $order['reserved_cash'] = $buy && $order['status'] !== 'filled' ? (string) $this->intradayReserve(Decimal::from($order['quantity'])->minus(Decimal::from($order['filled_quantity'])), $order['limit'], $settings) : '0';
+                    $fills[] = ['order_id' => $id, 'symbol' => $symbol, 'side' => $side, 'at' => $at->toISOString(), 'source_ns' => $q['timestamp_ns'], 'quantity' => (string) $quantity, 'price' => (string) $price, 'fee' => (string) $fee];
+                    if ($order['status'] === 'filled') {
+                        unset($pending[$symbol]);
+                    }
+                    unset($order);
+                    if ($sessionIndex !== null && ! $lossPaused && $openingEquity !== null) {
+                        $afterFill = $this->intradayEquity($cash, $positions, $quotes);
+                        $lossPaused = $afterFill !== null && $this->intradayLossPaused($afterFill, $openingEquity, $settings);
                     }
                 }
-                $order['filled_quantity'] = (string) Decimal::from($order['filled_quantity'])->plus($quantity);
-                $order['status'] = Decimal::from($order['quantity'])->compareTo(Decimal::from($order['filled_quantity'])) === 0 ? 'filled' : 'partial';
-                $order['reserved_cash'] = $buy && $order['status'] !== 'filled' ? (string) $this->intradayReserve(Decimal::from($order['quantity'])->minus(Decimal::from($order['filled_quantity'])), $order['limit'], $settings) : '0';
-                $fills[] = ['order_id' => $id, 'symbol' => $symbol, 'side' => $side, 'at' => $at->toISOString(), 'source_ns' => $q['timestamp_ns'], 'quantity' => (string) $quantity, 'price' => (string) $price, 'fee' => (string) $fee];
-                if ($order['status'] === 'filled') {
-                    unset($pending[$symbol]);
-                }
-                unset($order);
-                if ($sessionIndex !== null && ! $lossPaused) {
-                    $afterFill = $this->intradayEquity($cash, $positions, $quotes);
-                    $lossPaused = $afterFill !== null && $this->intradayLossPaused($afterFill, $openingEquity, $settings);
-                }
-            }
+            };
+            $fillOrders(in_array($frame['kind'], ['mark', 'opening_valuation'], true) ? [] : $pending);
             if ($frame['kind'] === 'decision') {
                 foreach ($symbols as $symbol) {
                     $q = $quotes[$symbol];
@@ -243,36 +255,40 @@ trait IntradayQuoteReplay
                     if ($side !== null) {
                         $buy = $side === 'BUY';
                         $reference = Decimal::from($q[$buy ? 'ask' : 'bid']);
-                        $bound = $reference->multipliedBy(Decimal::from('1')->plus($this->bps($settings['limit_offset_bps'])->multipliedBy(Decimal::from($buy ? '1' : '-1'))))->rounded(4, $buy ? RoundingMode::DOWN : RoundingMode::UP);
+                        $bound = $market ? SignalOrderPrice::bound('market', $side, $q, $buy ? $profile['levels']['max_entry'] : null, $settings)
+                            : $reference->multipliedBy(Decimal::from('1')->plus($this->bps($settings['limit_offset_bps'])->multipliedBy(Decimal::from($buy ? '1' : '-1'))))->rounded(4, $buy ? RoundingMode::DOWN : RoundingMode::UP);
                         $quantity = $positions[$symbol]['quantity'] ?? '0';
                         if ($buy) {
                             $max = Decimal::from($profile['levels']['max_entry']);
-                            if ($bound->compareTo($max) > 0) {
+                            if (! $market && $bound->compareTo($max) > 0) {
                                 $bound = $max;
                             }
                             $value = $this->intradayEquity($cash, $positions, $quotes);
                             $occupied = array_unique([...array_keys($positions), ...array_keys($pending)]);
-                            if ($value === null || ($sessionIndex === null ? $this->intradayLossPaused($value, $initial, $settings) : $lossPaused) || count($occupied) >= $settings['max_open_positions']) {
+                            if ($value === null || ($sessionIndex === null ? $this->intradayLossPaused($value, $initial, $settings) : ($lossPaused || $openingEquity === null)) || count($occupied) >= $settings['max_open_positions']) {
                                 $quantity = '0';
                                 $reason = 'equity_loss_or_capacity_unavailable';
                             } else {
                                 [$available, $cap] = $this->intradayCapacity($cash, $value, $positions, $quotes, $orders, $settings);
                                 $stop = $bound->minus(Decimal::from($profile['indicators']['atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
-                                $sizing = $this->sizer->calculate($value, $available, $bound, $stop, $settings, $cap);
+                                $sizing = $this->sizer->calculate($value, $available, $bound, $stop, $settings, $cap, $scale);
                                 $quantity = $sizing['quantity'];
                                 if (Decimal::from($quantity)->compareTo($zero) === 0) {
-                                    $reason = 'whole_share_size_zero';
+                                    $reason = $sizing['reason'] ?? ($market ? 'fractional_size_zero' : 'whole_share_size_zero');
                                 }
                             }
                         }
                         if (Decimal::from($quantity)->compareTo($zero) > 0) {
                             $id = ++$seq;
-                            $orders[$id] = ['id' => $id, 'symbol' => $symbol, 'side' => $side, 'quantity' => $quantity, 'filled_quantity' => '0', 'limit' => (string) $bound,
+                            $orders[$id] = ['type' => $market ? 'market' : 'limit', 'id' => $id, 'symbol' => $symbol, 'side' => $side, 'quantity' => $quantity, 'filled_quantity' => '0', 'limit' => (string) $bound,
                                 'accepted_at' => $at->toISOString(), 'atr' => $buy ? $profile['indicators']['atr'] : $positions[$symbol]['entry_atr'], 'reason' => $reason, 'status' => 'open',
                                 'reserved_cash' => $buy ? (string) $this->intradayReserve(Decimal::from($quantity), (string) $bound, $settings) : '0'];
                             $pending[$symbol] = $id;
                             if (! $buy) {
                                 $positions[$symbol]['latched_exit_signal_id'] ??= $id;
+                            }
+                            if ($market) {
+                                $fillOrders([$symbol => $id], true);
                             }
                         }
                     }
@@ -313,12 +329,18 @@ trait IntradayQuoteReplay
 
         $result = ['version' => self::INTRADAY_VERSION, 'label' => 'retrospective_sampled_quote_scenario_not_forward_or_point_in_time', 'final_equity' => $final,
             'cash' => (string) $cash, 'profiles' => $profiles, 'orders' => array_values($orders), 'fills' => $fills, 'trades' => $trades, 'open_positions' => $positions,
+            'execution' => ['order_mode' => $market ? 'fractional_market' : 'whole_share_limit', 'quantity_scale' => $scale, 'slippage_bps' => $settings['slippage_bps']],
             'curve' => $curve, 'events' => $events, 'stats' => $stats, 'coverage' => ['known_quotes' => $known, 'expected_quotes' => $total],
             'limitations' => ['fixed_research_universe_not_historical_watchlist', 'historical_earnings_blackout_assumed_clear', 'historical_listing_classification_and_broker_permission_assumed',
                 'sampled_quotes_not_continuous_order_book_or_queue_priority', 'event_time_not_historical_arrival_latency', 'single_session_flat_start_no_overnight_actions',
                 'missing_marks_leave_equity_unknown', 'drawdown_measured_only_at_known_quote_samples', 'unfilled_day_orders_remain_pending_at_sample_window_end', 'retrospective_provider_corrections_possible']];
 
-        return ['result' => $result, 'opening_equity' => $openingEquity, 'daily_loss_paused' => $lossPaused,
+        if ($market) {
+            $result['limitations'][] = 'symbol_fractional_eligibility_assumed';
+            $result['limitations'][] = 'market_fills_on_sampled_submission_quote_slippage_assumed';
+        }
+
+        return ['result' => $result, 'opening_equity' => $openingEquity, 'daily_loss_paused' => $lossPaused || ($sessionIndex !== null && $openingEquity === null),
             'state' => compact('positions', 'orders', 'fills', 'trades', 'curve', 'events', 'exited', 'seq', 'exposed', 'known', 'total') +
                 ['cash' => (string) $cash, 'drawdown' => (string) $drawdown, 'peak' => (string) $peak]];
     }

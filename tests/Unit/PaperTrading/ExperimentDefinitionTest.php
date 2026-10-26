@@ -27,7 +27,7 @@ class ExperimentDefinitionTest extends TestCase
                 'duplicates' => $spec['variants'][1]['equity'] = '500',
                 'text_switch' => $spec['variants'][0]['parameters'] = ['exit_on_fast_sma_close' => 'false'],
                 'short_filter' => $spec['variants'][0]['parameters'] = ['market_filter_sma_sessions' => 20],
-                // Experiments replay limit-order fills from sampled quotes; fractional market orders are daily-replay research only.
+                // Order mode comes from frozen applied policy; text cannot override execution permissions.
                 'order_mode' => $spec['variants'][0]['parameters'] = ['order_mode' => 'fractional_market'],
             };
             try {
@@ -53,5 +53,15 @@ class ExperimentDefinitionTest extends TestCase
         $spec['variants'][1]['parameters'] = ['market_filter_required' => false, 'exit_on_fast_sma_close' => false, 'market_filter_sma_sessions' => 100];
         $valid = app(ExperimentDefinition::class)->validate($spec);
         $this->assertSame(['market_filter_required' => false, 'exit_on_fast_sma_close' => false, 'market_filter_sma_sessions' => 100], $valid['variants'][1]['parameters']);
+    }
+
+    public function test_cost_schedule_boundary_uses_exchange_dates_instead_of_utc_midnight(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-25T14:00:00Z'));
+        $spec = F::spec(['sessions' => ['2026-10-01', '2026-10-02']]);
+        $this->assertSame($spec['sessions'], app(ExperimentDefinition::class)->validate($spec)['sessions']);
+        $spec['sessions'] = ['2026-09-30', '2026-10-01'];
+        $this->expectException(HttpException::class);
+        app(ExperimentDefinition::class)->validate($spec);
     }
 }

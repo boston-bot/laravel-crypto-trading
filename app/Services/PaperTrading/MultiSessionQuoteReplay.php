@@ -18,7 +18,7 @@ trait MultiSessionQuoteReplay
     /** Bounded experiment window, still chronological; never independently restart a session flat. */
     public function runQuoteWindow(array $sessions, array $parameters, array $settings, string $initial): array
     {
-        return $this->replayQuoteSessions($sessions, $parameters, $settings, $initial, 20, 'intraday_experiment_v1');
+        return $this->replayQuoteSessions($sessions, $parameters, $settings, $initial, 20, 'intraday_experiment_v2');
     }
 
     private function replayQuoteSessions(array $sessions, array $parameters, array $settings, string $initial, int $maximum, string $version): array

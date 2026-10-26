@@ -7,9 +7,11 @@ use App\Models\PaperTrading\StrategyExperiment;
 use App\Models\PaperTrading\StrategyExperimentStep as Step;
 use App\Services\PaperTrading\Experiments\ExperimentDefinition;
 use App\Services\PaperTrading\Experiments\StrategyExperiments;
+use App\Services\PaperTrading\SignalExecutionPolicies;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -17,6 +19,7 @@ use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Support\ExecutionFixture as E;
 use Tests\Support\ExperimentFixture as F;
+use Tests\Support\SignalExecutionFixture;
 use Tests\TestCase;
 
 class StrategyExperimentsTest extends TestCase
@@ -67,7 +70,7 @@ class StrategyExperimentsTest extends TestCase
         $this->assertSame('500.000000000000000000', $row->report['variants']['baseline']['final_equity']);
         $this->assertSame(0, SimulationOrder::count());
         $this->assertSame($p->cash, $p->fresh()->cash);
-        $this->assertSame(158, count(Http::recorded(fn ($q) => str_starts_with($q->url(), 'https://data.alpaca.markets/v2/stocks/quotes'))));
+        $this->assertSame(160, count(Http::recorded(fn ($q) => str_starts_with($q->url(), 'https://data.alpaca.markets/v2/stocks/quotes'))));
         $this->assertStringNotContainsString('hypothesis', DB::table('mcp_strategy_experiments')->where('id', $row->id)->value('definition'));
         $this->assertStringNotContainsString('daily_reads', DB::table('mcp_strategy_experiment_steps')->where('experiment_id', $row->id)->value('payload'));
         $this->artisan('mcp:experiment', ['action' => 'report', '--account' => (string) $c->id, '--experiment' => $row->experiment_id])
@@ -82,6 +85,27 @@ class StrategyExperimentsTest extends TestCase
         $this->assertSame(1, DB::table('jobs')->count());
         $this->expectException(HttpException::class);
         $runner->start($c, $c->user_id, $row->request_id, F::spec(['hypothesis' => 'Changed question.']));
+    }
+
+    public function test_experiments_freeze_the_applied_fractional_market_policy_without_creating_forward_orders(): void
+    {
+        [$c, $p] = SignalExecutionFixture::seed();
+        E::apply($c, ['order_type' => 'market', 'allow_fractional' => true]);
+        app(SignalExecutionPolicies::class)->apply($c, $c->user_id, 1, (string) Str::uuid(),
+            array_replace(SignalExecutionPolicies::DEFAULTS, ['allow_fractional' => true, 'slippage_bps' => '5']));
+        Http::swap((new Factory)->preventStrayRequests());
+        F::sources();
+        $before = $p->fresh()->cash;
+        $row = app(StrategyExperiments::class)->start($c, $c->user_id, (string) Str::uuid(), F::spec());
+        $this->assertTrue($row->definition['settings']['allow_fractional']);
+        $this->drain();
+        $row->refresh();
+        $this->assertSame('complete', $row->status, $row->reason ?? '');
+        $this->assertGreaterThan(0, $row->report['variants']['baseline']['fills']);
+        $this->assertSame('passed', $row->report['variants']['baseline']['verification']['status']);
+        $this->assertContains('symbol_fractional_eligibility_assumed', $row->report['variants']['baseline']['limitations']);
+        $this->assertSame(0, SimulationOrder::count());
+        $this->assertSame($before, $p->fresh()->cash);
     }
 
     public function test_transient_reads_retry_boundedly_and_resume_keeps_prior_checkpoints_and_attempt_history(): void

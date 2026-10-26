@@ -1,0 +1,17 @@
+{
+  "experiment": "QUOTE-004",
+  "registered_before_acquisition": "2026-10-25",
+  "name": "Current fractional policy on October completed sessions",
+  "hypothesis": "Determine whether the current $500 fractional-market paper policy produces reproducible entries and exits over a longer sampled-quote window; measure costs, blocked entries, open positions and observed drawdown without selecting parameters or claiming profitability.",
+  "symbols": ["CRWD", "DDOG"],
+  "universe_selection": "Two current nominees, selected for an execution demonstration: CRWD is already held in forward paper; DDOG is another nominee. This is retrospective selection, not a holdout or reconstructed historical watchlist.",
+  "sessions": ["2026-10-01", "2026-10-02", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"],
+  "date_boundary": "All 17 completed sessions covered by the reviewed October-December cost schedule; do not extrapolate that schedule into September.",
+  "baseline": "current_fractional",
+  "variants": [{"id": "current_fractional", "equity": "500"}],
+  "settings": "Freeze current applied signal execution and allocation settings, rule/parameter/profile versions and source hashes. No overrides, funding change, parameter search or forced terminal exit.",
+  "data": "Alpaca historical SIP regular-hours quotes, five-minute samples and a terminal bid mark; raw daily profile history, verified session calendar and observed corporate-action coverage. Stop on incomplete acquisition or unsupported actions.",
+  "success_criterion": "Complete consecutive acquisition, deterministic replay and independent exact cash/share/fee/P&L reconstruction. Report zero trades or unknown marks as recorded; do not weaken gates to create activity.",
+  "limits": "Historical earnings, listing/classification and per-symbol fractional permission are research assumptions; quote sampling does not reproduce continuous order books or historical arrival latency. No strategy edge or forward-paper acceptance is established.",
+  "execution_boundary": "Local research artifacts only; no deployment, runtime configuration, forward-paper ledger, broker order or watchlist mutation. Existing forward paper scheduling remains enabled."
+}

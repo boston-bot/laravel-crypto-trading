@@ -31,7 +31,7 @@ final class ExperimentComparisons
         return ['initial_equity' => $result['initial_equity'], 'final_equity' => $result['final_equity'], 'cash' => $result['cash'],
             'closed_trade_net' => $result['closed_trade_net'], 'open_episode_marked_pnl' => $result['open_episode_marked_pnl'],
             'orders' => count($result['orders']), 'fills' => count($result['fills']), 'open_positions' => count($result['open_positions']),
-            'fees' => (string) $fees, 'stats' => $result['stats'], 'coverage' => $result['coverage'], 'playbooks' => $playbooks,
+            'fees' => (string) $fees, 'execution' => $result['execution'] ?? null, 'stats' => $result['stats'], 'coverage' => $result['coverage'], 'playbooks' => $playbooks,
             'event_reasons' => array_count_values(array_column($result['events'], 'reason')), 'verification' => $verification,
             'assessment' => $result['trades'] === [] ? 'no_closed_trades_inconclusive' : 'exploratory_only_no_edge_claim', 'limitations' => $result['limitations']];
     }

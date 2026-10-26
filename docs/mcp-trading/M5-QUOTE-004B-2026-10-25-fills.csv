@@ -1,0 +1,2 @@
+order_id,symbol,side,at,source_ns,quantity,price,fee
+1,CRM,BUY,2026-10-01T13:45:00.000000Z,2026-10-01T13:44:59.991310070Z,0.299052,235.76782500,0.00

@@ -14,7 +14,7 @@ use RuntimeException;
 /** Independent cash/inventory reconstruction from outputs; no engine state, network, storage or LLM. */
 final class ReplayAccountingVerifier
 {
-    public const VERSION = 'quote_replay_accounting_v1';
+    public const VERSION = 'quote_replay_accounting_v2';
 
     public static function usable(?array $quote, array $frame, array $session, int $age): bool
     {
@@ -72,6 +72,7 @@ final class ReplayAccountingVerifier
         $cash = Decimal::from($initial);
         $held = [];
         $watermarks = [];
+        $liquidity = [];
         $filled = [];
         $episodes = [];
         $closed = [];
@@ -85,16 +86,23 @@ final class ReplayAccountingVerifier
                 $order = $orders[$fill['order_id']];
                 $symbol = $fill['symbol'];
                 $q = $frame['quotes'][$symbol] ?? null;
-                $need($frame['kind'] !== 'mark' && self::usable($q, $frame, $session, $settings['quote_max_age_seconds']));
+                $need(! in_array($frame['kind'], ['mark', 'opening_valuation'], true) && self::usable($q, $frame, $session, $settings['quote_max_age_seconds']));
                 $need($order['symbol'] === $symbol && $fill['side'] === $order['side'] && $q['timestamp_ns'] === $fill['source_ns']);
-                $need($fill['source_ns'] > HistoricalQuotes::timestamp($order['accepted_at']) && $fill['source_ns'] > ($watermarks[$order['id']] ?? ''));
+                $market = ($order['type'] ?? 'limit') === 'market';
+                $atSubmission = $market && $canonical($fill['at']) === $canonical($order['accepted_at']);
+                $need(! $market || ($settings['allow_fractional'] === true && Decimal::from($settings['slippage_bps'])->compareTo(Decimal::from('5')) >= 0));
+                $need(($atSubmission || $fill['source_ns'] > HistoricalQuotes::timestamp($order['accepted_at'])) && $fill['source_ns'] > ($watermarks[$order['id']] ?? ''));
                 $need(CarbonImmutable::parse($fill['at'])->setTimezone('America/New_York')->toDateString() === CarbonImmutable::parse($order['accepted_at'])->setTimezone('America/New_York')->toDateString());
                 $watermarks[$order['id']] = $fill['source_ns'];
                 $buy = $fill['side'] === 'BUY';
                 $qty = Decimal::from($fill['quantity']);
                 $price = Decimal::from($fill['price']);
                 $fee = Decimal::from($fill['fee']);
-                $need(preg_match('/^[1-9]\d*$/D', $fill['quantity']) === 1 && $qty->compareTo(Decimal::from($q[$buy ? 'ask_size' : 'bid_size'])) <= 0);
+                $need(preg_match($market ? '/^\d+(?:\.\d{1,6})?$/D' : '/^[1-9]\d*$/D', $fill['quantity']) === 1 && $qty->compareTo($zero) > 0);
+                $key = $symbol.':'.$fill['side'].':'.$fill['source_ns'];
+                $liquidity[$key] = ($liquidity[$key] ?? $zero)->plus($qty);
+                $need($liquidity[$key]->compareTo(Decimal::from($q[$buy ? 'ask_size' : 'bid_size'])) <= 0);
+                $need(! $atSubmission || ! $buy || Decimal::from($order['quantity'])->multipliedBy(Decimal::from($order['limit']))->compareTo(Decimal::from('1')) >= 0);
                 $need($buy ? $price->compareTo(Decimal::from($order['limit'])) <= 0 : $price->compareTo(Decimal::from($order['limit'])) >= 0);
                 $need($eq($fill['price'], (string) PaperFillPrice::calculate($fill['side'], $q[$buy ? 'ask' : 'bid'], $settings['slippage_bps'])));
                 $need($eq($fill['fee'], (string) $costs->fee($settings['cost_schedule'], $fill['side'], $qty, $price)));

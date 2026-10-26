@@ -1,0 +1,518 @@
+{
+    "version": "strategy_experiment_v1",
+    "label": "retrospective_sampled_quote_scenario_not_forward_or_point_in_time",
+    "name": "Current fractional policy with first-minute opening observations",
+    "hypothesis": "Correct the exact-open sampling limitation identified in QUOTE-004B, preserving the same symbols, dates, frozen policy, rules and parameters. Test whether data-only quotes 30 seconds after the open supply valid first-minute baselines and allow the unchanged gates to evaluate later entries.",
+    "evaluation_role": "exploratory",
+    "dataset_hash": "d5a04016b8143baadfeddf00e47e87c6211b6c5901c5b2f823c2f9c97f15c6e8",
+    "parameters": {
+        "version": "swing_signal_parameters_v1",
+        "values": {
+            "benchmark_symbol": "SPY",
+            "market_filter_sma_sessions": 200,
+            "fast_sma_sessions": 50,
+            "slow_sma_sessions": 200,
+            "relative_strength_sessions": 126,
+            "atr_sessions": 14,
+            "max_atr_pct": "6",
+            "ema_sessions": 20,
+            "pullback_max_atr_from_ema": "1",
+            "breakout_range_sessions": 20,
+            "breakout_max_range_atr": "3",
+            "max_chase_atr": "0.5",
+            "initial_stop_atr": "2",
+            "trailing_stop_atr": "3",
+            "earnings_blackout_sessions": 5,
+            "entry_delay_minutes": 15,
+            "time_exit_sessions": 20,
+            "cooldown_sessions": 5
+        },
+        "hash": "7f305b77cd773b0f9ac8df8f351586b611f5c73d1bfeff0cc4312627bae5fd5c"
+    },
+    "settings": {
+        "risk_per_trade_pct": "1",
+        "max_position_pct": "20",
+        "max_open_positions": 8,
+        "slippage_bps": "5",
+        "limit_offset_bps": "5",
+        "quote_max_age_seconds": 20,
+        "allow_fractional": true,
+        "cost_schedule": {
+            "version": "rh_listed_equity_2026q4_v1",
+            "reviewed_on": "2026-10-19",
+            "effective_from": "2026-10-01",
+            "effective_through": "2026-12-31",
+            "commission_per_share": "0",
+            "sec_per_million": "20.60",
+            "sec_waiver_notional": "500",
+            "taf_per_share": "0",
+            "taf_waiver_shares": "50",
+            "taf_max_per_execution": "9.79",
+            "cat_per_share": "0.000003",
+            "cat_minimum_charge": "0.01",
+            "rounding_policy": "per_simulated_execution_sec_up_other_half_up_v1",
+            "sources": [
+                "https:\/\/robinhood.com\/us\/en\/support\/articles\/trading-fees-on-robinhood\/",
+                "https:\/\/www.sec.gov\/rules-regulations\/fee-rate-advisories\/2026-2",
+                "https:\/\/www.finra.org\/rules-guidance\/rule-filings\/sr-finra-2026-021"
+            ]
+        },
+        "active_pct": "100",
+        "cash_pct": "0",
+        "daily_loss_pause_pct": "20"
+    },
+    "variant_definitions": [
+        {
+            "id": "current_fractional",
+            "equity": "500",
+            "parameters": [],
+            "values": {
+                "benchmark_symbol": "SPY",
+                "market_filter_sma_sessions": 200,
+                "fast_sma_sessions": 50,
+                "slow_sma_sessions": 200,
+                "relative_strength_sessions": 126,
+                "atr_sessions": 14,
+                "max_atr_pct": "6",
+                "ema_sessions": 20,
+                "pullback_max_atr_from_ema": "1",
+                "breakout_range_sessions": 20,
+                "breakout_max_range_atr": "3",
+                "max_chase_atr": "0.5",
+                "initial_stop_atr": "2",
+                "trailing_stop_atr": "3",
+                "earnings_blackout_sessions": 5,
+                "entry_delay_minutes": 15,
+                "time_exit_sessions": 20,
+                "cooldown_sessions": 5
+            },
+            "parameters_hash": "f2196435485531dcc0a06df877b2c7a1ad3b08c495e356e32fd5f47de3f2c51f"
+        }
+    ],
+    "rule_version": "swing_signals_v1",
+    "profile_version": "swing_profile_v2",
+    "baseline": "current_fractional",
+    "variants": {
+        "current_fractional": {
+            "initial_equity": "500",
+            "final_equity": "502.010522793890000000",
+            "cash": "331.01413707389000",
+            "closed_trade_net": "0",
+            "open_episode_marked_pnl": "2.010522793890000000",
+            "orders": 2,
+            "fills": 2,
+            "open_positions": 2,
+            "fees": "0.00",
+            "execution": {
+                "order_mode": "fractional_market",
+                "quantity_scale": 6,
+                "slippage_bps": "5"
+            },
+            "stats": {
+                "closed_trades": 0,
+                "wins": 0,
+                "losses": 0,
+                "hit_rate_pct": null,
+                "average_win_pct": null,
+                "average_loss_pct": null,
+                "profit_factor": null,
+                "total_return_pct": "0.4021",
+                "max_drawdown_pct": "1.2742",
+                "exposure_pct": "99.71"
+            },
+            "coverage": {
+                "known_quotes": 2682,
+                "expected_quotes": 2720
+            },
+            "playbooks": {
+                "breakout": {
+                    "closed_trades": 0,
+                    "wins": 0,
+                    "closed_trade_net": "0",
+                    "open_positions": 0
+                },
+                "pullback": {
+                    "closed_trades": 0,
+                    "wins": 0,
+                    "closed_trade_net": "0",
+                    "open_positions": 2
+                }
+            },
+            "event_reasons": {
+                "historical_quote_unavailable": 38,
+                "opening_entry_delay": 16,
+                "pullback_trigger_crossed": 2,
+                "trigger_not_crossed": 165,
+                "holding_exit_not_triggered": 2131,
+                "no_setup": 300
+            },
+            "verification": {
+                "version": "quote_replay_accounting_v2",
+                "status": "passed",
+                "cash": "331.01413707389000",
+                "closed_trade_net": "0",
+                "frames_checked": 1360,
+                "fills_checked": 2,
+                "closed_trades_checked": 0
+            },
+            "assessment": "no_closed_trades_inconclusive",
+            "limitations": [
+                "fixed_research_universe_not_historical_watchlist",
+                "historical_earnings_blackout_assumed_clear",
+                "historical_listing_classification_and_broker_permission_assumed",
+                "sampled_quotes_not_continuous_order_book_or_queue_priority",
+                "event_time_not_historical_arrival_latency",
+                "missing_marks_leave_equity_unknown",
+                "drawdown_measured_only_at_known_quote_samples",
+                "retrospective_provider_corrections_possible",
+                "symbol_fractional_eligibility_assumed",
+                "market_fills_on_sampled_submission_quote_slippage_assumed",
+                "observed_action_windows_not_guaranteed_historical_clearance",
+                "sessions_with_missing_opening_marks_block_all_new_entries",
+                "flat_start_and_open_terminal_positions_no_forced_liquidation"
+            ]
+        }
+    },
+    "comparisons": {
+        "current_fractional": {
+            "versus": "current_fractional",
+            "return_difference_percentage_points": "0.0000",
+            "drawdown_difference_percentage_points": "0.0000",
+            "closed_trades_difference": 0,
+            "capital_changed": false,
+            "same_dataset": true
+        }
+    },
+    "benchmark": {
+        "basis": "equal_weight_research_universe_first_ask_to_terminal_bid_price_only_no_fees",
+        "per_symbol_return_pct": {
+            "CRM": null,
+            "MSFT": null
+        },
+        "return_pct": null,
+        "reason": "opening_or_terminal_quote_unavailable",
+        "spy_return_pct": null,
+        "spy_reason": "benchmark_quotes_not_acquired"
+    },
+    "source_hashes": {
+        "app\/Jobs\/RunStrategyExperiment.php": "4709596dc38da01f69735a69ddbfc4704c7c399b2e1bae2bda068ecf3de0fb1c",
+        "app\/Models\/PaperTrading\/StrategyExperiment.php": "ea3acb59ad18155105c9d85f04c0aa84620d2b8a5c753eaf9b191375665ceb67",
+        "app\/Models\/PaperTrading\/StrategyExperimentStep.php": "a8e57fb3fc3616d9aef8d0439bc6091828d7d53d2c2b82e5059481f19e0b7821",
+        "app\/Services\/Broker\/Agentic\/RobinhoodOrderContract.php": "f157b6f15fcb5b0a1168513cd4ece2b60a3ebc936fddbb3e3b49de1db3ee219f",
+        "app\/Services\/MarketData\/Alpaca\/CorporateActions.php": "5066184ef0c772e0c85546b91b18c276cbc25fef65845501971c738e8f5db2b5",
+        "app\/Services\/MarketData\/Alpaca\/DailyBars.php": "ba901c8d8df549c8206827c7ff0397c58c186ecf910ffd2a3ef573be598900f2",
+        "app\/Services\/MarketData\/Alpaca\/HistoricalQuotes.php": "b04c423467a8dcdb325035e82d60c8d50ef26e6cdd1c9f4d8f2c52d6543b3588",
+        "app\/Services\/MarketData\/Alpaca\/TradingCalendar.php": "5b164558ad7fd04128384c03995c035dbc77047d68b8eb5bb9684246c98cd0bc",
+        "app\/Services\/PaperTrading\/EligibilityRules.php": "3b2d0e4f64c3e21e632f749bd8d51d81e2027cf81d2a7ad1c33830f1e2b0c9e7",
+        "app\/Services\/PaperTrading\/Experiments\/ExperimentAccess.php": "b3b657f914665003c5e7f2040fc49ddc6fd68ca82a9e6b4ba5fd0670988628b1",
+        "app\/Services\/PaperTrading\/Experiments\/ExperimentComparisons.php": "b0591d4f0e7abae7f8802fdd1aa840bb83db2a58eb3e906f56b4bd303eccd086",
+        "app\/Services\/PaperTrading\/Experiments\/ExperimentDefinition.php": "71322605a5ab0ffbe94f7f9f80347d41824afe60f64a9b5487741527e1d1d643",
+        "app\/Services\/PaperTrading\/Experiments\/ReplayAccountingVerifier.php": "39453c5eae501a94d4bc8f3121980caceeac56c62b0ff0a92f1d8014a909a9bd",
+        "app\/Services\/PaperTrading\/Experiments\/StrategyExperiments.php": "7b76201d2b8008f9dfcd80af361e65dadc82ceaee60504c0283b25d91d3d2cce",
+        "app\/Services\/PaperTrading\/IntradayQuoteReplay.php": "ddedc5dad0364e5c74eae5f47bfede28b6244cd2f979016f272718f3f180f620",
+        "app\/Services\/PaperTrading\/IntradayReplayInputs.php": "1bf0838641c46a26b1555630797a68b822349313dae81bf2ab6c14bb740f01db",
+        "app\/Services\/PaperTrading\/MultiSessionQuoteReplay.php": "ff9234fd80bdf2ac23c3179e9458b07bbc3d21e1019abd419e521af606c1bfdf",
+        "app\/Services\/PaperTrading\/PaperFillPrice.php": "60f1659e22cbe2415a3b7d7b78f90dbc106acd056ac6335618f832ffa10e60c2",
+        "app\/Services\/PaperTrading\/PaperMarketReferences.php": "60692300f19cb21046984763c1f3d479953cc8e34711bc9b7adb1ae9b4a89c89",
+        "app\/Services\/PaperTrading\/ProfileCalculator.php": "452d7fc673eab08679f2ce59af2fd6e76b2c63354f9e77197ed3dba0bac21bdb",
+        "app\/Services\/PaperTrading\/ResearchVariants.php": "3da3af5fae0c85fa1c67d2440d89f82b81e02c0b72d1b83f2fb7e3ed520ec8f5",
+        "app\/Services\/PaperTrading\/RiskSizer.php": "34d6fb710cb7a09766eb611fb4360c269b7463b2d2ce3876ed768e9c4343bc0e",
+        "app\/Services\/PaperTrading\/RuleEligibilityPolicies.php": "970271ace445286167d09737abcd507e3c76d0ae628c59a7a7fb258da22b655f",
+        "app\/Services\/PaperTrading\/SignalExecutionPolicies.php": "a967082f6d78554f00820419a2c5a37f813181d8d81b8e3bd50eff60c5c97653",
+        "app\/Services\/PaperTrading\/SignalOrderPrice.php": "cb8768b0e17bf607933dc00661ba676acad3ef4a57fb393941b6a706050e2681",
+        "app\/Services\/PaperTrading\/SignalParameters.php": "9ccf1b3be22e205afdbe6910904d671ebf7580fedc977ef3b1494b82937e906e",
+        "app\/Services\/PaperTrading\/SignalRules.php": "284f02d15cafc0bd186a742d8f9d96b93387634d47b135a019eeb7c332eece31",
+        "app\/Services\/PaperTrading\/StrategyParameters.php": "9fb00d4ccdffd09e630fdd777ca7e12d3a98bae503336427ad6884dc8680fd7d",
+        "app\/Services\/PaperTrading\/StrategyReplay.php": "bfa20a2f00c639f0d93b329ab36ca03c87383ff6f767e01375b9204a6bebf583",
+        "app\/Services\/PaperTrading\/TradingCosts.php": "acb31a3f32675dc417336bd35527c4339e23fc91e9eac3ecc90253b009c88444",
+        "app\/Support\/Mcp\/Decimal.php": "d1826e3f378330c689fad8ead3e4056618154652d37e88db3a7b85ab39e17e85",
+        "app\/Support\/Mcp\/ExactJsonNumbers.php": "e8ef6c569898bb2a1b6d5e96ae81d0cd60a5f785cd30bb8cc2767d5f21d76490",
+        "composer.lock": "d554dba0a66581f3f440e46331c1f538b6961f1e449894a5b8b5230d10b56de6"
+    },
+    "broker_executable": false,
+    "forward_ledger_changed": false,
+    "interpretation": "Exploratory comparison; no automatic winner selection, policy application or profitability claim.",
+    "experiment": "QUOTE-004C",
+    "specification": {
+        "name": "Current fractional policy with first-minute opening observations",
+        "hypothesis": "Correct the exact-open sampling limitation identified in QUOTE-004B, preserving the same symbols, dates, frozen policy, rules and parameters. Test whether data-only quotes 30 seconds after the open supply valid first-minute baselines and allow the unchanged gates to evaluate later entries.",
+        "symbols": [
+            "CRM",
+            "MSFT"
+        ],
+        "sessions": [
+            "2026-10-01",
+            "2026-10-02",
+            "2026-10-05",
+            "2026-10-06",
+            "2026-10-07",
+            "2026-10-08",
+            "2026-10-09",
+            "2026-10-12",
+            "2026-10-13",
+            "2026-10-14",
+            "2026-10-15",
+            "2026-10-16",
+            "2026-10-19",
+            "2026-10-20",
+            "2026-10-21",
+            "2026-10-22",
+            "2026-10-23"
+        ],
+        "baseline": "current_fractional",
+        "variants": [
+            {
+                "id": "current_fractional",
+                "equity": "500",
+                "parameters": []
+            }
+        ]
+    },
+    "definition_hash": "f1cff0e4dc28fee7029cfc62f58fe0a7e579c9acd6e2d3a543af6df5d14bad63",
+    "replay_versions": {
+        "engine": "intraday_quotes_v2",
+        "window": "intraday_experiment_v2",
+        "accounting": "quote_replay_accounting_v2"
+    },
+    "session_manifest": {
+        "session-2026-10-01.json": "a08dfba1dcc9a336d62e01558b97b14cbf658d22433f6873dd6e553850a78291",
+        "session-2026-10-02.json": "b71d66d202c724a39a9573d8bab5102aa826339f465c00cbbfd3f7fd2a79b22c",
+        "session-2026-10-05.json": "f7f1b5d3074cf125900eb4e04dd8026b3f51448cec03595a19bcd08520cba694",
+        "session-2026-10-06.json": "e96ec7a633db5ea1f157e0b0f3e130ed2fdd24201feb2cb62d3b1911a179c093",
+        "session-2026-10-07.json": "43e52e1098139ba6bdfee269e6199cfd68f8116588a779bc07388c1f352f8782",
+        "session-2026-10-08.json": "537049528e2484fae01f0c6f48aebd176726c90ead7473e4b480d26d208c2f37",
+        "session-2026-10-09.json": "cba1fec28a7cbf1d634c9910c560e12c36ff5b16c80860b2f4b4da8330a017e0",
+        "session-2026-10-12.json": "014fdd237266bc6dca2c4cc6bf0459065c6dec190cb2dcedb59dae7019cefbf0",
+        "session-2026-10-13.json": "ed7b9f85077d33bada4df4355376ac7b8e115cf515a77380e8740af7d51eca8a",
+        "session-2026-10-14.json": "eba8746f1fba8f40888827e4e88ab6d35c9f92d6250626f91355013ad8bdc627",
+        "session-2026-10-15.json": "ac922406b14c035b496695e894c9c3233e8d95c4c23aead503c00853cfab0c18",
+        "session-2026-10-16.json": "dd4548a861202c315655d73e3843a1f7706ca2861051a57baf8cdc74217c5b99",
+        "session-2026-10-19.json": "3e8bf8042bda2f43b2e446be26edbf090ab166a75148eab054d47450c0001843",
+        "session-2026-10-20.json": "998fb50e0828cfb437daa529e039f22d7cf1c0ecdee01ffa3fdc0d02690b31de",
+        "session-2026-10-21.json": "7e0055c48292c62d4d08e72118d351673faa49c95a65b2c3acbf75adc8b7adb6",
+        "session-2026-10-22.json": "89e93240283451274ab53726695c4945f27c9fabaa748d0ff71b6946974d84e6",
+        "session-2026-10-23.json": "36f031646dbc43ce35edcd04fd6c8442c6e0677e6b72ae81a8bf3eabb03a878d"
+    },
+    "determinism": "identical repeated replay on frozen inputs",
+    "acquisition_requests": 2856,
+    "publication": "Local source-only research; no runtime experiment row, deployment, policy application, forward-ledger or broker mutation.",
+    "modeled_execution_costs": {
+        "current_fractional": {
+            "recorded_fees": "0.00",
+            "embedded_adverse_slippage": "0.08445070611000",
+            "quoted_half_spread_versus_sample_midpoints": "0.012086250000000000000000",
+            "basis": "Slippage and half-spread are embedded in recorded fill prices; do not subtract them from P&L again. These are modeled costs, not broker-confirmed charges."
+        }
+    },
+    "trade_rows": {
+        "current_fractional": [
+            {
+                "symbol": "MSFT",
+                "status": "Open",
+                "setup": "pullback",
+                "quantity_bought": "0.184398",
+                "quantity_sold": "0",
+                "buy_notional": "98.47902332421000",
+                "sell_notional": "0",
+                "fees": "0.00",
+                "bought_at": "2026-10-09T15:00:00.000000Z",
+                "last_bought_at": "2026-10-09T15:00:00.000000Z",
+                "sold_at": null,
+                "last_sold_at": null,
+                "buy_reason": "pullback_trigger_crossed",
+                "sell_reason": null,
+                "fills": [
+                    {
+                        "order_id": 2,
+                        "symbol": "MSFT",
+                        "side": "BUY",
+                        "at": "2026-10-09T15:00:00.000000Z",
+                        "source_ns": "2026-10-09T14:59:59.524083482Z",
+                        "quantity": "0.184398",
+                        "price": "534.05689500",
+                        "fee": "0.00",
+                        "reason": "pullback_trigger_crossed"
+                    }
+                ],
+                "pending_exit_reason": null,
+                "pending_exit_status": null,
+                "quantity_remaining": "0.184398",
+                "buy_price": "534.056895000000000000",
+                "sell_price": null,
+                "mark": "524.36",
+                "mark_at": "2026-10-23T19:59:58.965060591Z",
+                "initial_stop": "509.199752140000000000",
+                "trailing_stop": "509.199752140000000000",
+                "stop_as_of": "2026-10-23T19:59:59.000000Z",
+                "net": "-1.78808804421000"
+            },
+            {
+                "symbol": "CRM",
+                "status": "Open",
+                "setup": "pullback",
+                "quantity_bought": "0.299052",
+                "quantity_sold": "0",
+                "buy_notional": "70.50683960190000",
+                "sell_notional": "0",
+                "fees": "0.00",
+                "bought_at": "2026-10-01T13:45:00.000000Z",
+                "last_bought_at": "2026-10-01T13:45:00.000000Z",
+                "sold_at": null,
+                "last_sold_at": null,
+                "buy_reason": "pullback_trigger_crossed",
+                "sell_reason": null,
+                "fills": [
+                    {
+                        "order_id": 1,
+                        "symbol": "CRM",
+                        "side": "BUY",
+                        "at": "2026-10-01T13:45:00.000000Z",
+                        "source_ns": "2026-10-01T13:44:59.991310070Z",
+                        "quantity": "0.299052",
+                        "price": "235.76782500",
+                        "fee": "0.00",
+                        "reason": "pullback_trigger_crossed"
+                    }
+                ],
+                "pending_exit_reason": null,
+                "pending_exit_status": null,
+                "quantity_remaining": "0.299052",
+                "buy_price": "235.767825000000000000",
+                "sell_price": null,
+                "mark": "248.47",
+                "mark_at": "2026-10-23T19:59:58.776974568Z",
+                "initial_stop": "219.178953580000000000",
+                "trailing_stop": "225.40669287",
+                "stop_as_of": "2026-10-23T19:59:59.000000Z",
+                "net": "3.79861083810000"
+            }
+        ]
+    },
+    "opening_baseline_status": {
+        "available_sessions": 17,
+        "total_sessions": 17,
+        "sessions": [
+            {
+                "date": "2026-10-01",
+                "opening_equity": "500",
+                "daily_loss_paused": false,
+                "fills": 1,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-02",
+                "opening_equity": "500.42829479810000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-05",
+                "opening_equity": "499.21414367810000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-06",
+                "opening_equity": "498.65192591810000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-07",
+                "opening_equity": "496.95929159810000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-08",
+                "opening_equity": "496.96527263810000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-09",
+                "opening_equity": "498.27512039810000",
+                "daily_loss_paused": false,
+                "fills": 1,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-12",
+                "opening_equity": "500.74763337389000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-13",
+                "opening_equity": "502.73119533389000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-14",
+                "opening_equity": "502.50761883389000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-15",
+                "opening_equity": "500.49226473389000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-16",
+                "opening_equity": "505.64774373389000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-19",
+                "opening_equity": "499.64018817389000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-20",
+                "opening_equity": "500.54616837389000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-21",
+                "opening_equity": "500.24694111389000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-22",
+                "opening_equity": "501.77060121389000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            },
+            {
+                "date": "2026-10-23",
+                "opening_equity": "500.69301243389000",
+                "daily_loss_paused": false,
+                "fills": 0,
+                "closed_trades": 0
+            }
+        ]
+    },
+    "replay_harness_sha256": "df1b651bd1015988f5fcb0bfe39f8891ce0f4edbe51989ebf814cbf823874b53",
+    "tested_source_patch_sha256": "739e798c30a47b54f6b8abf30ee1ecc13365fea971273dbf2e619c71d80d05dd"
+}

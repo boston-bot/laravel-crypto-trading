@@ -89,4 +89,30 @@ class ReplayAccountingVerifierTest extends TestCase
         $this->assertNull($report['benchmark']['return_pct']);
         $this->assertNull($report['comparisons']['base']['return_difference_percentage_points']);
     }
+
+    public function test_fractional_submission_fills_reconcile_and_cannot_disguise_invalid_precision_or_timing(): void
+    {
+        $data = $this->sessions();
+        $settings = array_replace(F::settings(), ['allow_fractional' => true, 'slippage_bps' => '5']);
+        $r = app(StrategyReplay::class)->runQuoteWindow($data, SignalParameters::current()['values'], $settings, '500');
+        $verifier = app(ReplayAccountingVerifier::class);
+        $this->assertNotEmpty($r['trades']);
+        $this->assertSame('passed', $verifier->verify($data, $r, $settings, '500')['status']);
+        foreach (['precision', 'type', 'time', 'future', 'cash'] as $case) {
+            $bad = $r;
+            match ($case) {
+                'precision' => $bad['fills'][0]['quantity'] .= '1',
+                'type' => $bad['orders'][0]['type'] = 'limit',
+                'time' => $bad['orders'][0]['accepted_at'] = '2026-10-19T13:50:00Z',
+                'future' => $bad['fills'][0]['source_ns'] = '2026-10-19T13:45:00.000000001Z',
+                'cash' => $bad['cash'] = '500',
+            };
+            try {
+                $verifier->verify($data, $bad, $settings, '500');
+                $this->fail('Tampered fractional result accepted: '.$case);
+            } catch (\RuntimeException $e) {
+                $this->assertSame('Replay accounting verification failed.', $e->getMessage());
+            }
+        }
+    }
 }

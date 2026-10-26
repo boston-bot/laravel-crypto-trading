@@ -116,6 +116,8 @@ final class IntradayReplayInputs
         for ($time = $open; $time->lt($end->subSecond()); $time = $time->addMinutes(5)) {
             $times[] = [$time, 'decision'];
         }
+        // A quote exactly at the bell often predates it. Keep the opening valuation inside the first minute.
+        array_splice($times, 1, 0, [[$open->addSeconds(30), 'opening_valuation']]);
         $times[] = [$end->subSecond(), 'mark'];
         foreach ($times as [$time, $kind]) {
             $frame = ['at' => $time->toISOString(), 'kind' => $kind, 'quotes' => []];

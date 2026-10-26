@@ -21,7 +21,7 @@ final class ExperimentDefinition
 {
     public const VERSION = 'strategy_experiment_v1';
 
-    public const DATA_CONTRACT = 'historical_sip_raw_regular_5m_full_sessions_v1';
+    public const DATA_CONTRACT = 'historical_sip_raw_regular_5m_opening30s_full_sessions_v2';
 
     private static ?array $processSources = null;
 
@@ -71,7 +71,7 @@ final class ExperimentDefinition
         sort($ordered);
         abort_unless($ordered === $spec['sessions'] && in_array($spec['baseline'], array_column($spec['variants'], 'id'), true), 422, 'Use ascending sessions and an existing baseline.');
         foreach ($spec['sessions'] as $date) {
-            abort_unless($date <= CarbonImmutable::now('America/New_York')->toDateString() && TradingCosts::valid(TradingCosts::reviewed(), CarbonImmutable::parse($date)), 422, 'Sessions must be historical and covered by reviewed costs.');
+            abort_unless($date <= CarbonImmutable::now('America/New_York')->toDateString() && TradingCosts::valid(TradingCosts::reviewed(), CarbonImmutable::parse($date, 'America/New_York')), 422, 'Sessions must be historical and covered by reviewed costs.');
         }
         $seen = [];
         foreach ($spec['variants'] as &$variant) {
@@ -110,10 +110,10 @@ final class ExperimentDefinition
 
     public function sources(): array
     {
-        $paths = ['composer.lock', 'app/Jobs/RunStrategyExperiment.php', 'app/Models/PaperTrading/StrategyExperiment.php', 'app/Models/PaperTrading/StrategyExperimentStep.php',
+        $paths = ['app/Services/Broker/Agentic/RobinhoodOrderContract.php', 'composer.lock', 'app/Jobs/RunStrategyExperiment.php', 'app/Models/PaperTrading/StrategyExperiment.php', 'app/Models/PaperTrading/StrategyExperimentStep.php',
             'app/Support/Mcp/Decimal.php', 'app/Support/Mcp/ExactJsonNumbers.php'];
         foreach (['StrategyReplay', 'ResearchVariants', 'IntradayQuoteReplay', 'MultiSessionQuoteReplay', 'IntradayReplayInputs', 'ProfileCalculator', 'SignalRules', 'SignalParameters',
-            'StrategyParameters', 'RiskSizer', 'PaperFillPrice', 'TradingCosts', 'EligibilityRules', 'RuleEligibilityPolicies', 'PaperMarketReferences', 'SignalExecutionPolicies'] as $name) {
+            'StrategyParameters', 'RiskSizer', 'PaperFillPrice', 'SignalOrderPrice', 'TradingCosts', 'EligibilityRules', 'RuleEligibilityPolicies', 'PaperMarketReferences', 'SignalExecutionPolicies'] as $name) {
             $paths[] = 'app/Services/PaperTrading/'.$name.'.php';
         }
         foreach (['HistoricalQuotes', 'DailyBars', 'TradingCalendar', 'CorporateActions'] as $name) {

@@ -49,6 +49,60 @@ class MultiSessionQuoteReplayTest extends TestCase
         return app(StrategyReplay::class)->runQuoteSessions($data, $parameters ?? SignalParameters::current()['values'], F::settings(), '10000');
     }
 
+    public function test_a_first_minute_valuation_recovers_a_missing_exact_open_without_trading_on_the_valuation_frame(): void
+    {
+        $data = $this->sessions(true);
+        array_splice($data[1]['frames'], 1, 0, [F::frame('2026-10-20T13:30:30Z', 'opening_valuation')]);
+        $r = $this->replay($data);
+        $this->assertNotNull($r['sessions'][1]['opening_equity']);
+        $this->assertFalse($r['sessions'][1]['daily_loss_paused']);
+        $this->assertCount(1, $r['trades']);
+        $this->assertNotContains('2026-10-20T13:30:30.000000Z', array_column($r['fills'], 'at'));
+        $this->assertNotContains('2026-10-20T13:30:30.000000Z', array_column($r['events'], 'at'));
+    }
+
+    public function test_a_quote_at_or_after_the_first_minute_cannot_supply_a_missing_opening_baseline(): void
+    {
+        $data = $this->sessions(true);
+        array_splice($data[1]['frames'], 1, 0, [F::frame('2026-10-20T13:31:00Z', 'opening_valuation')]);
+        $r = $this->replay($data);
+        $this->assertNull($r['sessions'][1]['opening_equity']);
+        $this->assertTrue($r['sessions'][1]['daily_loss_paused']);
+        $this->assertCount(1, $r['trades'], 'An unavailable opening baseline must still permit exits.');
+    }
+
+    public function test_accounting_changes_before_the_first_minute_valuation_prevent_a_fabricated_opening_baseline(): void
+    {
+        $data = $this->sessions();
+        foreach ($data as &$session) {
+            $session['symbols'][] = 'OTHER';
+            $session['daily_reads']['OTHER'] = $session['daily_reads']['DEMO'];
+            $session['action_reads']['OTHER'] = $session['action_reads']['DEMO'];
+            foreach ($session['frames'] as &$frame) {
+                $frame['quotes']['OTHER'] = $frame['quotes']['DEMO'];
+            }
+            unset($frame);
+        }
+        unset($session);
+        $open = F::frame('2026-10-20T13:30:00Z', quote: F::quote('2026-10-20T13:30:00Z', '98', '98.10'));
+        $open['quotes']['DEMO']['timestamp_ns'] = '2026-10-20T13:30:00.000000000Z';
+        $open['quotes']['OTHER'] = null;
+        $fill = F::frame('2026-10-20T13:30:15Z', 'fill', F::quote('2026-10-20T13:30:15Z', '98', '98.10'));
+        $fill['quotes']['OTHER'] = null;
+        $valuation = F::frame('2026-10-20T13:30:30Z', 'opening_valuation');
+        $valuation['quotes']['OTHER'] = $valuation['quotes']['DEMO'];
+        $data[1]['frames'] = [$open, $fill, $valuation, $data[1]['frames'][3]];
+        $r = $this->replay($data);
+        $this->assertSame(2, $r['sessions'][0]['fills']);
+        $this->assertSame(1, $r['sessions'][1]['fills']);
+        $this->assertNull($r['sessions'][1]['opening_equity']);
+        $this->assertTrue($r['sessions'][1]['daily_loss_paused']);
+        array_splice($data[1]['frames'], 1, 1); // Even an accepted, unfilled intent changes reservations.
+        $withoutFill = $this->replay($data);
+        $this->assertSame(0, $withoutFill['sessions'][1]['fills']);
+        $this->assertNull($withoutFill['sessions'][1]['opening_equity']);
+    }
+
     public function test_positions_cash_and_pinned_stops_survive_the_close_and_close_on_later_quotes(): void
     {
         $r = $this->replay($this->sessions());
@@ -209,7 +263,7 @@ class MultiSessionQuoteReplayTest extends TestCase
         }
         $r = app(StrategyReplay::class)->runQuoteWindow($data, SignalParameters::current()['values'], F::settings(), '10000');
         $this->assertCount(7, $r['sessions']);
-        $this->assertSame('intraday_experiment_v1', $r['version']);
+        $this->assertSame('intraday_experiment_v2', $r['version']);
         $this->assertSame('2026-10-19', $r['trades'][0]['entry_date']);
         $this->assertSame('2026-10-20', $r['trades'][0]['exit_date']);
         $this->assertNotSame('10000', $r['sessions'][2]['cash']);

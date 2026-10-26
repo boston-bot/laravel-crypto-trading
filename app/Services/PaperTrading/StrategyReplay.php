@@ -23,9 +23,9 @@ final class StrategyReplay
     use IntradayQuoteReplay;
     use MultiSessionQuoteReplay;
 
-    public const MULTISESSION_VERSION = 'intraday_quotes_multisession_v1';
+    public const MULTISESSION_VERSION = 'intraday_quotes_multisession_v2';
 
-    public const INTRADAY_VERSION = 'intraday_quotes_v1';
+    public const INTRADAY_VERSION = 'intraday_quotes_v2';
 
     // v3: research order modes and rule switches; the defaults reproduce v2.
     public const VERSION = 'daily_replay_v3';
