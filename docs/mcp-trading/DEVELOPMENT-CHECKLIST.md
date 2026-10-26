@@ -384,6 +384,7 @@ October 25 (second increment): owner requested live policy and submission checks
 - [x] Last-boundary live checks from broker-confirmed snapshot, quote, eligibility, profile, session baseline, daily loss, sleeve/position/risk sizing and per-session cap; sells limited to app-attributed broker-held shares. Account trading eligibility at submission remains open.
 - [x] Broker-confirmed outcome journal: acceptance binding, reconciliation to partial/filled/cancelled/rejected, per-execution fill dedupe, owner link/absent resolution of unknown outcomes, contradiction incidents; app-bound orders excluded from external-order detection.
 - [x] Control Center owner forms for live policy, buy pause/emergency disable (one-click engage), unknown-outcome link/absence and reconciliation review; authenticated, operator-only, CSRF-protected, throttled. SQLite **702 / 56 skips**, PostgreSQL **757 / 1 skip** (758 each). No order path.
+- [x] Order-tool contract reviewed (stored schemas plus a description-level `tools/list` with an empty call allowlist; order descriptions unchanged since October 19). `ref_id` proof binds app orders automatically; `approval_pending` state for broker customer approvals; documented `new`/`voided` states; read-only approval-setting operation (default off) and policy v2 `require_broker_approval` gate. Migration `000032` (test schema only). SQLite **705 / 62 skips**, PostgreSQL **766 / 1 skip** (767 each). [Evidence](M6-ORDER-CONTRACT-AND-APPROVALS-EVIDENCE.md).
 
 October 18: the owner waived M4's seven-session period and continued M5. This does not authorize M6 brokerage mutations or live-mode activation. Under the October 18 strategy/execution split, M6's execution gateway stays separate from the read gateway and accepts only signal-based orders that passed every M5 gate.
 
@@ -397,7 +398,7 @@ October 18: the owner waived M4's seven-session period and continued M5. This do
 
 Mandatory fault tests: two workers claim the same intent; crash immediately before/after external request; response lost after acceptance; duplicate delivery; refresh-token race; partial fill then cancellation; policy changed while awaiting approval; expired quote; manual buy consumes funds; missing order-history page; emergency disable during queued work; restored backup contains stale intents. Every ambiguous external outcome blocks new exposure until reconciled.
 
-Evidence: [initial journal foundation](M6-EXECUTION-JOURNAL-EVIDENCE.md); [live policy, checks and broker-confirmed outcomes](M6-LIVE-POLICY-AND-OUTCOMES-EVIDENCE.md); remaining M6 acceptance pending. Live authorization: none supplied by this documentation.
+Evidence: [initial journal foundation](M6-EXECUTION-JOURNAL-EVIDENCE.md); [live policy, checks and broker-confirmed outcomes](M6-LIVE-POLICY-AND-OUTCOMES-EVIDENCE.md); [order-tool contract, ref_id proof and approvals](M6-ORDER-CONTRACT-AND-APPROVALS-EVIDENCE.md); remaining M6 acceptance pending. Live authorization: none supplied by this documentation.
 
 ## Crypto track — Coinbase and Robinhood Crypto
 

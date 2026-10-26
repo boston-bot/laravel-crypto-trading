@@ -7,6 +7,11 @@ use App\Models\McpConnection;
 use App\Models\Monitoring\ExternalOrder;
 use App\Models\PaperTrading\StrategySignal;
 use App\Models\User;
+use App\Services\Broker\Agentic\BrokerRecord;
+use App\Services\Broker\Agentic\Operation;
+use App\Services\Broker\Agentic\ReadError;
+use App\Services\Broker\Agentic\ReadFailure;
+use App\Services\Broker\Agentic\RobinhoodReadNormalizer;
 use App\Services\Execution\BrokerOutcomes;
 use App\Services\Execution\ExecutionControls;
 use App\Services\Execution\ExecutionJournal;
@@ -79,7 +84,7 @@ class LiveSubmissionChecksTest extends TestCase
         foreach ([['risk_per_trade_pct' => '1.1'], ['max_position_pct' => '21'], ['max_position_pct' => '0'], ['daily_loss_pause_pct' => '11'],
             ['max_open_positions' => 9], ['max_orders_per_session' => 0], ['quote_max_age_seconds' => 61], ['sleeve_capital' => 1000],
             ['sleeve_capital' => '1e3'], ['max_order_notional' => '1000.01'], ['order_type' => 'limit'], ['slippage_bps' => '4.99'],
-            ['allow_fractional' => 'yes'], ['order_type' => 'stop', 'allow_fractional' => false]] as $patch) {
+            ['allow_fractional' => 'yes'], ['order_type' => 'stop', 'allow_fractional' => false], ['require_broker_approval' => '1']] as $patch) {
             $this->refused(fn () => $policies->apply($c, $c->user_id, 1, (string) Str::uuid(), $patch + self::POLICY));
         }
         $this->refused(fn () => $policies->apply($c, $c->user_id, 1, (string) Str::uuid(), array_diff_key(self::POLICY, ['max_order_notional' => 1])));
@@ -170,6 +175,45 @@ class LiveSubmissionChecksTest extends TestCase
         SignalExecutionFixture::quote($c);
         $this->assertSame('live_whole_share_size_zero', app(SubmissionChecks::class)->reason($c, $intent));
         $this->assertSame('live_whole_share_size_zero', app(SubmissionChecks::class)->plan($c, $signal)['reason']);
+    }
+
+    public function test_every_live_order_needs_a_fresh_broker_approval_setting_matching_the_owner_policy(): void
+    {
+        [$c, $signal] = $this->ready();
+        $checks = app(SubmissionChecks::class);
+        $this->assertNull($checks->plan($c, $signal)['reason']);
+        $this->broker->approvalRequired = false; // The owner turned approvals off in the Robinhood app.
+        $this->sync($c);
+        SignalExecutionFixture::quote($c);
+        $this->assertSame('broker_approval_setting_differs', $checks->plan($c, $signal)['reason']);
+        $this->assertSame('broker_approval_setting_differs', $checks->plan($c, $this->signal($c, 'SELL'))['reason'], 'Exits run under the same approval mode.');
+        $this->broker->approvalRequired = null; // The optional read fails; monitoring still completes.
+        $this->sync($c);
+        $this->assertSame('complete', DB::table('mcp_snapshots')->latest('id')->value('status'));
+        $this->assertSame('broker_approval_setting_unverified', $checks->plan($c, $signal)['reason']);
+        config(['robinhood_mcp.approval_setting_enabled' => false]);
+        $this->broker->approvalRequired = true;
+        $this->sync($c);
+        $this->assertSame('broker_approval_setting_unverified', $checks->plan($c, $signal)['reason']);
+        app(LivePolicies::class)->apply($c, $c->user_id, 1, (string) Str::uuid(), ['require_broker_approval' => false] + self::POLICY);
+        config(['robinhood_mcp.approval_setting_enabled' => true]);
+        $this->broker->approvalRequired = false;
+        $this->sync($c);
+        $this->assertNull($checks->plan($c, $signal)['reason']);
+    }
+
+    public function test_approval_setting_reads_must_name_the_bound_account_with_a_boolean(): void
+    {
+        $fields = RobinhoodReadNormalizer::fields(Operation::TradeApprovalSetting, ['account_number' => 'ACCT1', 'human_must_approve_trades' => true, 'updated_at' => '2026-10-25T00:00:00Z'], 'ACCT1');
+        $this->assertTrue(BrokerRecord::from(Operation::TradeApprovalSetting, $fields, null)->fields['human_must_approve_trades']);
+        foreach ([['account_number' => 'OTHER', 'human_must_approve_trades' => true], ['account_number' => 'ACCT1', 'human_must_approve_trades' => 'true'], ['account_number' => 'ACCT1']] as $row) {
+            try {
+                BrokerRecord::from(Operation::TradeApprovalSetting, RobinhoodReadNormalizer::fields(Operation::TradeApprovalSetting, $row, 'ACCT1'), null);
+                $this->fail('Malformed approval setting accepted.');
+            } catch (ReadFailure $failure) {
+                $this->assertSame(ReadError::Malformed, $failure->reason);
+            }
+        }
     }
 
     public function test_entries_need_a_broker_confirmed_opening_baseline(): void

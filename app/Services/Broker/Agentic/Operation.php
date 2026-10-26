@@ -2,7 +2,7 @@
 
 namespace App\Services\Broker\Agentic;
 
-// No order review, submit, cancel, watchlist mutation or configuration operation exists here.
+// No order review, submit, cancel, approval decision, watchlist mutation or configuration operation exists here.
 enum Operation: string
 {
     case Accounts = 'accounts';
@@ -21,4 +21,5 @@ enum Operation: string
     case CashFlows = 'cash_flows';
     case History = 'history';
     case Calendar = 'calendar';
+    case TradeApprovalSetting = 'trade_approval_setting';
 }

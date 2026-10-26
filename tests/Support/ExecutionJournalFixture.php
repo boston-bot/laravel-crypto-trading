@@ -43,7 +43,7 @@ final class ExecutionJournalFixture
     }
 
     /** Every execution table with user triggers, children first. */
-    private const TABLES = ['fills', 'outcomes', 'broker_orders', 'events', 'dispatches', 'intents', 'policies', 'controls'];
+    private const TABLES = ['fills', 'outcomes', 'broker_orders', 'approvals', 'events', 'dispatches', 'intents', 'policies', 'controls'];
 
     public static function cleanup(?int $connection): void
     {
@@ -61,7 +61,7 @@ final class ExecutionJournalFixture
             $ids = DB::table('mcp_execution_intents')->where('mcp_connection_id', $connection)->pluck('id');
             $accounts = DB::table('mcp_execution_intents')->whereIn('id', $ids)->pluck('execution_account_id')
                 ->merge(DB::table('mcp_execution_accounts')->where('scope', $scope)->pluck('id'))->unique()->values();
-            foreach (['fills', 'outcomes', 'broker_orders', 'events', 'dispatches'] as $suffix) {
+            foreach (['fills', 'outcomes', 'broker_orders', 'approvals', 'events', 'dispatches'] as $suffix) {
                 DB::table('mcp_execution_'.$suffix)->whereIn('intent_id', $ids)->delete();
             }
             DB::table('mcp_execution_intents')->whereIn('id', $ids)->delete();

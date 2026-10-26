@@ -19,10 +19,10 @@ use Illuminate\Support\Facades\Validator;
  */
 final class LivePolicies
 {
-    public const CONTRACT = 'live_execution_policy_v1';
+    public const CONTRACT = 'live_execution_policy_v2';
 
     public const FIELDS = ['sleeve_capital', 'max_order_notional', 'risk_per_trade_pct', 'max_position_pct', 'max_open_positions',
-        'daily_loss_pause_pct', 'max_orders_per_session', 'order_type', 'allow_fractional', 'slippage_bps', 'limit_offset_bps', 'quote_max_age_seconds'];
+        'daily_loss_pause_pct', 'max_orders_per_session', 'order_type', 'allow_fractional', 'slippage_bps', 'limit_offset_bps', 'quote_max_age_seconds', 'require_broker_approval'];
 
     public static function current(string $scope): ?ExecutionPolicy
     {
@@ -45,9 +45,11 @@ final class LivePolicies
             'risk_per_trade_pct' => $rate, 'max_position_pct' => $rate, 'daily_loss_pause_pct' => $rate, 'slippage_bps' => $rate, 'limit_offset_bps' => $rate,
             'max_open_positions' => ['required', 'integer', 'min:1', 'max:8'], 'max_orders_per_session' => ['required', 'integer', 'min:1', 'max:20'],
             'quote_max_age_seconds' => ['required', 'integer', 'min:1', 'max:60'], 'order_type' => ['required', 'in:market,limit'],
-            'allow_fractional' => ['present'], 'request' => ['required', 'uuid'], 'base' => ['integer', 'min:0']])->validate();
+            'allow_fractional' => ['present'], 'require_broker_approval' => ['present'], 'request' => ['required', 'uuid'], 'base' => ['integer', 'min:0']])->validate();
         unset($payload['request'], $payload['base']);
         abort_unless(is_bool($payload['allow_fractional']), 422, 'Fractional shares must be true or false.');
+        // The owner's expectation of Robinhood's own approval setting; a broker setting that differs denies every claim.
+        abort_unless(is_bool($payload['require_broker_approval']), 422, 'Broker approval expectation must be true or false.');
         $zero = Decimal::from('0');
         foreach (['risk_per_trade_pct' => '1', 'max_position_pct' => '20', 'daily_loss_pause_pct' => '10', 'slippage_bps' => '100', 'limit_offset_bps' => '100'] as $key => $max) {
             $v = Decimal::from($payload[$key]);

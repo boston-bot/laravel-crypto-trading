@@ -88,6 +88,9 @@ final class Capabilities
             if ($operation === 'earnings_calendar' && ! config('robinhood_mcp.earnings_enabled')) {
                 continue;
             }
+            if ($operation === 'trade_approval_setting' && ! config('robinhood_mcp.approval_setting_enabled')) {
+                continue;
+            }
             if (($profile['reviewed_read_only'] ?? false) && (($tools[$profile['tool']]['fingerprint'] ?? null) !== ($profile['fingerprint'] ?? null) ||
                 (isset($profile['semantic_fingerprint']) && ($tools[$profile['tool']]['semantic_fingerprint'] ?? null) !== $profile['semantic_fingerprint']))) {
                 $changed = true;
@@ -117,6 +120,9 @@ final class Capabilities
             throw new ReadFailure(ReadError::Disabled);
         }
         if ($operation === Operation::EarningsCalendar && ! config('robinhood_mcp.earnings_enabled')) {
+            throw new ReadFailure(ReadError::Disabled);
+        }
+        if ($operation === Operation::TradeApprovalSetting && ! config('robinhood_mcp.approval_setting_enabled')) {
             throw new ReadFailure(ReadError::Disabled);
         }
         $profile = config('robinhood_mcp.operations.'.$operation->value);

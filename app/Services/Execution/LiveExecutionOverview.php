@@ -2,6 +2,7 @@
 
 namespace App\Services\Execution;
 
+use App\Models\Execution\ExecutionApproval;
 use App\Models\Execution\ExecutionFill;
 use App\Models\Execution\ExecutionOutcome;
 use App\Models\Execution\OrderIntent;
@@ -24,7 +25,8 @@ final class LiveExecutionOverview
         $outcomes = ExecutionOutcome::whereIn('intent_id', $intents->pluck('id'))->latest('id')->get()->unique('intent_id')->keyBy('intent_id');
         $rows = $intents->map(fn (OrderIntent $intent) => ['intent' => $intent, 'status' => $dispatches[$intent->id]->status ?? 'missing',
             'claimed_at' => $dispatches[$intent->id]->claimed_at ?? null, 'outcome' => $outcomes[$intent->id] ?? null]);
-        $unknown = $rows->where('status', 'unknown')->values();
+        $approvals = ExecutionApproval::whereIn('intent_id', $intents->pluck('id'))->get()->keyBy('intent_id');
+        $unknown = $rows->whereIn('status', ['unknown', 'approval_pending'])->map(fn ($row) => $row + ['approval' => $approvals[$row['intent']->id] ?? null])->values();
         // Owner links choose among this account's observed orders matching side and symbol; the journal rechecks quantity and time.
         $candidates = $unknown->isEmpty() ? collect() : ExternalOrder::where('mcp_connection_id', $connection->id)->where('scope', $scope)
             ->whereNotIn('broker_id_hash', DB::table('mcp_execution_broker_orders')->select('broker_id_hash'))->latest('id')->limit(50)->get();

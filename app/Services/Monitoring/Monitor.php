@@ -103,6 +103,14 @@ final class Monitor
                 throw new ReadFailure(ReadError::Malformed);
             }
         }
+        if (config('robinhood_mcp.approval_setting_enabled')) {
+            // Optional evidence for the live checks only: a failure leaves the setting unknown and never fails monitoring.
+            try {
+                $parts['trade_approval_setting'] = json_decode(json_encode($this->gateway->read($connection, Operation::TradeApprovalSetting), JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+            } catch (ReadFailure $failure) {
+                $parts['trade_approval_setting'] = ['failure' => $failure->reason->value];
+            }
+        }
         $parts['quotes'] = [];
         $parts['quote_failures'] = [];
         // Bounded optional enrichment in batched reads. A quote failure makes valuation/rules unknown, never erases holdings.

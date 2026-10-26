@@ -870,3 +870,7 @@ There is no C2 evaluation schedule or paper-order handoff. The command returns s
 Follow-up presence-only checks confirm both venue credentials are now recognized by the deployed app. No new authenticated call was made after private keys appeared in the IDE context; rotate exposed keys at the venues and replace local configuration. No key permission or write flag was changed by C2 development.
 
 [Source behavior, migration review, tests and remaining C2/C3 acceptance](CRYPTO-C2-RULES-EVIDENCE.md).
+
+## Live execution: broker approval setting (M6, read-only)
+
+Requires additive migration `2026_10_26_000032` (deploy with the owner migration credentials as before). Then set `ROBINHOOD_MCP_APPROVAL_SETTING_ENABLED=true` in the runtime `.env` and redeploy the same revision so cached configuration is rebuilt. Each monitoring run then adds one read-only `get_trade_approval_setting` call; a failed read is recorded with the snapshot and never fails monitoring. The Control Center's live policy must state the approval mode you set in the Robinhood app; while the broker's setting differs or cannot be read, every live order is denied. Brokerage writes remain disabled and no order tool is callable. [Evidence](M6-ORDER-CONTRACT-AND-APPROVALS-EVIDENCE.md).

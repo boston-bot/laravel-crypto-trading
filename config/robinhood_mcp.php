@@ -6,6 +6,8 @@ return [
     'execution_inputs_enabled' => filter_var(env('ROBINHOOD_MCP_EXECUTION_INPUTS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'watchlists_enabled' => filter_var(env('ROBINHOOD_MCP_WATCHLISTS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'earnings_enabled' => filter_var(env('ROBINHOOD_MCP_EARNINGS_ENABLED', false), FILTER_VALIDATE_BOOL),
+    // Read-only broker trade-approval setting, recorded with monitoring snapshots for the live submission checks.
+    'approval_setting_enabled' => filter_var(env('ROBINHOOD_MCP_APPROVAL_SETTING_ENABLED', false), FILTER_VALIDATE_BOOL),
     'client_id' => env('ROBINHOOD_MCP_CLIENT_ID'),
     'redirect_uri' => env('ROBINHOOD_MCP_REDIRECT_URI'),
     'max_pages' => 20,
@@ -85,6 +87,14 @@ return [
             'records' => 'data.accounts',
             'pagination' => ['kind' => 'single'],
             'normalizer' => 'robinhood_accounts_v1',
+        ],
+        // Reviewed October 25, 2026 against the stored catalog and a description-level tools/list. Read-only; only the
+        // customer can change the setting in the Robinhood app.
+        'trade_approval_setting' => [
+            'tool' => 'get_trade_approval_setting', 'reviewed_read_only' => true,
+            'fingerprint' => '918bc72431997fd2195c8366e60f63787c8e4541224b51a0ed92797cead50f56',
+            'account_argument' => 'account_number', 'records' => 'data.setting', 'records_object' => true,
+            'pagination' => ['kind' => 'single'], 'normalizer' => 'robinhood_v1', 'coverage' => 'account_setting',
         ],
         'portfolio' => [
             'tool' => 'get_portfolio', 'reviewed_read_only' => true,

@@ -22,6 +22,9 @@ class LiveExecutionController extends Controller
             'live' => ['required', 'array'], 'confirm_live_policy' => ['accepted']]);
         $input = array_intersect_key($data['live'], array_flip(LivePolicies::FIELDS));
         $input['allow_fractional'] = $request->boolean('live.allow_fractional');
+        // A required choice, not a checkbox: the owner states which Robinhood approval mode they expect.
+        abort_unless(in_array($data['live']['require_broker_approval'] ?? null, ['0', '1'], true), 422, 'Choose the expected broker approval mode.');
+        $input['require_broker_approval'] = $data['live']['require_broker_approval'] === '1';
         $policies->apply($this->connection($request), $request->user()->id, (int) $data['base_version'], $data['request_id'], $input + $data['live']);
 
         return $this->done('Live policy version applied. Brokerage writes remain '.(config('mcp.brokerage_writes_enabled') ? 'enabled by configuration' : 'disabled').'; staged intents with the previous fingerprint can no longer be claimed.');

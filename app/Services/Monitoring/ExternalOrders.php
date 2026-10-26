@@ -46,6 +46,8 @@ final class ExternalOrders
             if ($retrieved->isFuture() || $retrieved->lt(CarbonImmutable::now()->subMinutes(5))) {
                 throw new ReadFailure(ReadError::Stale);
             }
+            // Orders proven by this app's ref_id are bound first; any account mismatch below rolls the binding back.
+            app(BrokerOutcomes::class)->bind($current, $snapshot->scope, $read['records']);
             foreach ($read['records'] as $row) {
                 $order = $row['data'] ?? [];
                 if (($order['account_id'] ?? null) !== $current->bound_account_id || ! is_string($order['id'] ?? null) || $order['id'] === '') {

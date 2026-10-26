@@ -104,11 +104,11 @@ final class RiskObservations
         $pendingBuys = 0;
         foreach ($parts['orders']['records'] as $row) {
             $order = $row['data'];
-            if (in_array($order['status'], ['filled', 'cancelled', 'canceled', 'rejected', 'failed', 'expired'], true)) {
+            if (in_array($order['status'], ['filled', 'cancelled', 'canceled', 'rejected', 'failed', 'expired', 'voided'], true)) {
                 continue;
             }
             $unresolved++;
-            if (! in_array($order['status'], ['queued', 'confirmed', 'unconfirmed', 'pending', 'partially_filled'], true)) {
+            if (! in_array($order['status'], ['new', 'queued', 'confirmed', 'unconfirmed', 'pending', 'partially_filled'], true)) {
                 $pause[] = 'unknown_order_state';
                 $pendingKnown = false;
             }

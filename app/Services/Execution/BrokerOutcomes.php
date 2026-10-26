@@ -26,15 +26,55 @@ final class BrokerOutcomes
 
     public const MISSING = 'execution_order_missing_from_history';
 
-    /** Robinhood order states. An open state with a partial cumulative quantity is a partial fill. */
-    public const STATES = ['queued' => 'accepted', 'unconfirmed' => 'accepted', 'confirmed' => 'accepted', 'pending' => 'accepted',
+    /** Robinhood order states (RobinhoodOrderContract::ORDER_STATES plus legacy spellings). An open state with a partial cumulative quantity is a partial fill. */
+    public const STATES = ['new' => 'accepted', 'queued' => 'accepted', 'unconfirmed' => 'accepted', 'confirmed' => 'accepted', 'pending' => 'accepted',
         'partially_filled' => 'partially_filled', 'filled' => 'filled', 'cancelled' => 'broker_cancelled', 'canceled' => 'broker_cancelled',
-        'expired' => 'broker_cancelled', 'rejected' => 'rejected', 'failed' => 'rejected'];
+        'expired' => 'broker_cancelled', 'voided' => 'broker_cancelled', 'rejected' => 'rejected', 'failed' => 'rejected'];
 
     private const NEXT = ['accepted' => ['accepted', 'partially_filled', 'filled', 'broker_cancelled', 'rejected'],
         'partially_filled' => ['partially_filled', 'filled', 'broker_cancelled']];
 
     public function __construct(private IncidentRecorder $incidents) {}
+
+    /**
+     * Binds orders that carry an unresolved intent's ref_id (its idempotency key) before external-order classification.
+     * The broker deduplicates by ref_id, but proof also needs the intent's symbol, side and exact quantity and a
+     * creation time after the claim. A ref_id match that differs is a contradiction (for example an approval the
+     * customer edited): it stays external and raises a blocking incident. Caller holds the connection-row lock.
+     */
+    public function bind(McpConnection $connection, string $scope, array $records): void
+    {
+        $account = DB::table('mcp_execution_accounts')->where('scope', $scope)->lockForUpdate()->first();
+        if (! $account) {
+            return;
+        }
+        $unbound = OrderIntent::where('execution_account_id', $account->id)->whereNotIn('id', BrokerOrderBinding::select('intent_id'))
+            ->whereIn('id', DB::table('mcp_execution_dispatches')->whereIn('status', ExecutionJournal::UNBOUND)->select('intent_id'))->get()->keyBy(fn ($intent) => strtolower($intent->idempotency_key));
+        foreach ($records as $row) {
+            $order = $row['data'] ?? [];
+            $ref = is_string($order['ref_id'] ?? null) ? strtolower($order['ref_id']) : null;
+            $intent = $ref !== null ? $unbound[$ref] ?? null : null;
+            if (! $intent || ! is_string($order['id'] ?? null) || $order['id'] === '') {
+                continue;
+            }
+            $dispatch = DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->lockForUpdate()->firstOrFail();
+            $hash = hash('sha256', $order['id']);
+            if (! in_array($dispatch->status, ExecutionJournal::UNBOUND, true) || BrokerOrderBinding::where('intent_id', $intent->id)->exists()) {
+                continue;
+            }
+            if (! ExecutionJournal::matches($intent, $order, CarbonImmutable::parse($dispatch->claimed_at), true) || BrokerOrderBinding::where('broker_id_hash', $hash)->exists()) {
+                $this->incidents->record($connection, self::MISMATCH, 'critical', 'execution');
+
+                continue;
+            }
+            BrokerOrderBinding::create(['intent_id' => $intent->id, 'broker_id_hash' => $hash, 'broker_order_id' => $order['id'],
+                'source' => 'ref_id_match', 'recorded_at' => now()]);
+            DB::table('mcp_execution_dispatches')->where('id', $dispatch->id)->update(['status' => 'accepted', 'version' => $dispatch->version + 1, 'updated_at' => now()]);
+            DB::table('mcp_execution_events')->insert(['intent_id' => $intent->id, 'version' => $dispatch->version + 1, 'status' => 'accepted',
+                'reason' => 'broker_order_matched_ref_id', 'recorded_at' => now()]);
+            unset($unbound[$ref]);
+        }
+    }
 
     /** Caller holds the connection-row lock and has verified the read's account binding and freshness. */
     public function record(McpConnection $connection, BrokerOrderRead $read): void

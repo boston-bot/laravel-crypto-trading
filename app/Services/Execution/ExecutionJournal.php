@@ -3,6 +3,7 @@
 namespace App\Services\Execution;
 
 use App\Models\Execution\BrokerOrderBinding;
+use App\Models\Execution\ExecutionApproval;
 use App\Models\Execution\OrderIntent;
 use App\Models\McpConnection;
 use App\Models\Monitoring\BrokerOrderRead;
@@ -29,7 +30,10 @@ use Ramsey\Uuid\Uuid;
 final class ExecutionJournal
 {
     /** Claimed states whose broker outcome is unresolved or still open. */
-    public const BLOCKING = ['submitting', 'unknown', 'accepted', 'partially_filled'];
+    public const BLOCKING = ['submitting', 'unknown', 'approval_pending', 'accepted', 'partially_filled'];
+
+    /** Claimed states with no proven broker order yet; ref_id proof, an owner link or confirmed absence resolves them. */
+    public const UNBOUND = ['submitting', 'unknown', 'approval_pending'];
 
     public function __construct(private SubmissionChecks $checks) {}
 
@@ -190,6 +194,33 @@ final class ExecutionJournal
     }
 
     /**
+     * The broker routed the request to the customer for approval in the Robinhood app instead of placing it. No order
+     * exists yet. The account stays blocked until the approved order is proven by its ref_id or an owner link, or the
+     * owner confirms absence after the approval's own expiry. Approval state text is kept verbatim, never interpreted.
+     */
+    public function approvalPending(McpConnection $connection, int $actor, int $intentId, string $token, string $approvalId, string $state, bool $edited, string $expiresAt): void
+    {
+        abort_unless($approvalId !== '' && strlen($approvalId) <= 128 && ! preg_match('/\s/', $approvalId) && $state !== '' && strlen($state) <= 64 &&
+            preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/D', $expiresAt), 422, 'Invalid broker approval reference.');
+        DB::transaction(function () use ($connection, $actor, $intentId, $token, $approvalId, $state, $edited, $expiresAt) {
+            $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
+            $this->operator($current, $actor);
+            $intent = OrderIntent::whereKey($intentId)->where('mcp_connection_id', $current->id)->firstOrFail();
+            DB::table('mcp_execution_accounts')->where('id', $intent->execution_account_id)->lockForUpdate()->firstOrFail();
+            if ($prior = ExecutionApproval::where('intent_id', $intentId)->first()) {
+                abort_unless(hash_equals($prior->approval_id_hash, hash('sha256', $approvalId)), 409, 'Intent already has a different approval.');
+                $this->owned($intentId, $token, ['approval_pending', 'accepted', 'partially_filled', 'filled', 'broker_cancelled', 'rejected', 'absent']);
+
+                return;
+            }
+            $dispatch = $this->owned($intentId, $token, ['submitting']);
+            ExecutionApproval::create(['intent_id' => $intentId, 'approval_id_hash' => hash('sha256', $approvalId), 'approval_id' => $approvalId,
+                'initial_state' => $state, 'is_edited' => $edited, 'expires_at' => CarbonImmutable::parse($expiresAt), 'recorded_at' => now()]);
+            $this->transition($dispatch, 'approval_pending', 'broker_customer_approval_requested');
+        });
+    }
+
+    /**
      * Owner resolution of an unknown outcome to an order the broker actually reports. The order must match the
      * intent's symbol, side and quantity, and is reviewed as an external order by the same authenticated action.
      */
@@ -207,10 +238,10 @@ final class ExecutionJournal
 
                 return;
             }
-            abort_unless($dispatch->status === 'unknown', 409, 'Only an unknown outcome can be linked.');
+            abort_unless(in_array($dispatch->status, ['unknown', 'approval_pending'], true), 409, 'Only an unknown or approval-pending outcome can be linked.');
             $external = ExternalOrder::whereKey($externalOrderId)->where('scope', $account->scope)->firstOrFail();
             $order = $external->payload['order'] ?? [];
-            abort_unless($this->candidate($intent, $order, CarbonImmutable::parse($dispatch->claimed_at)), 409, 'Broker order does not match the intent.');
+            abort_unless(self::matches($intent, $order, CarbonImmutable::parse($dispatch->claimed_at)), 409, 'Broker order does not match the intent.');
             abort_if(BrokerOrderBinding::where('broker_id_hash', $external->broker_id_hash)->exists(), 409, 'Broker order already linked.');
             BrokerOrderBinding::create(['intent_id' => $intentId, 'broker_id_hash' => $external->broker_id_hash, 'broker_order_id' => $order['id'],
                 'source' => 'owner_link', 'actor_id' => $actor, 'external_order_id' => $external->id, 'request_id' => $request, 'recorded_at' => now()]);
@@ -226,8 +257,9 @@ final class ExecutionJournal
     }
 
     /**
-     * Owner confirmation that an unknown request created no order. Requires a fresh, complete order-history read
-     * taken after the submission deadline that shows no candidate order and no unreviewed external candidate.
+     * Owner confirmation that an unknown request, or an approval request that was declined or expired, created no
+     * order. Requires a fresh, complete order-history read taken after the submission deadline and any approval expiry
+     * that shows no candidate order and no unreviewed external candidate.
      */
     public function absent(McpConnection $connection, int $actor, int $intentId): void
     {
@@ -240,31 +272,39 @@ final class ExecutionJournal
             if ($dispatch->status === 'absent') {
                 return;
             }
-            abort_unless($dispatch->status === 'unknown', 409, 'Only an unknown outcome can be confirmed absent.');
+            abort_unless(in_array($dispatch->status, ['unknown', 'approval_pending'], true), 409, 'Only an unknown or approval-pending outcome can be confirmed absent.');
+            $after = $intent->expires_at;
+            if ($dispatch->status === 'approval_pending') {
+                $approval = ExecutionApproval::where('intent_id', $intentId)->firstOrFail();
+                $after = $approval->expires_at->gt($after) ? $approval->expires_at : $after;
+            }
             $read = BrokerOrderRead::where('mcp_connection_id', $current->id)->where('scope', $account->scope)->where('auth_generation', $current->auth_generation)->latest('id')->first();
             abort_unless($read && $read->complete && ($read->payload['read']['coverage'] ?? null) === 'equities' &&
                 ($read->payload['contract_fingerprint'] ?? null) === config('robinhood_mcp.operations.orders.fingerprint') &&
                 ! $read->retrieved_at->isFuture() && $read->retrieved_at->gt(CarbonImmutable::now()->subMinutes(5)) &&
-                $read->retrieved_at->gte($intent->expires_at->addMinutes(2)), 409, 'A complete order history read after the deadline is required.');
+                $read->retrieved_at->gte($after->addMinutes(2)), 409, 'A complete order history read after the deadline is required.');
             $claimed = CarbonImmutable::parse($dispatch->claimed_at);
             foreach ($read->payload['read']['records'] ?? [] as $row) {
-                abort_if($this->candidate($intent, $row['data'] ?? [], $claimed), 409, 'Broker reports a matching order; link it instead.');
+                abort_if(self::matches($intent, $row['data'] ?? [], $claimed) || (($row['data']['ref_id'] ?? null) === $intent->idempotency_key), 409, 'Broker reports a matching order; link it instead.');
             }
             foreach (app(ExternalOrders::class)->pending($current)->get() as $external) {
-                abort_if($this->candidate($intent, $external->payload['order'] ?? [], $claimed), 409, 'An unreviewed matching order exists; link it instead.');
+                abort_if(self::matches($intent, $external->payload['order'] ?? [], $claimed) || (($external->payload['order']['ref_id'] ?? null) === $intent->idempotency_key), 409, 'An unreviewed matching order exists; link it instead.');
             }
             $this->transition($dispatch, 'absent', 'owner_confirmed_no_broker_order');
         });
     }
 
-    /** Matching evidence only. A missing creation time counts as a candidate, never as proof of absence. */
-    private function candidate(OrderIntent $intent, array $order, CarbonImmutable $claimed): bool
+    /**
+     * Matching evidence: symbol, side, exact quantity, created no earlier than a minute before the claim. Leniently, a
+     * missing creation time counts as a match (never as proof of absence); strictly, it must be present.
+     */
+    public static function matches(OrderIntent $intent, array $order, CarbonImmutable $claimed, bool $strict = false): bool
     {
         $created = $order['created_at'] ?? null;
         try {
-            $recent = ! is_string($created) || CarbonImmutable::parse($created)->gte($claimed->subMinute());
+            $recent = is_string($created) ? CarbonImmutable::parse($created)->gte($claimed->subMinute()) : ! $strict;
         } catch (\Throwable) {
-            $recent = true;
+            $recent = ! $strict;
         }
 
         return is_string($order['id'] ?? null) && ($order['symbol'] ?? null) === $intent->payload['symbol'] &&

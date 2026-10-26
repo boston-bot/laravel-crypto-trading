@@ -19,6 +19,9 @@ final class RobinhoodReadNormalizer
                 'event_contracts_value' => $row['event_contracts_value'] ?? null, 'mutual_funds_value' => $row['mutual_funds_value'] ?? null,
                 'fixed_income_value' => $row['fixed_income_value'] ?? null, 'pending_deposits' => $row['pending_deposits'] ?? null],
             // The positions tool supplies symbols, not broker position/instrument IDs. Do not fabricate IDs.
+            // The broker names the account explicitly here; a different account refuses the read.
+            Operation::TradeApprovalSetting => $scope + ['setting_account' => $row['account_number'] ?? null,
+                'human_must_approve_trades' => $row['human_must_approve_trades'] ?? null, 'setting_updated_at' => $row['updated_at'] ?? null],
             Operation::Positions => $scope + ['symbol' => $row['symbol'] ?? null, 'quantity' => $row['quantity'] ?? null,
                 'average_buy_price' => $row['average_buy_price'] ?? null, 'position_type' => $row['type'] ?? null, 'asset_class' => 'equity'],
             Operation::Orders => $scope + ['id' => $row['id'] ?? null, 'instrument_id' => $row['instrument_id'] ?? null,

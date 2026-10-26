@@ -24,12 +24,13 @@ final class LiveExecutionFixture
 {
     public const POLICY = ['sleeve_capital' => '1000.00', 'max_order_notional' => '250.00', 'risk_per_trade_pct' => '1', 'max_position_pct' => '20',
         'max_open_positions' => 4, 'daily_loss_pause_pct' => '2', 'max_orders_per_session' => 3, 'order_type' => 'market', 'allow_fractional' => true,
-        'slippage_bps' => '5', 'limit_offset_bps' => '5', 'quote_max_age_seconds' => 30];
+        'slippage_bps' => '5', 'limit_offset_bps' => '5', 'quote_max_age_seconds' => 30, 'require_broker_approval' => true];
 
     /** @return array{0: McpConnection, 1: StrategySignal, 2: ExecutionPolicy} */
     public static function seed(LiveBrokerGateway $broker, array $policy = []): array
     {
         [$c] = StrategySignalFixture::seed();
+        config(['robinhood_mcp.approval_setting_enabled' => true]);
         self::sync($c, $broker);
         SignalExecutionFixture::quote($c);
         $signal = app(StrategySignals::class)->record($c, $c->user_id)->keyBy('symbol')['DEMO'];

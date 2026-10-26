@@ -64,6 +64,13 @@
                 <option value="market" @selected($type === 'market')>Market, with a price collar from the profile maximum entry</option>
                 <option value="limit" @selected($type === 'limit')>Limit (whole shares)</option>
             </select></label>
+            @php $approvalMode = (string) old('live.require_broker_approval', isset($saved['require_broker_approval']) ? ($saved['require_broker_approval'] ? '1' : '0') : ''); @endphp
+            <label class="field">Robinhood trade approval (set by you in the Robinhood app)<select name="live[require_broker_approval]" required>
+                <option value="" @selected($approvalMode === '')>Choose the mode you expect</option>
+                <option value="1" @selected($approvalMode === '1')>On: every order waits for my approval in the app (recommended for a pilot)</option>
+                <option value="0" @selected($approvalMode === '0')>Off: orders execute without my approval</option>
+            </select></label>
+            <p class="note">Every live order is denied while the broker's current setting differs from this choice or cannot be read.</p>
             <label class="check"><input type="checkbox" name="live[allow_fractional]" value="1" @checked(old('live.allow_fractional', $saved['allow_fractional'] ?? false))><span>Fractional shares on market orders when Robinhood reports the symbol fractional-tradable</span></label>
             <details><summary>Reviewed cost schedule attached to the policy</summary><pre class="code-block">{{ json_encode(App\Services\PaperTrading\TradingCosts::reviewed(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre></details>
             <label class="check"><input type="checkbox" name="confirm_live_policy" value="1" required><span>I set these live limits for this broker account. Applying them does not enable writes and invalidates intents staged under an earlier version.</span></label>
@@ -84,7 +91,11 @@
 
     @foreach($live['unknown'] as $row)
         @php $p = $row['intent']->payload; @endphp
-        <x-callout tone="warn" title="Unknown outcome · intent #{{ $row['intent']->id }}">{{ $p['side'] }} {{ $p['quantity'] }} {{ $p['symbol'] }} was claimed <x-time :at="$row['claimed_at']" /> and the broker response was not recorded. New live orders are blocked until you link the broker's order or confirm none exists. It is never retried.</x-callout>
+        @if($row['status'] === 'approval_pending')
+            <x-callout tone="warn" title="Waiting for your approval · intent #{{ $row['intent']->id }}">{{ $p['side'] }} {{ $p['quantity'] }} {{ $p['symbol'] }} was sent to Robinhood, which asked you to approve or decline it in the Robinhood app (approval expires <x-time :at="$row['approval']?->expires_at" />). New live orders are blocked until the approved order appears in order history with this app's reference, or you confirm no order after the approval expires. An order you edit before approving is treated as your own order.</x-callout>
+        @else
+            <x-callout tone="warn" title="Unknown outcome · intent #{{ $row['intent']->id }}">{{ $p['side'] }} {{ $p['quantity'] }} {{ $p['symbol'] }} was claimed <x-time :at="$row['claimed_at']" /> and the broker response was not recorded. New live orders are blocked until the broker's order is matched by this app's reference, you link it, or you confirm none exists. It is never retried.</x-callout>
+        @endif
         @if($row['candidates']->isNotEmpty())
             <form method="post" action="{{ route('mcp.live.link', $row['intent']->id) }}" class="stack">@csrf
                 <input type="hidden" name="account_scope" value="{{ $scopeKey }}">
@@ -102,7 +113,7 @@
         @endif
         <form method="post" action="{{ route('mcp.live.absent', $row['intent']->id) }}" class="stack">@csrf
             <input type="hidden" name="account_scope" value="{{ $scopeKey }}">
-            <label class="check"><input type="checkbox" name="confirm_absent" value="1" required><span>The broker created no order for this intent. Allowed only with a complete order-history read at least two minutes after the deadline that shows no matching order.</span></label>
+            <label class="check"><input type="checkbox" name="confirm_absent" value="1" required><span>The broker created no order for this intent. Allowed only with a complete order-history read at least two minutes after the deadline (and any approval expiry) that shows no matching order.</span></label>
             <button class="btn btn-secondary" type="submit">Confirm no broker order</button>
         </form>
     @endforeach

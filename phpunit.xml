@@ -27,6 +27,7 @@
         <env name="ROBINHOOD_MCP_EXECUTION_INPUTS_ENABLED" value="false" force="true"/>
         <env name="ROBINHOOD_MCP_WATCHLISTS_ENABLED" value="false" force="true"/>
         <env name="ROBINHOOD_MCP_EARNINGS_ENABLED" value="false" force="true"/>
+        <env name="ROBINHOOD_MCP_APPROVAL_SETTING_ENABLED" value="false" force="true"/>
         <env name="ROBINHOOD_MCP_CLIENT_ID" value="" force="true"/>
         <env name="LEGACY_CRYPTO_SCHEDULES_ENABLED" value="false" force="true"/>
         <env name="MCP_MONITORING_ENABLED" value="false" force="true"/>

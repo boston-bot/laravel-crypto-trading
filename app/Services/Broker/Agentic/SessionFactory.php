@@ -24,6 +24,9 @@ class SessionFactory
             if ($operation === Operation::EarningsCalendar && ! config('robinhood_mcp.earnings_enabled')) {
                 continue;
             }
+            if ($operation === Operation::TradeApprovalSetting && ! config('robinhood_mcp.approval_setting_enabled')) {
+                continue;
+            }
             $profile = config('robinhood_mcp.operations.'.$operation->value);
             if (($profile['reviewed_read_only'] ?? false) === true && is_string($profile['tool'] ?? null)) {
                 $allowed[] = $profile['tool'];

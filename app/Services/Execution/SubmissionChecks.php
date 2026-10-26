@@ -10,6 +10,7 @@ use App\Models\Monitoring\Run;
 use App\Models\Monitoring\Snapshot;
 use App\Models\PaperTrading\StrategySignal;
 use App\Services\Broker\Agentic\RobinhoodOrderContract;
+use App\Services\Broker\Agentic\TrustedHttp;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\ExternalOrders;
 use App\Services\Monitoring\MarketCalendar;
@@ -109,6 +110,18 @@ class SubmissionChecks
         $obs = $snapshot?->observations ?? [];
         if (! $snapshot || ! isset($obs['equity'], $obs['buying_power'], $obs['equity_exposure'])) {
             return $deny('broker_account_unverified');
+        }
+        // Every live order, entry or exit, runs under the owner's stated broker approval mode, read from the same snapshot.
+        $approval = $snapshot->payload['trade_approval_setting'] ?? [];
+        $setting = $approval['records'][0]['data']['human_must_approve_trades'] ?? null;
+        $settingAt = is_string($approval['retrieved_at'] ?? null) ? CarbonImmutable::parse($approval['retrieved_at']) : null;
+        if (! is_bool($setting) || ($approval['completeness'] ?? null) !== 'complete' || ($approval['source'] ?? null) !== TrustedHttp::RESOURCE ||
+            count($approval['records'] ?? []) !== 1 || ($approval['records'][0]['data']['account_id'] ?? null) !== $c->bound_account_id ||
+            ! $settingAt || $settingAt->isFuture() || $settingAt->lte($now->subMinutes(5))) {
+            return $deny('broker_approval_setting_unverified');
+        }
+        if ($setting !== $s['require_broker_approval']) {
+            return $deny('broker_approval_setting_differs');
         }
         $held = Decimal::from('0');
         $occupied = [];

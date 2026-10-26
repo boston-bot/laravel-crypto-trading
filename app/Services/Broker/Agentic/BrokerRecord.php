@@ -30,6 +30,7 @@ final readonly class BrokerRecord implements JsonSerializable
             Operation::CashFlows => ['id', 'account_id', 'amount'],
             Operation::History => ['account_id'],
             Operation::Calendar => ['date', 'session_status'],
+            Operation::TradeApprovalSetting => ['account_id', 'setting_account'],
         };
         foreach ($required as $key) {
             if (! isset($fields[$key]) || $fields[$key] === '') {
@@ -40,7 +41,7 @@ final readonly class BrokerRecord implements JsonSerializable
             throw new ReadFailure(ReadError::Malformed);
         }
         $decimals = ['dividend_per_share', 'book_bid', 'book_ask', 'book_bid_quantity', 'book_ask_quantity', 'quantity', 'filled_quantity', 'price', 'bid', 'ask', 'last', 'cash', 'equity', 'buying_power', 'market_value', 'amount', 'unleveraged_buying_power', 'average_buy_price', 'stop_price', 'average_price', 'fees', 'regular_last', 'extended_last', 'equity_value', 'options_value', 'crypto_value', 'futures_value', 'event_contracts_value', 'mutual_funds_value', 'fixed_income_value', 'pending_deposits', 'eps_estimate', 'eps_actual'];
-        $strings = ['asset_type', 'market_date', 'ex_dividend_date', 'record_date', 'payable_date', 'dividend_schedule_status', 'id', 'account_id', 'instrument_id', 'account_kind', 'symbol', 'status', 'side', 'order_type', 'time_in_force', 'currency', 'date', 'session_status', 'nickname', 'account_type', 'brokerage_account_type', 'management_type', 'account_scope', 'asset_class', 'position_type', 'name', 'bid_as_of', 'ask_as_of', 'last_as_of', 'regular_last_as_of', 'extended_last_as_of', 'last_session', 'report_date', 'report_timing', 'ref_id', 'market_hours', 'created_at', 'last_transaction_at'];
+        $strings = ['asset_type', 'market_date', 'ex_dividend_date', 'record_date', 'payable_date', 'dividend_schedule_status', 'id', 'account_id', 'instrument_id', 'account_kind', 'symbol', 'status', 'side', 'order_type', 'time_in_force', 'currency', 'date', 'session_status', 'nickname', 'account_type', 'brokerage_account_type', 'management_type', 'account_scope', 'asset_class', 'position_type', 'name', 'bid_as_of', 'ask_as_of', 'last_as_of', 'regular_last_as_of', 'extended_last_as_of', 'last_session', 'report_date', 'report_timing', 'ref_id', 'market_hours', 'created_at', 'last_transaction_at', 'setting_account', 'setting_updated_at'];
         foreach ($fields as $key => $value) {
             if ($key === 'executions') {
                 $fields[$key] = $value === null ? null : self::executions($value);
@@ -54,7 +55,7 @@ final readonly class BrokerRecord implements JsonSerializable
                 } catch (\InvalidArgumentException) {
                     throw new ReadFailure(ReadError::Malformed);
                 }
-            } elseif (in_array($key, ['agentic_allowed', 'deactivated', 'permanently_deactivated', 'broker_tradeable', 'extended_hours_fractional_tradability', 'report_verified'], true)) {
+            } elseif (in_array($key, ['agentic_allowed', 'deactivated', 'permanently_deactivated', 'broker_tradeable', 'extended_hours_fractional_tradability', 'report_verified', 'human_must_approve_trades'], true)) {
                 if (! is_bool($value) && ! ($key === 'report_verified' && $value === null)) {
                     throw new ReadFailure(ReadError::Malformed);
                 }
@@ -78,6 +79,9 @@ final readonly class BrokerRecord implements JsonSerializable
             throw new ReadFailure(ReadError::Malformed);
         }
         if (isset($fields['side']) && ! in_array($fields['side'], ['buy', 'sell'], true)) {
+            throw new ReadFailure(ReadError::Malformed);
+        }
+        if ($operation === Operation::TradeApprovalSetting && (! is_bool($fields['human_must_approve_trades'] ?? null) || $fields['setting_account'] !== $fields['account_id'])) {
             throw new ReadFailure(ReadError::Malformed);
         }
         if ($operation === Operation::Accounts && ! in_array($fields['account_kind'], ['agentic', 'personal', 'unknown'], true)) {

@@ -256,6 +256,103 @@ class LiveExecutionBoundaryTest extends TestCase
         $this->refused(fn () => $journal->claim($c, $c->user_id, $next->id), 409, 'live_session_order_limit');
     }
 
+    public function test_ref_id_proves_the_app_order_after_a_lost_response_without_an_owner_link(): void
+    {
+        [$c, $signal, $journal] = $this->ready();
+        $intent = F::stage($c, $signal);
+        $token = $journal->claim($c, $c->user_id, $intent->id);
+        $journal->uncertain($c, $c->user_id, $intent->id, $token);
+        $ref = strtoupper($intent->idempotency_key); // The broker echoes the key; case is not significant.
+        $this->report($c, [LiveBrokerGateway::order('rh-by-ref', 'filled', '1', '1', [['exec-ref', '1', '101.70']], ref: $ref),
+            LiveBrokerGateway::order('rh-chatgpt', 'filled', '1', '1', [['exec-gpt', '1', '101.70']])]);
+        $this->assertSame('filled', $this->dispatchStatus($intent));
+        $this->assertSame('ref_id_match', BrokerOrderBinding::where('intent_id', $intent->id)->value('source'));
+        $this->assertSame(['staged', 'submitting', 'unknown', 'accepted', 'filled'], DB::table('mcp_execution_events')->where('intent_id', $intent->id)->orderBy('version')->pluck('status')->all());
+        // Only the other agent's identical-looking order is external.
+        $this->assertSame([hash('sha256', 'rh-chatgpt')], ExternalOrder::where('mcp_connection_id', $c->id)->pluck('broker_id_hash')->all());
+        $this->assertSame(1, ExecutionFill::where('intent_id', $intent->id)->count());
+    }
+
+    public function test_ref_id_binding_during_submission_is_idempotent_with_the_acknowledgement(): void
+    {
+        [$c, $signal, $journal] = $this->ready();
+        $intent = F::stage($c, $signal);
+        $token = $journal->claim($c, $c->user_id, $intent->id);
+        $this->report($c, [LiveBrokerGateway::order('rh-race-ack', 'confirmed', '1', ref: $intent->idempotency_key)]);
+        $this->assertSame('accepted', $this->dispatchStatus($intent));
+        $journal->accepted($c, $c->user_id, $intent->id, $token, 'rh-race-ack');
+        $this->refused(fn () => $journal->accepted($c, $c->user_id, $intent->id, $token, 'rh-something-else'));
+        $this->assertSame(1, BrokerOrderBinding::where('intent_id', $intent->id)->count());
+    }
+
+    public function test_a_ref_id_order_that_differs_from_the_intent_stays_external_and_blocks(): void
+    {
+        [$c, $signal, $journal] = $this->ready();
+        $intent = F::stage($c, $signal);
+        $token = $journal->claim($c, $c->user_id, $intent->id);
+        $journal->approvalPending($c, $c->user_id, $intent->id, $token, 'approval-edited', 'pending', false, now()->addMinutes(10)->toIso8601String());
+        // The owner edited the quantity before approving: that order is the owner's, not the app's.
+        $this->report($c, [LiveBrokerGateway::order('rh-edited', 'filled', '3', '3', [['exec-edit', '3', '101.70']], ref: $intent->idempotency_key)]);
+        $this->assertSame('approval_pending', $this->dispatchStatus($intent));
+        $this->assertSame(0, BrokerOrderBinding::where('intent_id', $intent->id)->count());
+        $this->assertSame(1, ExternalOrder::where('mcp_connection_id', $c->id)->count());
+        $this->assertSame('open', Incident::where('mcp_connection_id', $c->id)->where('incident_key', BrokerOutcomes::MISMATCH)->value('state'));
+        $this->travel(13)->minutes();
+        $this->report($c, $this->broker->orders);
+        $this->refused(fn () => $journal->absent($c, $c->user_id, $intent->id), 409, 'Broker reports a matching order; link it instead.');
+    }
+
+    public function test_customer_approval_blocks_the_account_until_the_approved_order_appears_by_ref_id(): void
+    {
+        [$c, $signal, $journal] = $this->ready();
+        $intent = F::stage($c, $signal);
+        $next = F::stage($c, F::signal($c, 'BUY'));
+        $token = $journal->claim($c, $c->user_id, $intent->id);
+        $journal->approvalPending($c, $c->user_id, $intent->id, $token, 'approval-1', 'pending', false, now()->addMinutes(30)->toIso8601String());
+        $journal->approvalPending($c, $c->user_id, $intent->id, $token, 'approval-1', 'pending', false, now()->addMinutes(30)->toIso8601String());
+        $this->refused(fn () => $journal->approvalPending($c, $c->user_id, $intent->id, $token, 'approval-2', 'pending', false, now()->addMinutes(30)->toIso8601String()));
+        $this->assertSame('approval_pending', $this->dispatchStatus($intent));
+        $this->assertStringNotContainsString('approval-1', (string) DB::table('mcp_execution_approvals')->value('approval_id'));
+        $this->assertNull($journal->claim($c, $c->user_id, $next->id), 'A pending approval blocks every other claim.');
+        $this->report($c, []);
+        $this->assertSame('approval_pending', $this->dispatchStatus($intent), 'No order yet is not absence.');
+        $this->assertNull(Incident::where('mcp_connection_id', $c->id)->where('incident_key', BrokerOutcomes::MISSING)->value('state'));
+        // The owner approves in the Robinhood app; the order the broker places carries the app's ref_id.
+        $this->report($c, [LiveBrokerGateway::order('rh-approved', 'new', '1', ref: $intent->idempotency_key)]);
+        $this->assertSame('accepted', $this->dispatchStatus($intent));
+        $this->report($c, [LiveBrokerGateway::order('rh-approved', 'filled', '1', '1', [['exec-approved', '1', '101.70']], ref: $intent->idempotency_key)]);
+        $this->assertSame('filled', $this->dispatchStatus($intent));
+        $this->assertSame(0, ExternalOrder::where('mcp_connection_id', $c->id)->count());
+    }
+
+    public function test_declined_or_expired_approval_is_confirmed_absent_only_after_the_approval_expiry(): void
+    {
+        [$c, $signal, $journal] = $this->ready();
+        $intent = F::stage($c, $signal);
+        $token = $journal->claim($c, $c->user_id, $intent->id);
+        $journal->approvalPending($c, $c->user_id, $intent->id, $token, 'approval-declined', 'pending', false, now()->addMinutes(20)->toIso8601String());
+        $this->travel(7)->minutes(); // Past the four-minute submission deadline, but not the approval expiry.
+        $this->report($c, []);
+        $this->refused(fn () => $journal->absent($c, $c->user_id, $intent->id), 409, 'A complete order history read after the deadline is required.');
+        $this->travel(16)->minutes();
+        $this->report($c, []);
+        $journal->absent($c, $c->user_id, $intent->id);
+        $this->assertSame('absent', $this->dispatchStatus($intent));
+    }
+
+    public function test_documented_new_and_voided_states_reconcile_without_incidents(): void
+    {
+        [$c, $signal, $journal] = $this->ready();
+        $intent = F::stage($c, $signal);
+        $token = $journal->claim($c, $c->user_id, $intent->id);
+        $journal->accepted($c, $c->user_id, $intent->id, $token, 'rh-voided');
+        $this->report($c, [LiveBrokerGateway::order('rh-voided', 'new', '1')]);
+        $this->report($c, [LiveBrokerGateway::order('rh-voided', 'voided', '1')]);
+        $this->assertSame('broker_cancelled', $this->dispatchStatus($intent));
+        $this->assertSame(0, Incident::where('mcp_connection_id', $c->id)->whereIn('incident_key', [BrokerOutcomes::MISMATCH, BrokerOutcomes::MISSING])->count());
+        $this->sqlRefused(fn () => DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->update(['status' => 'approval_pending', 'version' => 5]));
+    }
+
     public function test_complete_history_missing_an_open_app_order_raises_an_incident(): void
     {
         [$c, $signal, $journal] = $this->ready();

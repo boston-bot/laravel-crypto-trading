@@ -9,6 +9,7 @@ use App\Models\Monitoring\Incident;
 use App\Models\User;
 use App\Services\Execution\BrokerOutcomes;
 use App\Services\Execution\ExecutionControls;
+use App\Services\Execution\ExecutionJournal;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\IncidentRecorder;
 use Carbon\CarbonImmutable;
@@ -109,6 +110,18 @@ class LiveExecutionControlsTest extends TestCase
         $this->assertSame('accepted', DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->value('status'));
         $this->assertSame($c->user_id, ExternalOrderReview::where('external_order_id', $lost->id)->sole()->actor_id);
         $this->get('/mcp/dashboard/control')->assertOk()->assertDontSee('Unknown outcome · intent #'.$intent->id)->assertSee('accepted');
+    }
+
+    public function test_approval_pending_orders_show_their_expiry_and_resolution_forms(): void
+    {
+        $this->broker = new LiveBrokerGateway;
+        [$c, $signal] = F::seed($this->broker);
+        $intent = F::stage($c, $signal);
+        DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->update(['status' => 'submitting', 'version' => 2, 'claim_token' => $token = (string) Str::uuid(), 'claimed_at' => now()]);
+        app(ExecutionJournal::class)->approvalPending($c, $c->user_id, $intent->id, $token, 'approval-ui', 'pending', false, now()->addMinutes(30)->toIso8601String());
+        $this->actingAs(User::findOrFail($c->user_id));
+        $this->get('/mcp/dashboard/control')->assertOk()->assertSee('Waiting for your approval · intent #'.$intent->id)
+            ->assertSee('Confirm no broker order')->assertDontSee('approval-ui')->assertSee('approval_pending');
     }
 
     public function test_reconciliation_incident_review_form_resolves_and_reports_the_block(): void
