@@ -50,7 +50,7 @@ final class SignalOrderAdmission
         }
         $signal = StrategySignal::whereKey($id)->where('paper_portfolio_id', $portfolio->id)->where('symbol', $order->symbol)->first();
         $cycle = $signal ? StrategyCycle::find($signal->cycle_id) : null;
-        if (! $signal || ! $cycle || $cycle->auth_generation !== $connection->auth_generation || $signal->status !== 'signal' || $signal->side !== $order->side ||
+        if (! $signal || ! $cycle || $signal->position_source !== 'paper' || $cycle->position_source !== 'paper' || $cycle->auth_generation !== $connection->auth_generation || $signal->status !== 'signal' || $signal->side !== $order->side ||
             $signal->rule_version !== SignalRules::VERSION || $signal->recorded_at->gt($order->accepted_at)) {
             return 'signal_provenance_invalid';
         }

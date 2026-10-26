@@ -75,7 +75,7 @@ class MonitoringController extends Controller
             $control['external_orders'] = $scope ? ['pending' => app(ExternalOrders::class)->pending($connection)->latest('id')->paginate(10, ['*'], 'external_orders_page')->withQueryString(),
                 'entry_pause_reason' => app(ExternalOrders::class)->entryReason($connection)] : null;
             $control['live'] = $scope ? app(LiveExecutionOverview::class)->for($connection) : null;
-            $control['signals'] = $scope ? StrategySignal::where('mcp_connection_id', $connection->id)
+            $control['signals'] = $scope ? StrategySignal::where('position_source', 'paper')->where('mcp_connection_id', $connection->id)
                 ->where('paper_portfolio_id', $control['paper']['portfolio']->id ?? 0)->latest('id')->paginate(10, ['*'], 'signals_page')->withQueryString() : null;
             $control['eligibility'] = $scope ? ['policy' => RuleEligibilityPolicies::selected($connection),
                 'assessments' => EligibilityAssessment::where('mcp_connection_id', $connection->id)->where('scope', $scope)->latest('id')->paginate(10, ['*'], 'eligibility_page')->withQueryString()] : null;

@@ -6,6 +6,8 @@ use App\Models\McpConnection;
 use App\Models\Monitoring\Incident;
 use App\Services\Broker\Agentic\BrokerGateway;
 use App\Services\Broker\Agentic\RobinhoodGateway;
+use App\Services\Execution\ExecutionGateway;
+use App\Services\Execution\RobinhoodExecutionGateway;
 use App\Services\Monitoring\AccountScope;
 use App\Services\PaperTrading\DecisionInputs;
 use App\Services\PaperTrading\StoredDecisionInputs;
@@ -31,6 +33,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(BrokerGateway::class, RobinhoodGateway::class);
+        // Writes have their own gateway and session; only ExecutionDispatcher resolves it.
+        $this->app->bind(ExecutionGateway::class, RobinhoodExecutionGateway::class);
         $this->app->bind(MarketDataProvider::class, BrokerMarketData::class);
         $this->app->bind(ResearchModel::class, OpenAiResearchModel::class);
         $this->app->bind(DecisionInputs::class, StoredDecisionInputs::class);

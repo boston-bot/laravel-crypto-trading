@@ -30,7 +30,7 @@ final class LiveExecutionFixture
     public static function seed(LiveBrokerGateway $broker, array $policy = []): array
     {
         [$c] = StrategySignalFixture::seed();
-        config(['robinhood_mcp.approval_setting_enabled' => true]);
+        config(['robinhood_mcp.approval_setting_enabled' => true, 'robinhood_mcp.account_eligibility_enabled' => true]);
         self::sync($c, $broker);
         SignalExecutionFixture::quote($c);
         $signal = app(StrategySignals::class)->record($c, $c->user_id)->keyBy('symbol')['DEMO'];
@@ -67,6 +67,6 @@ final class LiveExecutionFixture
 
         return StrategySignal::create(array_replace($base->only(['mcp_connection_id', 'paper_portfolio_id', 'symbol', 'status', 'reason',
             'rule_version', 'parameters_version', 'profile_id', 'watchlist_revision_id', 'market_input_id', 'cutoff', 'recorded_at', 'payload']),
-            ['cycle_id' => $copy->id, 'side' => $side, 'input_fingerprint' => hash('sha256', (string) Str::uuid())]));
+            ['cycle_id' => $copy->id, 'side' => $side, 'cutoff' => now(), 'recorded_at' => now(), 'input_fingerprint' => hash('sha256', (string) Str::uuid())]));
     }
 }

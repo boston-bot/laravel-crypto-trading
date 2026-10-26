@@ -8,6 +8,7 @@ use App\Models\Monitoring\Holding;
 use App\Models\Monitoring\Incident;
 use App\Models\Monitoring\Run;
 use App\Models\Monitoring\Snapshot;
+use App\Models\PaperTrading\StrategyCycle;
 use App\Models\PaperTrading\StrategySignal;
 use App\Services\Broker\Agentic\RobinhoodOrderContract;
 use App\Services\Broker\Agentic\TrustedHttp;
@@ -24,6 +25,7 @@ use App\Services\PaperTrading\RuleEligibility;
 use App\Services\PaperTrading\SignalOrderPrice;
 use App\Services\PaperTrading\SignalParameters;
 use App\Services\PaperTrading\SignalRules;
+use App\Services\PaperTrading\StrategySignals;
 use App\Services\PaperTrading\SymbolProfiles;
 use App\Services\PaperTrading\TradingCosts;
 use App\Support\Mcp\Decimal;
@@ -45,7 +47,7 @@ class SubmissionChecks
         if (! $signal || $signal->symbol !== $payload['symbol'] || $signal->side !== $payload['side'] || $signal->input_fingerprint !== $payload['signal_input_fingerprint']) {
             return 'signal_provenance_invalid';
         }
-        $plan = $this->assess($connection, $signal, $payload['policy_fingerprint']);
+        $plan = $this->assess($connection, $signal, $payload['policy_fingerprint'], $intent->id);
         if ($plan['reason'] !== null) {
             return $plan['reason'];
         }
@@ -75,7 +77,7 @@ class SubmissionChecks
         return $this->assess($connection, $signal, null);
     }
 
-    private function assess(McpConnection $c, StrategySignal $signal, ?string $fingerprint): array
+    private function assess(McpConnection $c, StrategySignal $signal, ?string $fingerprint, ?int $intentId = null): array
     {
         $deny = fn (string $reason, array $evidence = []) => ['reason' => $reason, 'draft' => null, 'scale' => 0, 'reference_price' => null, 'evidence' => $evidence];
         $scope = AccountScope::key($c);
@@ -106,10 +108,18 @@ class SubmissionChecks
         if ($session['status'] !== 'regular' || CarbonImmutable::parse($session['closes_at'])->subMinutes(5)->lte($now)) {
             return $deny('outside_verified_session');
         }
+        $cycle = StrategyCycle::find($signal->cycle_id);
+        if (! $cycle || $cycle->mcp_connection_id !== $c->id || $cycle->scope !== $scope || $cycle->auth_generation !== $c->auth_generation ||
+            $signal->mcp_connection_id !== $c->id || $signal->cutoff->isFuture() || $signal->recorded_at->isFuture() || $signal->cutoff->lte($now->subMinutes(5))) {
+            return $deny('signal_stale_or_authorization_changed');
+        }
         $snapshot = $this->snapshot($c, $now);
         $obs = $snapshot?->observations ?? [];
         if (! $snapshot || ! isset($obs['equity'], $obs['buying_power'], $obs['equity_exposure'])) {
             return $deny('broker_account_unverified');
+        }
+        if ($reason = app(AccountEligibility::class)->reason($c, $snapshot)) {
+            return $deny($reason);
         }
         // Every live order, entry or exit, runs under the owner's stated broker approval mode, read from the same snapshot.
         $approval = $snapshot->payload['trade_approval_setting'] ?? [];
@@ -151,9 +161,19 @@ class SubmissionChecks
         $scale = SignalOrderPrice::scale($type, $s, $quote);
         $evidence = ['policy_id' => $policy->id, 'policy_version' => $policy->version, 'snapshot_id' => $snapshot->id, 'market_input_id' => $input->id];
         if ($signal->side === 'SELL') {
+            if ($signal->position_source !== 'live' || $cycle->position_source !== 'live') {
+                return $deny('live_exit_requires_live_position_signal', $evidence);
+            }
+            $exit = app(StrategySignals::class)->liveExitAssessment($c, $signal->symbol, $now, $s['quote_max_age_seconds']);
+            $original = $signal->payload['evidence']['report']['position'] ?? [];
+            $current = $exit['report']['position'];
+            if (($original['context']['entry_order_id'] ?? null) !== ($current['context']['entry_order_id'] ?? null) ||
+                ($original['fill_ids'] ?? null) !== $current['fill_ids'] || $exit['result']['status'] !== 'signal') {
+                return $deny('live_exit_position_changed_or_not_triggered', $evidence);
+            }
             // Exits ignore buy pauses, watchlists and entry incidents, but sell only broker-held shares this app's
             // broker-confirmed fills put there: never the owner's or another agent's holdings, never short.
-            $attributed = $this->attributed($scope, $signal->symbol);
+            $attributed = Decimal::from($current['quantity']);
             $available = ($attributed->compareTo($held) < 0 ? $attributed : $held)->rounded($scale, RoundingMode::DOWN);
             if ($available->compareTo(Decimal::from('0')) <= 0) {
                 return $deny('live_position_unattributed_or_absent', $evidence);
@@ -174,6 +194,7 @@ class SubmissionChecks
         }
         $claimed = DB::table('mcp_execution_dispatches as d')->join('mcp_execution_intents as i', 'i.id', '=', 'd.intent_id')
             ->join('mcp_execution_accounts as a', 'a.id', '=', 'i.execution_account_id')->where('a.scope', $scope)
+            ->when($intentId !== null, fn ($q) => $q->where('i.id', '!=', $intentId))
             ->where('d.claimed_at', '>=', CarbonImmutable::parse($session['opens_at'])->utc()->format('Y-m-d H:i:s.u'))->count();
         if ($claimed >= $s['max_orders_per_session']) {
             return $deny('live_session_order_limit', $evidence);
@@ -206,6 +227,16 @@ class SubmissionChecks
         if ($held->compareTo(Decimal::from('0')) > 0) {
             return $deny('broker_symbol_already_held', $evidence);
         }
+        $livePosition = app(LivePositionFacts::class)->inspect($c, $signal->symbol, $now);
+        if ($livePosition['held']) {
+            return $deny('live_position_history_unverified', $evidence);
+        }
+        if ($livePosition['last_exit_at'] !== null) {
+            $cooldown = app(StrategySignals::class)->sessionsSince($livePosition['last_exit_at'], $now);
+            if ($cooldown === null || $cooldown < SignalParameters::current()['values']['cooldown_sessions']) {
+                return $deny($cooldown === null ? 'live_cooldown_calendar_unknown' : 'live_reentry_cooldown', $evidence);
+            }
+        }
         $opening = $this->opening($c, $session);
         if ($reason = PortfolioEntryLimits::reason($obs['equity'], $opening, count($occupied), $s)) {
             return $deny($reason === 'portfolio_valuation_unavailable' ? 'live_session_baseline_unavailable' : $reason, $evidence);
@@ -233,7 +264,9 @@ class SubmissionChecks
     {
         $net = Decimal::from('0');
         $fills = DB::table('mcp_execution_fills as f')->join('mcp_execution_accounts as a', 'a.id', '=', 'f.execution_account_id')
-            ->where('a.scope', $scope)->where('f.symbol', $symbol)->get(['f.side', 'f.quantity']);
+            ->where('a.scope', $scope)->where('f.symbol', $symbol)
+            ->where('f.executed_at', '<=', CarbonImmutable::now()->format('Y-m-d H:i:s.u'))
+            ->where('f.recorded_at', '<=', CarbonImmutable::now()->format('Y-m-d H:i:s.u'))->get(['f.side', 'f.quantity']);
         foreach ($fills as $fill) {
             $quantity = Decimal::from((string) $fill->quantity);
             $net = $fill->side === 'BUY' ? $net->plus($quantity) : $net->minus($quantity);

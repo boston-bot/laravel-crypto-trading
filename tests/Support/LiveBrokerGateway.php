@@ -27,13 +27,20 @@ final class LiveBrokerGateway implements BrokerGateway
 
     public bool $partialOrders = false;
 
+    public bool $partialAccounts = false;
+
     /** Robinhood's customer-approval setting; null makes the read fail. */
     public ?bool $approvalRequired = true;
+
+    public ?array $accountPatch = [];
 
     public function read(McpConnection $connection, Operation $operation, array $filters = []): ReadResult
     {
         $account = $connection->bound_account_id;
         $rows = match ($operation) {
+            Operation::Accounts => $this->accountPatch === null ? throw new ReadFailure(ReadError::Transport) : [array_replace([
+                'id' => $account, 'account_kind' => 'agentic', 'agentic_allowed' => true, 'status' => 'active', 'deactivated' => false,
+                'permanently_deactivated' => false, 'management_type' => 'self_directed', 'brokerage_account_type' => 'individual', 'account_type' => 'limited_margin'], $this->accountPatch)],
             Operation::Portfolio => [['account_id' => $account, 'equity' => $this->equity, 'cash' => $this->buyingPower, 'buying_power' => $this->buyingPower]],
             Operation::Positions => array_map(fn ($symbol, $p) => ['account_id' => $account, 'symbol' => $symbol, 'quantity' => $p[0], 'market_value' => $p[1]],
                 array_keys($this->positions), $this->positions),
@@ -45,11 +52,11 @@ final class LiveBrokerGateway implements BrokerGateway
         if ($rows === null) {
             return (new MonitoringGateway)->read($connection, $operation, $filters);
         }
-        $orders = in_array($operation, [Operation::Orders, Operation::TradeApprovalSetting], true);
+        $orders = in_array($operation, [Operation::Orders, Operation::TradeApprovalSetting, Operation::Accounts], true);
 
         return new ReadResult($orders ? TrustedHttp::RESOURCE : 'fake:synthetic-not-broker-data', now()->toDateTimeImmutable(),
             array_map(fn ($row) => BrokerRecord::from($operation, $row, now()->toDateTimeImmutable()), $rows),
-            ! ($orders && $this->partialOrders), coverage: match ($operation) {
+            ! ($operation === Operation::Accounts ? $this->partialAccounts : ($orders && $this->partialOrders)), coverage: match ($operation) {
                 Operation::Portfolio => 'account_totals', Operation::TradeApprovalSetting => 'account_setting', default => 'equities'
             });
     }

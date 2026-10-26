@@ -59,12 +59,12 @@ final class CadenceReport
         $spans = array_map(fn ($times) => $this->ms($times[0], $times[array_key_last($times)]), $slots);
         $elapsedReads = count(array_filter(array_keys($slots), fn ($slot) => $slot < $elapsed));
         $elapsedUsable = count(array_filter(array_keys($usableSlots), fn ($slot) => $slot < $elapsed));
-        $cycles = StrategyCycle::where('mcp_connection_id', $connection->id)->where('scope', $scope)
+        $cycles = StrategyCycle::where('position_source', 'paper')->where('mcp_connection_id', $connection->id)->where('scope', $scope)
             ->where('cycle_at', '>=', $stamp($open))->where('cycle_at', '<', $stamp($close))
             ->where('cycle_at', '<=', $stamp($asOf))->where('recorded_at', '<=', $stamp($asOf))
             ->get(['id', 'cycle_at', 'recorded_at']);
         // Signals carry no scope column; they are scoped through their cycle and local availability time.
-        $signals = StrategySignal::where('mcp_connection_id', $connection->id)->whereIn('cycle_id', $cycles->pluck('id'))
+        $signals = StrategySignal::where('position_source', 'paper')->where('mcp_connection_id', $connection->id)->whereIn('cycle_id', $cycles->pluck('id'))
             ->where('recorded_at', '<=', $stamp($asOf))->where('cutoff', '<=', $stamp($asOf))->get(['status', 'reason', 'cutoff', 'payload']);
         $evaluationAges = [];
         $unknownEvaluationTime = $invalidEvaluationTime = 0;

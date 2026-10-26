@@ -145,7 +145,7 @@ final class PaperSessionValuations
             ->orderBy('id')->get()->first(function ($order) use ($connection) {
                 $id = $order->intent['strategy_signal_id'] ?? null;
 
-                return $id && StrategySignal::whereKey($id)->whereIn('cycle_id', StrategyCycle::where('mcp_connection_id', $connection->id)->where('auth_generation', $connection->auth_generation)->select('id'))->exists();
+                return $id && StrategySignal::whereKey($id)->whereIn('cycle_id', StrategyCycle::where('position_source', 'paper')->where('mcp_connection_id', $connection->id)->where('auth_generation', $connection->auth_generation)->select('id'))->exists();
             });
         if ($prior) {
             return ['equity' => $prior->assumptions['session_open_equity'], 'kind' => 'prior_verified_signal_order', 'order_id' => $prior->id];

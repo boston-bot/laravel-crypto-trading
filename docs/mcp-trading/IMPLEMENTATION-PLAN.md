@@ -1,5 +1,7 @@
 # End-to-end implementation plan
 
+October 26 M6 source increment: all submission checks now rerun after preview, optional fresh account metadata denies execution when eligibility is unknown, and live exit state comes from app-attributed broker fills in the shared strategy engine. Explicit paper/live signal source identity and a composite cycle/source constraint prevent ledger crossover. Migration `000033` is test-only; both new read/evaluation flags default off. No runtime migration, deployment, activation or broker call. [Evidence and remaining M6 work](M6-LIVE-EXITS-AND-SUBMISSION-EVIDENCE.md).
+
 October 25 M6 second source increment: versioned owner live policy and controls, real local submission checks on broker-confirmed state, and broker-confirmed outcomes/fills reconciled from read-only order history. No write gateway, dispatcher or activation; live writes disabled; no runtime migration or deployment. [Evidence and next work](M6-LIVE-POLICY-AND-OUTCOMES-EVIDENCE.md).
 
 October 25 M6 source increment: the owner requested beginning controlled-execution development. A separate durable unapproved-intent journal and dispatch/outbox foundation now support immutable evidence, one claim per account, conservative unknown outcomes and PostgreSQL lifecycle constraints. Production submission checks always deny; broker writes, live policy, reconciliation and activation remain unimplemented. M6 is partial; M5 acceptance is unchanged. No runtime migration, deployment or brokerage mutation. [Evidence and next work](M6-EXECUTION-JOURNAL-EVIDENCE.md).

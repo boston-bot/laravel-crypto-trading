@@ -373,6 +373,12 @@ October 25 M5 research follow-up (source only): historical quote replay now acce
 
 ## M6 — Controlled execution, separately enabled
 
+October 26 source follow-up: owner requested the remaining submission/account/live-exit priorities. Complete local admission now reruns after preview, excluding the current claim from its own session cap. Default-off account-eligibility reads retain current authorization/contract/freshness evidence; failures deny execution without failing monitoring. The shared strategy engine reconstructs live episodes/stops from broker-confirmed app fills, retains partial/latched exits across restart, and enforces live reentry cooldown. Paper/live signals and cycles have separate source identities and a composite foreign key under additive migration `000033`, tested only in `mcp_trading_test.mcp_trading`. The manual `mcp:live-exits` evaluator is default off and never dispatches. Full SQLite **716 passed / 82 skips, 4,958 assertions**; PostgreSQL **797 passed / one existing environment skip, 5,637 assertions** (798 total each). Composer, scoped Pint and whitespace checks passed. No frontend assets changed. No runtime migration/deployment, flag change, provider request or live order. [Detailed evidence and remaining gates](M6-LIVE-EXITS-AND-SUBMISSION-EVIDENCE.md). M6 remains partial.
+
+- [x] Re-run full admission after broker preview, with failures withdrawn before place; test policy/pause/freshness/buying-power/approval/account changes during preview.
+- [x] Fresh stored account trading eligibility at claim and pre-send, independently of the local monitoring role (source only; collection defaults off).
+- [x] Live exit signals from broker-confirmed app holdings in the shared rules engine, independent of paper positions and watchlist membership, with source/ledger isolation (source only; manual evaluator defaults off).
+
 October 25: owner requested beginning implementation following discussion of a small supervised pilot. The first source increment adds immutable encrypted intents, a transactional dispatch/outbox row, shared-account PostgreSQL ownership, token fencing and conservative `submitting`/`unknown` recovery. Production submission checks always deny, including with the write flag enabled. Full SQLite **690 passed / 47 skips, 4,749 assertions**; PostgreSQL **736 passed / one existing environment skip, 5,173 assertions** (737 total each). Composer and scoped Pint passed. Migration `000030` adds four tables/two trigger functions in the test schema only; no backfill, runtime migration, deployment, flag change or broker call. M6 is now partial; the complete lifecycle, actual dispatcher, live checks, approval support and reconciliation remain open. M5 acceptance is unchanged. [Detailed evidence and remaining gates](M6-EXECUTION-JOURNAL-EVIDENCE.md).
 
 - [x] Initial journal foundation: atomic unapproved intent/outbox creation, immutable signal provenance, exact decimal validation, one stable idempotency key, shared-account claim serialization and conservative crash states (source only; no external dispatcher).
@@ -381,10 +387,11 @@ October 25 (second increment): owner requested live policy and submission checks
 
 - [x] Explicit versioned owner live policy with code bounds; intents bound to its fingerprint.
 - [x] Separate buy pause and full emergency disable; emergency disable withdraws a claimed-but-unsent order.
-- [x] Last-boundary live checks from broker-confirmed snapshot, quote, eligibility, profile, session baseline, daily loss, sleeve/position/risk sizing and per-session cap; sells limited to app-attributed broker-held shares. Account trading eligibility at submission remains open.
+- [x] Last-boundary live checks from broker-confirmed snapshot, quote, eligibility, profile, session baseline, daily loss, sleeve/position/risk sizing and per-session cap; sells limited to app-attributed broker-held shares. Account trading eligibility was added in the October 26 source follow-up; runtime verification remains open.
 - [x] Broker-confirmed outcome journal: acceptance binding, reconciliation to partial/filled/cancelled/rejected, per-execution fill dedupe, owner link/absent resolution of unknown outcomes, contradiction incidents; app-bound orders excluded from external-order detection.
 - [x] Control Center owner forms for live policy, buy pause/emergency disable (one-click engage), unknown-outcome link/absence and reconciliation review; authenticated, operator-only, CSRF-protected, throttled. SQLite **702 / 56 skips**, PostgreSQL **757 / 1 skip** (758 each). No order path.
 - [x] Order-tool contract reviewed (stored schemas plus a description-level `tools/list` with an empty call allowlist; order descriptions unchanged since October 19). `ref_id` proof binds app orders automatically; `approval_pending` state for broker customer approvals; documented `new`/`voided` states; read-only approval-setting operation (default off) and policy v2 `require_broker_approval` gate. Migration `000032` (test schema only). SQLite **705 / 62 skips**, PostgreSQL **766 / 1 skip** (767 each). [Evidence](M6-ORDER-CONTRACT-AND-APPROVALS-EVIDENCE.md).
+- [x] Execution gateway and dispatcher: separate write session (allowlist `review_equity_order`/`place_equity_order` only, writes flag required), pinned write-schema fingerprints, review alerts withdraw, `ref_id` on place, order/approval/unknown journaling with no retry, owner-run `mcp:live-order`. Fake server and fake gateway only. SQLite **714 / 69 skips**, PostgreSQL **782 / 1 skip** (783 each). [Evidence](M6-EXECUTION-GATEWAY-EVIDENCE.md).
 
 October 18: the owner waived M4's seven-session period and continued M5. This does not authorize M6 brokerage mutations or live-mode activation. Under the October 18 strategy/execution split, M6's execution gateway stays separate from the read gateway and accepts only signal-based orders that passed every M5 gate.
 
@@ -398,7 +405,7 @@ October 18: the owner waived M4's seven-session period and continued M5. This do
 
 Mandatory fault tests: two workers claim the same intent; crash immediately before/after external request; response lost after acceptance; duplicate delivery; refresh-token race; partial fill then cancellation; policy changed while awaiting approval; expired quote; manual buy consumes funds; missing order-history page; emergency disable during queued work; restored backup contains stale intents. Every ambiguous external outcome blocks new exposure until reconciled.
 
-Evidence: [initial journal foundation](M6-EXECUTION-JOURNAL-EVIDENCE.md); [live policy, checks and broker-confirmed outcomes](M6-LIVE-POLICY-AND-OUTCOMES-EVIDENCE.md); [order-tool contract, ref_id proof and approvals](M6-ORDER-CONTRACT-AND-APPROVALS-EVIDENCE.md); remaining M6 acceptance pending. Live authorization: none supplied by this documentation.
+Evidence: [initial journal foundation](M6-EXECUTION-JOURNAL-EVIDENCE.md); [live policy, checks and broker-confirmed outcomes](M6-LIVE-POLICY-AND-OUTCOMES-EVIDENCE.md); [order-tool contract, ref_id proof and approvals](M6-ORDER-CONTRACT-AND-APPROVALS-EVIDENCE.md); [execution gateway and dispatcher](M6-EXECUTION-GATEWAY-EVIDENCE.md); remaining M6 acceptance pending. Live authorization: none supplied by this documentation.
 
 ## Crypto track — Coinbase and Robinhood Crypto
 
@@ -436,6 +443,7 @@ Unimplemented rows remain proposed interfaces. `--account` on M2 commands is the
 
 | Command | Status | Behavior |
 |---|---|---|
+| `php artisan mcp:live-order --account=<local-id> --signal=<id> [--stage-only]` | M6 available, writes disabled | Owner-run, one signal: plan, stage and (unless `--stage-only`) dispatch through every live gate; denied while `BROKERAGE_WRITES_ENABLED` is false |
 | `php artisan mcp:doctor` | M0 available | Redacted database/schema identity checks; read-only |
 | `php artisan mcp:sync --account=<local-id> --key=<stable-key>` | M2 available | Foreground broker reads and complete-only snapshot publication |
 | `php artisan mcp:reconcile --account=<local-id>` | Standalone command planned | M2 already has a separate read-only reconciliation queue; no submit/cancel |

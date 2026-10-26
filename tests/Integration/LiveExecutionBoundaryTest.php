@@ -17,6 +17,7 @@ use App\Services\Execution\ExecutionJournal;
 use App\Services\Execution\SubmissionChecks;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\ExternalOrders;
+use App\Services\PaperTrading\StrategySignals;
 use App\Support\Mcp\Decimal;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
@@ -118,8 +119,10 @@ class LiveExecutionBoundaryTest extends TestCase
         $this->broker->positions['DEMO'] = ['1.5', '152.55'];
         $this->report($c, $this->broker->orders);
         F::sync($c, $this->broker);
-        SignalExecutionFixture::quote($c);
-        $sell = app(SubmissionChecks::class)->plan($c, F::signal($c, 'SELL'));
+        SignalExecutionFixture::quote($c, '70', '70.01');
+        config(['mcp.live_exit_signals_enabled' => true]);
+        $exit = app(StrategySignals::class)->recordLiveExits($c, $c->user_id)->sole();
+        $sell = app(SubmissionChecks::class)->plan($c, $exit);
         $this->assertNull($sell['reason'], json_encode($sell));
         $this->assertSame('1', $sell['draft']['quantity']);
     }
@@ -198,10 +201,11 @@ class LiveExecutionBoundaryTest extends TestCase
             ->where('i.mcp_connection_id', $c->id)->whereIn('d.status', ExecutionJournal::BLOCKING)->count());
     }
 
-    public function test_partial_cancel_rejection_and_contradictions_are_recorded_or_raise_a_blocking_incident(): void
+    public function test_partial_cancel_and_terminal_regression_raise_a_blocking_incident(): void
     {
         [$c, $signal, $journal] = $this->ready();
         $intent = F::stage($c, $signal);
+        $next = F::stage($c, F::signal($c, 'BUY'));
         $token = $journal->claim($c, $c->user_id, $intent->id);
         $journal->accepted($c, $c->user_id, $intent->id, $token, 'rh-partial');
         $this->report($c, [LiveBrokerGateway::order('rh-partial', 'partially_filled', '1', '0.4', [['exec-p', '0.4', '101.70']])]);
@@ -209,7 +213,6 @@ class LiveExecutionBoundaryTest extends TestCase
         $this->assertSame('broker_cancelled', $this->dispatchStatus($intent));
         $this->assertSame(0, app(SubmissionChecks::class)->attributed(AccountScope::key($c), 'DEMO')->compareTo(Decimal::from('0.4')));
         $outcomes = ExecutionOutcome::where('intent_id', $intent->id)->count();
-        $next = F::stage($c, F::signal($c, 'BUY'));
         // The broker later contradicts a terminal outcome: nothing changes and every live claim is blocked.
         $this->report($c, [LiveBrokerGateway::order('rh-partial', 'filled', '1', '1', [['exec-p', '0.4', '101.70'], ['exec-q', '0.6', '101.70']])]);
         $this->assertSame('broker_cancelled', $this->dispatchStatus($intent));
@@ -220,6 +223,13 @@ class LiveExecutionBoundaryTest extends TestCase
         app(BrokerOutcomes::class)->review($c, $c->user_id, BrokerOutcomes::MISMATCH);
         $this->report($c, []);
         SignalExecutionFixture::quote($c);
+        $this->refused(fn () => $journal->claim($c, $c->user_id, $next->id), 409, 'live_position_history_unverified');
+    }
+
+    public function test_rejection_and_unknown_broker_states_are_recorded_or_raise_a_blocking_incident(): void
+    {
+        [$c, $signal, $journal] = $this->ready();
+        $next = F::stage($c, $signal);
         $retry = $journal->claim($c, $c->user_id, $next->id);
         $this->assertNotNull($retry);
         $journal->accepted($c, $c->user_id, $next->id, $retry, 'rh-rejected');

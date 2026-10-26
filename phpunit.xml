@@ -21,6 +21,8 @@
         </include>
     </source>
     <php>
+        <env name="ROBINHOOD_MCP_ACCOUNT_ELIGIBILITY_ENABLED" value="false" force="true"/>
+        <env name="MCP_LIVE_EXIT_SIGNALS_ENABLED" value="false" force="true"/>
         <env name="MCP_INTRADAY_SYMBOL_WARMUP_ENABLED" value="false" force="true"/>
         <env name="ROBINHOOD_MCP_ENABLED" value="false" force="true"/>
         <env name="ROBINHOOD_MCP_REFERENCE_DATA_ENABLED" value="false" force="true"/>

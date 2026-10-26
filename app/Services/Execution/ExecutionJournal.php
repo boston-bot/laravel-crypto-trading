@@ -52,11 +52,12 @@ final class ExecutionJournal
             $account = DB::table('mcp_execution_accounts')->where('scope', $scope)->lockForUpdate()->first();
             $signal = StrategySignal::whereKey($signalId)->where('mcp_connection_id', $current->id)->firstOrFail();
             $cycle = StrategyCycle::findOrFail($signal->cycle_id);
+            abort_unless($signal->side !== 'SELL' || ($signal->position_source === 'live' && $cycle->position_source === 'live'), 409, 'Live exits require live position evidence.');
             abort_unless($signal->status === 'signal' && in_array($signal->side, ['BUY', 'SELL'], true) &&
                 $signal->asset_class === 'equity' && $signal->venue === 'robinhood_agentic' && $signal->rule_version === SignalRules::VERSION &&
                 $cycle->mcp_connection_id === $current->id && $cycle->scope === $scope && $cycle->auth_generation === $current->auth_generation, 409, 'Signal provenance is invalid.');
             $payload = ['contract' => 'execution_intent_v1', 'mode' => 'live_intent_unapproved',
-                'symbol' => $signal->symbol, 'side' => $signal->side, 'signal_id' => $signal->id,
+                'symbol' => $signal->symbol, 'side' => $signal->side, 'signal_id' => $signal->id, 'position_source' => $signal->position_source,
                 'signal_input_fingerprint' => $signal->input_fingerprint, 'rule_version' => $signal->rule_version,
                 'parameters_version' => $signal->parameters_version, 'profile_id' => $signal->profile_id,
                 'watchlist_revision_id' => $signal->watchlist_revision_id, 'market_input_id' => $signal->market_input_id] + $draft;
@@ -137,12 +138,15 @@ final class ExecutionJournal
     }
 
     /**
-     * The claim owner's last local check immediately before the network request. Writes disabled, an emergency
-     * disable, an expired deadline or a changed authorization withdraws the claim: nothing was sent, so this is
-     * not ambiguous. Returns true only while the caller still owns a sendable claim.
+     * The claim owner's last local check after broker preview. Re-run every submission check using current stored
+     * facts under the connection/account locks. Nothing has been sent; a denial withdraws instead of becoming unknown.
      */
     public function beforeSend(McpConnection $connection, int $actor, int $intentId, string $token): bool
     {
+        if (DB::transactionLevel() !== 0) {
+            throw new LogicException('Pre-send checks must commit independently before any external request.');
+        }
+
         return DB::transaction(function () use ($connection, $actor, $intentId, $token) {
             $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
             $this->operator($current, $actor);
@@ -158,11 +162,30 @@ final class ExecutionJournal
                 ! $authorized => 'withdrawn_authorization_changed',
                 default => null,
             };
+            if ($reason === null && ($denial = $this->checks->reason($current, $intent)) !== null) {
+                $reason = 'withdrawn_'.substr(preg_replace('/[^a-z0-9_]/', '_', strtolower($denial)), 0, 80);
+            }
             if ($reason !== null) {
                 $this->transition($dispatch, 'withdrawn', $reason);
             }
 
             return $reason === null;
+        });
+    }
+
+    /**
+     * The claim owner stops before any place request was made, for example after a broker review alert. Only the
+     * process that knows nothing was sent may call this; a possible send must use uncertain() instead.
+     */
+    public function withdraw(McpConnection $connection, int $actor, int $intentId, string $token, string $reason): void
+    {
+        abort_unless(preg_match('/^withdrawn_[a-z0-9_]{1,80}$/D', $reason) === 1, 422, 'Invalid withdrawal reason.');
+        DB::transaction(function () use ($connection, $actor, $intentId, $token, $reason) {
+            $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
+            $this->operator($current, $actor);
+            $intent = OrderIntent::whereKey($intentId)->where('mcp_connection_id', $current->id)->firstOrFail();
+            DB::table('mcp_execution_accounts')->where('id', $intent->execution_account_id)->lockForUpdate()->firstOrFail();
+            $this->transition($this->owned($intentId, $token, ['submitting']), 'withdrawn', $reason);
         });
     }
 

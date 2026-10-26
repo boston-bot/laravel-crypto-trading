@@ -142,7 +142,7 @@ class LiveSubmissionChecksTest extends TestCase
         // The broker holds DEMO, but no broker-confirmed app fill put it there.
         $this->broker->positions['DEMO'] = ['3', '305.00'];
         $this->sync($c);
-        $this->assertSame('live_position_unattributed_or_absent', $checks->plan($c, $this->signal($c, 'SELL'))['reason']);
+        $this->assertSame('live_exit_requires_live_position_signal', $checks->plan($c, $this->signal($c, 'SELL'))['reason']);
         $this->assertSame('broker_symbol_already_held', $checks->plan($c, $signal)['reason']);
     }
 
@@ -156,6 +156,8 @@ class LiveSubmissionChecksTest extends TestCase
         $this->assertNull($checks->plan($c, $signal)['reason']);
         $this->travel(5)->minutes();
         SignalExecutionFixture::quote($c);
+        $this->assertSame('signal_stale_or_authorization_changed', $checks->plan($c, $signal)['reason']);
+        $signal = $this->signal($c, 'BUY');
         $this->assertSame('broker_account_unverified', $checks->plan($c, $signal)['reason']);
         // A complete snapshot 2.5% below the 14:00 opening baseline latches the daily loss pause for entries.
         $this->broker->equity = '975.00';

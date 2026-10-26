@@ -59,7 +59,7 @@ final class SignalPositionFacts
             return array_replace($result, ['reason' => 'strategy_position_history_unverified']);
         }
         $order = array_values($buys)[0];
-        $signal = StrategySignal::whereKey($order->intent['strategy_signal_id'] ?? 0)->where('paper_portfolio_id', $portfolio->id)
+        $signal = StrategySignal::where('position_source', 'paper')->whereKey($order->intent['strategy_signal_id'] ?? 0)->where('paper_portfolio_id', $portfolio->id)
             ->where('symbol', $symbol)->where('status', 'signal')->where('side', 'BUY')->first();
         if (! $signal || $signal->rule_version !== SignalRules::VERSION || $signal->recorded_at->gt($order->accepted_at) ||
             $order->intent['origin'] !== 'real_data_paper_simulation' || $positions->where('sleeve', $order->sleeve)->count() !== 1) {

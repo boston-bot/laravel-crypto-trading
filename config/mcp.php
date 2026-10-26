@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'live_exit_signals_enabled' => filter_var(env('MCP_LIVE_EXIT_SIGNALS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'external_order_detection_enabled' => filter_var(env('MCP_EXTERNAL_ORDER_DETECTION_ENABLED', false), FILTER_VALIDATE_BOOL),
     'legacy_schedules_enabled' => filter_var(env('LEGACY_CRYPTO_SCHEDULES_ENABLED', false), FILTER_VALIDATE_BOOL),
     'monitoring_enabled' => filter_var(env('MCP_MONITORING_ENABLED', false), FILTER_VALIDATE_BOOL),

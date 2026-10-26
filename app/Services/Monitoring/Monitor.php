@@ -103,6 +103,15 @@ final class Monitor
                 throw new ReadFailure(ReadError::Malformed);
             }
         }
+        if (config('robinhood_mcp.account_eligibility_enabled')) {
+            // Metadata permission evidence only; an unavailable read denies execution without failing monitoring.
+            try {
+                $parts['account_eligibility'] = ['read' => json_decode(json_encode($this->gateway->read($connection, Operation::Accounts), JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR),
+                    'auth_generation' => $connection->auth_generation, 'contract_fingerprint' => config('robinhood_mcp.operations.accounts.fingerprint')];
+            } catch (ReadFailure $failure) {
+                $parts['account_eligibility'] = ['failure' => $failure->reason->value];
+            }
+        }
         if (config('robinhood_mcp.approval_setting_enabled')) {
             // Optional evidence for the live checks only: a failure leaves the setting unknown and never fails monitoring.
             try {

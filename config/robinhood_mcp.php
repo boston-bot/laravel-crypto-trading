@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'account_eligibility_enabled' => filter_var(env('ROBINHOOD_MCP_ACCOUNT_ELIGIBILITY_ENABLED', false), FILTER_VALIDATE_BOOL),
     'enabled' => filter_var(env('ROBINHOOD_MCP_ENABLED', false), FILTER_VALIDATE_BOOL),
     'reference_data_enabled' => filter_var(env('ROBINHOOD_MCP_REFERENCE_DATA_ENABLED', false), FILTER_VALIDATE_BOOL),
     'execution_inputs_enabled' => filter_var(env('ROBINHOOD_MCP_EXECUTION_INPUTS_ENABLED', false), FILTER_VALIDATE_BOOL),

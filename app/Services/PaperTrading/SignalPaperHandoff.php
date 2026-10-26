@@ -32,6 +32,7 @@ final class SignalPaperHandoff
                 $current->auth_generation === $connection->auth_generation && AccountScope::key($current) === AccountScope::key($connection), 409, 'Account authorization changed.');
             $portfolio = Portfolio::where('mcp_connection_id', $current->id)->where('scope', AccountScope::key($current))->lockForUpdate()->firstOrFail();
             $signal = StrategySignal::whereKey($signalId)->where('mcp_connection_id', $current->id)->where('paper_portfolio_id', $portfolio->id)->firstOrFail();
+            abort_unless($signal->position_source === 'paper', 409, 'Live signals cannot enter the paper ledger.');
             if ($prior = SignalOrderHandoff::where('signal_id', $signalId)->first()) {
                 return $prior;
             }

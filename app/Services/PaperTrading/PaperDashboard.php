@@ -28,10 +28,10 @@ final class PaperDashboard
         $stamp = $asOf->utc()->format('Y-m-d H:i:s.u');
         $start = CarbonImmutable::parse($date, 'America/New_York')->startOfDay()->utc();
         $end = $start->setTimezone('America/New_York')->addDay()->utc();
-        $cycles = StrategyCycle::where('mcp_connection_id', $connection->id)->where('paper_portfolio_id', $portfolio->id)->where('scope', $portfolio->scope)
+        $cycles = StrategyCycle::where('position_source', 'paper')->where('mcp_connection_id', $connection->id)->where('paper_portfolio_id', $portfolio->id)->where('scope', $portfolio->scope)
             ->where('auth_generation', $connection->auth_generation)->where('recorded_at', '<=', $stamp);
         $sessionCycles = (clone $cycles)->where('cycle_at', '>=', $start)->where('cycle_at', '<', $end);
-        $signals = StrategySignal::where('paper_portfolio_id', $portfolio->id)->where('mcp_connection_id', $connection->id)
+        $signals = StrategySignal::where('position_source', 'paper')->where('paper_portfolio_id', $portfolio->id)->where('mcp_connection_id', $connection->id)
             ->whereIn('cycle_id', (clone $sessionCycles)->select('id'))->where('cutoff', '<=', $stamp)->where('recorded_at', '<=', $stamp);
         $counts = (clone $signals)->selectRaw('status, COUNT(*) AS total')->groupBy('status')->pluck('total', 'status')->all();
         $reasons = (clone $signals)->selectRaw('reason, COUNT(*) AS total')->where('status', '!=', 'signal')->groupBy('reason')->orderByDesc('total')->orderBy('reason')->get();

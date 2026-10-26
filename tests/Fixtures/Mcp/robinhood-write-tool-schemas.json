@@ -1,0 +1,1077 @@
+{
+    "provenance": "Structural schemas (names, types, required fields) of the reviewed Robinhood agentic write tools as stored by the app catalog on 2026-10-26T02:00Z. No descriptions, identifiers or account data.",
+    "tools": {
+        "review_equity_order": {
+            "name": "review_equity_order",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "account_number": {
+                        "type": "string"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "side": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "quantity": {
+                        "type": "string"
+                    },
+                    "dollar_amount": {
+                        "type": "string"
+                    },
+                    "limit_price": {
+                        "type": "string"
+                    },
+                    "stop_price": {
+                        "type": "string"
+                    },
+                    "time_in_force": {
+                        "type": "string"
+                    },
+                    "market_hours": {
+                        "type": "string"
+                    },
+                    "tax_lots": {
+                        "type": [
+                            "null",
+                            "array"
+                        ],
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "open_lot_id": {
+                                    "type": "string"
+                                },
+                                "quantity": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "open_lot_id",
+                                "quantity"
+                            ],
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "required": [
+                    "account_number",
+                    "symbol",
+                    "side",
+                    "type"
+                ],
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {
+                                "type": "string"
+                            },
+                            "side": {
+                                "type": "string"
+                            },
+                            "type": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "string"
+                            },
+                            "dollar_amount": {
+                                "type": "string"
+                            },
+                            "limit_price": {
+                                "type": "string"
+                            },
+                            "stop_price": {
+                                "type": "string"
+                            },
+                            "order_checks": {
+                                "type": "object"
+                            },
+                            "quote_data": {
+                                "type": [
+                                    "null",
+                                    "object"
+                                ],
+                                "properties": {
+                                    "symbol": {
+                                        "type": "string"
+                                    },
+                                    "last_trade_price": {
+                                        "type": "string"
+                                    },
+                                    "venue_last_trade_time": {
+                                        "type": "string"
+                                    },
+                                    "last_non_reg_trade_price": {
+                                        "type": [
+                                            "null",
+                                            "string"
+                                        ]
+                                    },
+                                    "venue_last_non_reg_trade_time": {
+                                        "type": [
+                                            "null",
+                                            "string"
+                                        ]
+                                    },
+                                    "adjusted_previous_close": {
+                                        "type": "string"
+                                    },
+                                    "previous_close": {
+                                        "type": "string"
+                                    },
+                                    "previous_close_date": {
+                                        "type": [
+                                            "null",
+                                            "string"
+                                        ]
+                                    },
+                                    "bid_price": {
+                                        "type": "string"
+                                    },
+                                    "venue_bid_time": {
+                                        "type": "string"
+                                    },
+                                    "ask_price": {
+                                        "type": "string"
+                                    },
+                                    "venue_ask_time": {
+                                        "type": "string"
+                                    },
+                                    "has_traded": {
+                                        "type": "boolean"
+                                    },
+                                    "state": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "symbol",
+                                    "last_trade_price",
+                                    "venue_last_trade_time",
+                                    "last_non_reg_trade_price",
+                                    "venue_last_non_reg_trade_time",
+                                    "adjusted_previous_close",
+                                    "previous_close",
+                                    "previous_close_date",
+                                    "bid_price",
+                                    "venue_bid_time",
+                                    "ask_price",
+                                    "venue_ask_time",
+                                    "has_traded",
+                                    "state"
+                                ],
+                                "additionalProperties": false
+                            },
+                            "market_data_disclosure": {
+                                "type": "string"
+                            },
+                            "customer_approval_required": {
+                                "type": [
+                                    "null",
+                                    "boolean"
+                                ]
+                            },
+                            "customer_approval_required_reason": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "symbol",
+                            "side",
+                            "type",
+                            "order_checks",
+                            "quote_data"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            }
+        },
+        "place_equity_order": {
+            "name": "place_equity_order",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "account_number": {
+                        "type": "string"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "side": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "quantity": {
+                        "type": "string"
+                    },
+                    "dollar_amount": {
+                        "type": "string"
+                    },
+                    "limit_price": {
+                        "type": "string"
+                    },
+                    "stop_price": {
+                        "type": "string"
+                    },
+                    "time_in_force": {
+                        "type": "string"
+                    },
+                    "market_hours": {
+                        "type": "string"
+                    },
+                    "tax_lots": {
+                        "type": [
+                            "null",
+                            "array"
+                        ],
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "open_lot_id": {
+                                    "type": "string"
+                                },
+                                "quantity": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "open_lot_id",
+                                "quantity"
+                            ],
+                            "additionalProperties": false
+                        }
+                    },
+                    "ref_id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "account_number",
+                    "symbol",
+                    "side",
+                    "type"
+                ],
+                "additionalProperties": false
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "order": {
+                                "type": [
+                                    "null",
+                                    "object"
+                                ],
+                                "properties": {
+                                    "id": {
+                                        "type": "string"
+                                    },
+                                    "ref_id": {
+                                        "type": "string"
+                                    },
+                                    "instrument_id": {
+                                        "type": "string"
+                                    },
+                                    "symbol": {
+                                        "type": "string"
+                                    },
+                                    "side": {
+                                        "type": "string"
+                                    },
+                                    "type": {
+                                        "type": "string"
+                                    },
+                                    "state": {
+                                        "type": "string"
+                                    },
+                                    "quantity": {
+                                        "type": [
+                                            "null",
+                                            "string"
+                                        ]
+                                    },
+                                    "cumulative_quantity": {
+                                        "type": "string"
+                                    },
+                                    "price": {
+                                        "type": [
+                                            "null",
+                                            "string"
+                                        ]
+                                    },
+                                    "stop_price": {
+                                        "type": [
+                                            "null",
+                                            "string"
+                                        ]
+                                    },
+                                    "average_price": {
+                                        "type": [
+                                            "null",
+                                            "string"
+                                        ]
+                                    },
+                                    "fees": {
+                                        "type": "string"
+                                    },
+                                    "dollar_based_amount": {
+                                        "type": [
+                                            "null",
+                                            "object"
+                                        ],
+                                        "properties": {
+                                            "amount": {
+                                                "type": "string"
+                                            },
+                                            "currency_code": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "required": [
+                                            "amount",
+                                            "currency_code"
+                                        ],
+                                        "additionalProperties": false
+                                    },
+                                    "time_in_force": {
+                                        "type": "string"
+                                    },
+                                    "market_hours": {
+                                        "type": "string"
+                                    },
+                                    "trigger": {
+                                        "type": "string"
+                                    },
+                                    "placed_agent": {
+                                        "type": "string"
+                                    },
+                                    "agent_initiated": {
+                                        "type": "boolean"
+                                    },
+                                    "created_at": {
+                                        "type": "string"
+                                    },
+                                    "last_transaction_at": {
+                                        "type": [
+                                            "null",
+                                            "string"
+                                        ]
+                                    },
+                                    "executions": {
+                                        "type": [
+                                            "null",
+                                            "array"
+                                        ],
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "id": {
+                                                    "type": "string"
+                                                },
+                                                "price": {
+                                                    "type": "string"
+                                                },
+                                                "quantity": {
+                                                    "type": "string"
+                                                },
+                                                "timestamp": {
+                                                    "type": "string"
+                                                },
+                                                "fees": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "id",
+                                                "price",
+                                                "quantity",
+                                                "timestamp",
+                                                "fees"
+                                            ],
+                                            "additionalProperties": false
+                                        }
+                                    },
+                                    "reject_reason": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "instrument_id",
+                                    "symbol",
+                                    "side",
+                                    "type",
+                                    "state",
+                                    "quantity",
+                                    "cumulative_quantity",
+                                    "price",
+                                    "stop_price",
+                                    "average_price",
+                                    "fees",
+                                    "dollar_based_amount",
+                                    "time_in_force",
+                                    "market_hours",
+                                    "trigger",
+                                    "placed_agent",
+                                    "agent_initiated",
+                                    "created_at",
+                                    "last_transaction_at",
+                                    "executions"
+                                ],
+                                "additionalProperties": false
+                            },
+                            "approval": {
+                                "type": [
+                                    "null",
+                                    "object"
+                                ],
+                                "properties": {
+                                    "approval_id": {
+                                        "type": "string"
+                                    },
+                                    "account_number": {
+                                        "type": "string"
+                                    },
+                                    "asset_class": {
+                                        "type": "string"
+                                    },
+                                    "state": {
+                                        "type": "string"
+                                    },
+                                    "is_edited": {
+                                        "type": "boolean"
+                                    },
+                                    "rationale": {
+                                        "type": "string"
+                                    },
+                                    "proposed_order": {
+                                        "type": [
+                                            "null",
+                                            "object"
+                                        ],
+                                        "properties": {
+                                            "asset_class": {
+                                                "type": "string"
+                                            },
+                                            "side": {
+                                                "type": "string"
+                                            },
+                                            "order_type": {
+                                                "type": "string"
+                                            },
+                                            "time_in_force": {
+                                                "type": "string"
+                                            },
+                                            "market_hours": {
+                                                "type": "string"
+                                            },
+                                            "trigger": {
+                                                "type": "string"
+                                            },
+                                            "contingency_type": {
+                                                "type": "string"
+                                            },
+                                            "sub_orders": {
+                                                "type": [
+                                                    "null",
+                                                    "array"
+                                                ],
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "asset_class": {
+                                                            "type": "string"
+                                                        },
+                                                        "side": {
+                                                            "type": "string"
+                                                        },
+                                                        "quantity": {
+                                                            "type": "string"
+                                                        },
+                                                        "order_type": {
+                                                            "type": "string"
+                                                        },
+                                                        "trigger": {
+                                                            "type": "string"
+                                                        },
+                                                        "limit_price": {
+                                                            "type": [
+                                                                "null",
+                                                                "object"
+                                                            ],
+                                                            "properties": {
+                                                                "amount": {
+                                                                    "type": "string"
+                                                                },
+                                                                "currency_code": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "amount"
+                                                            ],
+                                                            "additionalProperties": false
+                                                        },
+                                                        "stop_price": {
+                                                            "type": [
+                                                                "null",
+                                                                "object"
+                                                            ],
+                                                            "properties": {
+                                                                "amount": {
+                                                                    "type": "string"
+                                                                },
+                                                                "currency_code": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "amount"
+                                                            ],
+                                                            "additionalProperties": false
+                                                        },
+                                                        "time_in_force": {
+                                                            "type": "string"
+                                                        },
+                                                        "is_primary": {
+                                                            "type": "boolean"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "asset_class",
+                                                        "side",
+                                                        "quantity",
+                                                        "order_type",
+                                                        "trigger",
+                                                        "time_in_force",
+                                                        "is_primary"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
+                                            },
+                                            "quantity": {
+                                                "type": "string"
+                                            },
+                                            "dollar_amount": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "limit_price": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "stop_price": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "peg_type": {
+                                                "type": "string"
+                                            },
+                                            "price_peg": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "percentage_peg": {
+                                                "type": "string"
+                                            },
+                                            "symbol": {
+                                                "type": "string"
+                                            },
+                                            "strike_price": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "expiration_date": {
+                                                "type": "string"
+                                            },
+                                            "option_type": {
+                                                "type": "string"
+                                            },
+                                            "position_effect": {
+                                                "type": "string"
+                                            },
+                                            "estimated_cost": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "estimated_credit": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "estimated_quantity": {
+                                                "type": "string"
+                                            },
+                                            "tax_lot_selection_type": {
+                                                "type": "string"
+                                            },
+                                            "tax_lots": {
+                                                "type": [
+                                                    "null",
+                                                    "array"
+                                                ],
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "open_lot_id": {
+                                                            "type": "string"
+                                                        },
+                                                        "quantity": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "open_lot_id",
+                                                        "quantity"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
+                                            }
+                                        },
+                                        "required": [
+                                            "asset_class"
+                                        ],
+                                        "additionalProperties": false
+                                    },
+                                    "actual_order": {
+                                        "type": [
+                                            "null",
+                                            "object"
+                                        ],
+                                        "properties": {
+                                            "asset_class": {
+                                                "type": "string"
+                                            },
+                                            "side": {
+                                                "type": "string"
+                                            },
+                                            "order_type": {
+                                                "type": "string"
+                                            },
+                                            "time_in_force": {
+                                                "type": "string"
+                                            },
+                                            "market_hours": {
+                                                "type": "string"
+                                            },
+                                            "trigger": {
+                                                "type": "string"
+                                            },
+                                            "contingency_type": {
+                                                "type": "string"
+                                            },
+                                            "sub_orders": {
+                                                "type": [
+                                                    "null",
+                                                    "array"
+                                                ],
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "asset_class": {
+                                                            "type": "string"
+                                                        },
+                                                        "side": {
+                                                            "type": "string"
+                                                        },
+                                                        "quantity": {
+                                                            "type": "string"
+                                                        },
+                                                        "order_type": {
+                                                            "type": "string"
+                                                        },
+                                                        "trigger": {
+                                                            "type": "string"
+                                                        },
+                                                        "limit_price": {
+                                                            "type": [
+                                                                "null",
+                                                                "object"
+                                                            ],
+                                                            "properties": {
+                                                                "amount": {
+                                                                    "type": "string"
+                                                                },
+                                                                "currency_code": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "amount"
+                                                            ],
+                                                            "additionalProperties": false
+                                                        },
+                                                        "stop_price": {
+                                                            "type": [
+                                                                "null",
+                                                                "object"
+                                                            ],
+                                                            "properties": {
+                                                                "amount": {
+                                                                    "type": "string"
+                                                                },
+                                                                "currency_code": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "amount"
+                                                            ],
+                                                            "additionalProperties": false
+                                                        },
+                                                        "time_in_force": {
+                                                            "type": "string"
+                                                        },
+                                                        "is_primary": {
+                                                            "type": "boolean"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "asset_class",
+                                                        "side",
+                                                        "quantity",
+                                                        "order_type",
+                                                        "trigger",
+                                                        "time_in_force",
+                                                        "is_primary"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
+                                            },
+                                            "quantity": {
+                                                "type": "string"
+                                            },
+                                            "dollar_amount": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "limit_price": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "stop_price": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "peg_type": {
+                                                "type": "string"
+                                            },
+                                            "price_peg": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "percentage_peg": {
+                                                "type": "string"
+                                            },
+                                            "symbol": {
+                                                "type": "string"
+                                            },
+                                            "strike_price": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "expiration_date": {
+                                                "type": "string"
+                                            },
+                                            "option_type": {
+                                                "type": "string"
+                                            },
+                                            "position_effect": {
+                                                "type": "string"
+                                            },
+                                            "estimated_cost": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "estimated_credit": {
+                                                "type": [
+                                                    "null",
+                                                    "object"
+                                                ],
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "currency_code": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "amount"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "estimated_quantity": {
+                                                "type": "string"
+                                            },
+                                            "tax_lot_selection_type": {
+                                                "type": "string"
+                                            },
+                                            "tax_lots": {
+                                                "type": [
+                                                    "null",
+                                                    "array"
+                                                ],
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "open_lot_id": {
+                                                            "type": "string"
+                                                        },
+                                                        "quantity": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "open_lot_id",
+                                                        "quantity"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
+                                            }
+                                        },
+                                        "required": [
+                                            "asset_class"
+                                        ],
+                                        "additionalProperties": false
+                                    },
+                                    "expires_at": {
+                                        "type": "string"
+                                    },
+                                    "created_at": {
+                                        "type": "string"
+                                    },
+                                    "updated_at": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "approval_id",
+                                    "account_number",
+                                    "asset_class",
+                                    "state",
+                                    "is_edited"
+                                ],
+                                "additionalProperties": false
+                            }
+                        },
+                        "additionalProperties": false
+                    },
+                    "guide": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "data",
+                    "guide"
+                ],
+                "additionalProperties": false
+            }
+        }
+    }
+}

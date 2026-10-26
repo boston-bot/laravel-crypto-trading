@@ -13,12 +13,14 @@ use App\Models\PaperTrading\SimulationOrder;
 use App\Models\PaperTrading\StrategyCycle;
 use App\Models\PaperTrading\StrategySignal;
 use App\Models\User;
+use App\Services\Execution\LivePolicies;
+use App\Services\Execution\LivePositionFacts;
 use App\Services\Monitoring\AccountScope;
 use App\Support\Mcp\Decimal;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
-/** Stored-data only, paper strategy evidence. No network, policy changes, reservations, orders or fills. */
+/** Shared deterministic rules over explicit paper or live position facts. No network, orders, policy or ledger changes. */
 final class StrategySignals
 {
     public function tick(?int $account = null): int
@@ -38,11 +40,18 @@ final class StrategySignals
         return $count;
     }
 
-    public function record(McpConnection $connection, int $actor, ?array $batchSymbols = null)
+    public function recordLiveExits(McpConnection $connection, int $actor)
     {
-        abort_unless(config('paper.signals_enabled'), 409, 'Strategy signals are disabled.');
+        return $this->record($connection, $actor, null, 'live');
+    }
 
-        return DB::transaction(function () use ($connection, $actor, $batchSymbols) {
+    public function record(McpConnection $connection, int $actor, ?array $batchSymbols = null, string $positionSource = 'paper')
+    {
+        abort_unless(in_array($positionSource, ['paper', 'live'], true), 422);
+        $live = $positionSource === 'live';
+        abort_unless($live ? config('mcp.live_exit_signals_enabled') : config('paper.signals_enabled'), 409, 'Strategy signals are disabled.');
+
+        return DB::transaction(function () use ($connection, $actor, $batchSymbols, $live, $positionSource) {
             $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
             abort_unless($current->user_id === $actor && User::whereKey($actor)->whereIn('email', config('mcp.operator_emails'))->exists(), 403);
             abort_unless($current->status === 'connected' && $current->account_role === 'agentic_monitoring' && $current->bound_account_id &&
@@ -53,15 +62,18 @@ final class StrategySignals
             $cutoff = CarbonImmutable::now();
             $cycleAt = CarbonImmutable::createFromTimestampUTC(intdiv($cutoff->getTimestamp(), 300) * 300);
             $existing = StrategyCycle::where('mcp_connection_id', $current->id)->where('scope', $scope)->where('auth_generation', $current->auth_generation)
-                ->where('rule_version', SignalRules::VERSION)->where('cycle_at', $cycleAt->format('Y-m-d H:i:s.u'))->first();
+                ->where('rule_version', SignalRules::VERSION)->where('position_source', $positionSource)->where('cycle_at', $cycleAt->format('Y-m-d H:i:s.u'))->first();
             if ($existing && $batchSymbols === null) {
                 return StrategySignal::where('cycle_id', $existing->id)->orderBy('symbol')->get();
             }
             $execution = ExecutionPolicies::current($portfolio);
-            abort_unless($execution && RuleEligibilityPolicies::current($portfolio, $cutoff), 409, 'Applied rule and execution settings are required.');
+            abort_unless($live || ($execution && RuleEligibilityPolicies::current($portfolio, $cutoff)), 409, 'Applied rule and execution settings are required.');
+            $livePolicy = $live ? LivePolicies::current($scope) : null;
+            abort_unless(! $live || $livePolicy, 409, 'An applied live policy is required.');
+            $maxAge = $live ? $livePolicy->payload['quote_max_age_seconds'] : $execution->payload['quote_max_age_seconds'];
             $parameters = SignalParameters::current();
-            $membership = app(StrategyWatchlists::class)->nominations($current, $cutoff);
-            $symbols = app(SymbolUniverse::class)->reads($current, $cutoff);
+            $membership = $live ? ['revision' => null] : app(StrategyWatchlists::class)->nominations($current, $cutoff);
+            $symbols = $live ? app(LivePositionFacts::class)->symbols($current, $cutoff) : app(SymbolUniverse::class)->reads($current, $cutoff);
             if ($batchSymbols !== null) {
                 abort_if(array_diff($batchSymbols, $symbols), 409, 'Batch symbols are no longer in the selected universe.');
             }
@@ -73,11 +85,11 @@ final class StrategySignals
             $orderRead = BrokerOrderRead::where('mcp_connection_id', $current->id)->where('scope', $scope)->where('auth_generation', $current->auth_generation)
                 ->where('recorded_at', '<=', $cutoff->format('Y-m-d H:i:s.u'))->latest('id')->first();
             $cycle = $existing ?? StrategyCycle::create(['mcp_connection_id' => $current->id, 'paper_portfolio_id' => $portfolio->id, 'scope' => $scope,
-                'auth_generation' => $current->auth_generation, 'actor_id' => $actor, 'rule_version' => SignalRules::VERSION,
+                'auth_generation' => $current->auth_generation, 'position_source' => $positionSource, 'actor_id' => $actor, 'rule_version' => SignalRules::VERSION,
                 'cycle_at' => $cycleAt, 'cutoff' => $cutoff, 'recorded_at' => now(), 'payload' => ['symbols' => $symbols,
-                    'ledger_version' => $portfolio->ledger_version, 'execution_version_id' => $execution->id, 'session' => $session,
+                    'ledger_version' => $portfolio->ledger_version, 'execution_version_id' => $execution?->id, 'session' => $session,
                     'snapshot_id' => $snapshot?->id, 'order_read_id' => $orderRead?->id, 'parameters' => $parameters,
-                    'evaluation_mode' => $batchSymbols === null ? 'whole_universe' : 'incremental_batches', 'mode' => 'paper_signal_evidence']]);
+                    'evaluation_mode' => $batchSymbols === null ? 'whole_universe' : 'incremental_batches', 'mode' => $live ? 'live_exit_signal_evidence' : 'paper_signal_evidence']]);
             foreach ($selected as $symbol) {
                 // The connection lock serializes overlapping batches and retries within this window.
                 if (StrategySignal::where('cycle_id', $cycle->id)->where('symbol', $symbol)->exists()) {
@@ -85,7 +97,7 @@ final class StrategySignals
                 }
                 $input = app(PaperMarketInputs::class)->latest($current, $symbol, $cutoff);
                 $profile = app(SymbolProfiles::class)->latest($current, $symbol, $cutoff);
-                $position = app(SignalPositionFacts::class)->inspect($portfolio, $symbol, $cutoff);
+                $position = $live ? app(LivePositionFacts::class)->inspect($current, $symbol, $cutoff) : app(SignalPositionFacts::class)->inspect($portfolio, $symbol, $cutoff);
                 $history = app(PaperMarketReferences::class)->verifiedHistory($current, $symbol, $cutoff);
                 $benchmark = app(PaperMarketReferences::class)->verifiedHistory($current, $parameters['values']['benchmark_symbol'], $cutoff);
                 $validProfile = $profile && $profile->status === 'complete' && $profile->profile_version === ProfileCalculator::VERSION &&
@@ -97,8 +109,12 @@ final class StrategySignals
                 $report = ['profile_valid' => (bool) $validProfile, 'position' => $position, 'eligibility' => null, 'earnings' => null];
                 $brokerHeld = $snapshot ? Holding::where('snapshot_id', $snapshot->id)->where('symbol', $symbol)->get()
                     ->contains(fn ($h) => Decimal::from($h->quantity)->compareTo(Decimal::from('0')) !== 0) : false;
-                $quote = StoredStrategyQuote::read($input, $current, $cutoff, $execution->payload['quote_max_age_seconds']);
-                if ($session['status'] !== 'regular') {
+                $quote = StoredStrategyQuote::read($input, $current, $cutoff, $maxAge);
+                if ($live) {
+                    $assessment = $this->liveExitAssessment($current, $symbol, $cutoff, $maxAge);
+                    $result = $assessment['result'];
+                    $report = $assessment['report'];
+                } elseif ($session['status'] !== 'regular') {
                     $result = SignalRules::result($session['status'] === 'unknown' ? 'unavailable' : 'wait', 'session_'.$session['status']);
                 } elseif ($position['held']) {
                     if ($quote === null) {
@@ -111,7 +127,7 @@ final class StrategySignals
                         $earnings = config('robinhood_mcp.earnings_enabled') ? app(EarningsCalendar::class)->status($current, $symbol, $cutoff, 2) : ['status' => 'unavailable'];
                         $report['earnings'] = $earnings;
                         // Unknown corporate actions can invalidate all price levels. Never compare an unadjusted stop to split-adjusted prices.
-                        $clearance = app(CorporateActionClearance::class)->inspect($input, $cutoff, $execution->payload['quote_max_age_seconds']);
+                        $clearance = app(CorporateActionClearance::class)->inspect($input, $cutoff, $maxAge);
                         $report['corporate_actions'] = $clearance;
                         $result = $clearance['clear'] !== true ? SignalRules::result('unavailable', 'exit_corporate_actions_unverified') :
                             app(SignalRules::class)->exit($quote['bid'], $context, $validProfile ? $profile->payload : null, $earnings, $context['parameters']);
@@ -142,22 +158,65 @@ final class StrategySignals
                     };
                     $report['cooldown_elapsed_sessions'] = $cooldown;
                 }
-                $evidence = ['rule_version' => SignalRules::VERSION, 'parameters' => $parameters, 'cutoff' => $cutoff->toISOString(),
+
+                $usedParameters = $live && isset($report['position']['context']['parameters']) ? ['version' => $report['position']['context']['parameters_version'],
+                    'values' => $report['position']['context']['parameters']] : $parameters;
+                $evidence = ['rule_version' => SignalRules::VERSION, 'parameters' => $usedParameters, 'cutoff' => $cutoff->toISOString(),
                     'cycle_id' => $cycle->id, 'auth_generation' => $current->auth_generation, 'scope' => $scope, 'ledger_version' => $portfolio->ledger_version,
-                    'execution_version_id' => $execution->id, 'watchlist_revision_id' => $membership['revision']?->id,
+                    'execution_version_id' => $execution?->id, 'watchlist_revision_id' => $membership['revision']?->id,
                     'profile_id' => $profile?->id, 'profile_fingerprint' => $profile?->input_fingerprint, 'market_input_id' => $input?->id,
                     'market_input_times' => $input ? ['source_at' => $input->source_at?->toISOString(), 'retrieved_at' => $input->retrieved_at->toISOString(), 'recorded_at' => $input->recorded_at->toISOString()] : null,
                     'quote' => $quote, 'session' => $session, 'snapshot_id' => $snapshot?->id, 'order_read_id' => $orderRead?->id, 'report' => $report];
                 StrategySignal::create(['mcp_connection_id' => $current->id, 'paper_portfolio_id' => $portfolio->id, 'cycle_id' => $cycle->id,
                     'symbol' => $symbol, 'profile_id' => $profile?->id, 'watchlist_revision_id' => $membership['revision']?->id, 'market_input_id' => $input?->id,
                     'status' => $result['status'], 'side' => $result['side'], 'reason' => $result['reason'], 'rule_version' => SignalRules::VERSION,
-                    'parameters_version' => $parameters['version'], 'input_fingerprint' => hash('sha256', json_encode($evidence, JSON_THROW_ON_ERROR)),
-                    'payload' => ['evidence' => $evidence, 'parameters' => $parameters, 'result' => $result, 'mode' => 'paper_signal_evidence', 'broker_executable' => false],
+                    'position_source' => $positionSource, 'parameters_version' => $usedParameters['version'], 'input_fingerprint' => hash('sha256', json_encode($evidence, JSON_THROW_ON_ERROR)),
+                    'payload' => ['evidence' => $evidence, 'parameters' => $usedParameters, 'result' => $result, 'mode' => $live ? 'live_exit_signal_evidence' : 'paper_signal_evidence', 'broker_executable' => false],
                     'cutoff' => $cutoff, 'recorded_at' => now()]);
             }
 
             return StrategySignal::where('cycle_id', $cycle->id)->whereIn('symbol', $selected)->orderBy('symbol')->get();
         });
+    }
+
+    /** The shared exit rules, re-evaluated from live fills and current stored evidence. No signal or ledger writes. */
+    public function liveExitAssessment(McpConnection $connection, string $symbol, CarbonImmutable $cutoff, int $maxAge): array
+    {
+        $position = app(LivePositionFacts::class)->inspect($connection, $symbol, $cutoff);
+        $report = ['position' => $position, 'earnings' => null, 'corporate_actions' => null, 'profile_valid' => false];
+        $deny = fn ($reason) => ['result' => SignalRules::result('unavailable', $reason), 'report' => $report];
+        $session = $this->session($cutoff);
+        if ($session['status'] !== 'regular') {
+            return $deny('session_'.$session['status']);
+        }
+        if (! $position['held'] || ! $position['context']) {
+            return $deny($position['reason'] ?? 'live_position_absent');
+        }
+        $input = app(PaperMarketInputs::class)->latest($connection, $symbol, $cutoff);
+        $quote = StoredStrategyQuote::read($input, $connection, $cutoff, $maxAge);
+        if (! $quote) {
+            return $deny('fresh_scoped_quote_unavailable');
+        }
+        $profile = app(SymbolProfiles::class)->latest($connection, $symbol, $cutoff);
+        $history = app(PaperMarketReferences::class)->verifiedHistory($connection, $symbol, $cutoff);
+        $benchmark = app(PaperMarketReferences::class)->verifiedHistory($connection, SignalParameters::current()['values']['benchmark_symbol'], $cutoff);
+        $validProfile = $profile && $profile->status === 'complete' && $profile->profile_version === ProfileCalculator::VERSION &&
+            $profile->parameters_version === StrategyParameters::VERSION && ($profile->payload['evidence']['parameters_hash'] ?? null) === StrategyParameters::current()['hash'] &&
+            $history['read'] && $benchmark['read'] && $profile->history_read_id === $history['read_id'] && $profile->benchmark_read_id === $benchmark['read_id'] &&
+            $profile->session_date->toDateString() === ($session['previous_session'] ?? null) &&
+            $benchmark['read']->payload['facts']['last_session'] === ($session['previous_session'] ?? null);
+        $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->firstOrFail();
+        $context = $this->exitContext($portfolio, $symbol, $position['context'], $validProfile ? $history['read']->payload['bars'] : [], $cutoff, 'live');
+        $report['position']['context'] = $context;
+        $report['profile_valid'] = (bool) $validProfile;
+        $earnings = config('robinhood_mcp.earnings_enabled') ? app(EarningsCalendar::class)->status($connection, $symbol, $cutoff, 2) : ['status' => 'unavailable'];
+        $clearance = app(CorporateActionClearance::class)->inspect($input, $cutoff, $maxAge);
+        $report['earnings'] = $earnings;
+        $report['corporate_actions'] = $clearance;
+        $result = $clearance['clear'] !== true ? SignalRules::result('unavailable', 'exit_corporate_actions_unverified') :
+            app(SignalRules::class)->exit($quote['bid'], $context, $validProfile ? $profile->payload : null, $earnings, $context['parameters']);
+
+        return ['result' => $result, 'report' => $report];
     }
 
     private function session(CarbonImmutable $cutoff): array
@@ -185,7 +244,7 @@ final class StrategySignals
             'opens_at' => $session->opens_at?->toISOString(), 'closes_at' => $session->closes_at?->toISOString(), 'previous_session' => $previous];
     }
 
-    private function sessionsSince(string $exitAt, CarbonImmutable $cutoff): ?int
+    public function sessionsSince(string $exitAt, CarbonImmutable $cutoff): ?int
     {
         $day = CarbonImmutable::parse($exitAt)->setTimezone('America/New_York')->startOfDay()->addDay();
         $end = $cutoff->setTimezone('America/New_York')->startOfDay();
@@ -201,13 +260,16 @@ final class StrategySignals
         return $count;
     }
 
-    private function exitContext(Portfolio $portfolio, string $symbol, array $context, array $bars, CarbonImmutable $cutoff): array
+    private function exitContext(Portfolio $portfolio, string $symbol, array $context, array $bars, CarbonImmutable $cutoff, string $positionSource = 'paper'): array
     {
         $date = CarbonImmutable::parse($context['entry_at'])->setTimezone('America/New_York')->toDateString();
         $trail = Decimal::from($context['initial_stop']);
         $progressed = false;
         $latched = null;
-        $previous = StrategySignal::where('paper_portfolio_id', $portfolio->id)->where('symbol', $symbol)->where('recorded_at', '<=', $cutoff->format('Y-m-d H:i:s.u'))->orderByDesc('id')->get();
+        $previous = StrategySignal::where('position_source', $positionSource)->where('symbol', $symbol)
+            ->when($positionSource === 'paper', fn ($q) => $q->where('paper_portfolio_id', $portfolio->id),
+                fn ($q) => $q->whereIn('cycle_id', StrategyCycle::where('scope', $portfolio->scope)->where('position_source', 'live')->select('id')))
+            ->where('recorded_at', '<=', $cutoff->format('Y-m-d H:i:s.u'))->orderByDesc('id')->get();
         foreach ($previous as $row) {
             $old = $row->payload['evidence']['report']['position']['context'] ?? null;
             if (($old['entry_order_id'] ?? null) === $context['entry_order_id']) {
