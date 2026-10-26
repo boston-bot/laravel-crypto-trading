@@ -112,10 +112,12 @@ final class CryptoMarketCollector
         $quoteAt = CarbonImmutable::now();
         $quote = $this->gateway->bestBidAsk($id, $quoteAt);
         $now = CarbonImmutable::now();
-        $candles = ['FIVE_MINUTE' => $this->gateway->closedCandles($id, 'FIVE_MINUTE', $now->subMinutes((int) config('crypto.intraday_lookback_minutes')), $now)];
+        // Only settled candles are stored, so the first observation is the venue's near-final value.
+        $settled = $now->subMinutes((int) config('crypto.candle_settlement_minutes'));
+        $candles = ['FIVE_MINUTE' => $this->gateway->closedCandles($id, 'FIVE_MINUTE', $now->subMinutes((int) config('crypto.intraday_lookback_minutes')), $settled)];
         $dailyFrom = $this->dailyFrom($id, $now);
         if ($dailyFrom !== null) {
-            $candles['ONE_DAY'] = $this->gateway->closedCandles($id, 'ONE_DAY', $dailyFrom, $now);
+            $candles['ONE_DAY'] = $this->gateway->closedCandles($id, 'ONE_DAY', $dailyFrom, $settled);
         }
         $retrievedAt = CarbonImmutable::now();
 
@@ -137,7 +139,7 @@ final class CryptoMarketCollector
         });
     }
 
-    /** First observation is kept; a later differing observation is counted on its read, never applied. */
+    /** First observation is kept; a later differing observation is counted on its read and recorded as a revision, never applied. */
     private function candles(int $readId, string $productId, string $granularity, array $rows, CarbonImmutable $retrievedAt): array
     {
         if ($rows === []) {
@@ -157,6 +159,11 @@ final class CryptoMarketCollector
                 foreach (['open', 'high', 'low', 'close', 'volume'] as $key) {
                     if (Decimal::from(self::plain((string) $prior->{$key}))->compareTo(Decimal::from($candle[$key])) !== 0) {
                         $conflicts++;
+                        $observed = array_map(fn ($field) => self::plain($candle[$field]), ['open' => 'open', 'high' => 'high', 'low' => 'low', 'close' => 'close', 'volume' => 'volume']);
+                        // The same revised values seen on later reads are one revision.
+                        DB::table('mcp_crypto_candle_revisions')->insertOrIgnore($observed + ['mcp_crypto_market_read_id' => $readId, 'candle_id' => $prior->id,
+                            'venue' => self::VENUE, 'product_id' => $productId, 'granularity' => $granularity, 'starts_at' => self::time($candle['starts_at']),
+                            'fingerprint' => hash('sha256', json_encode($observed, JSON_THROW_ON_ERROR)), 'retrieved_at' => self::time($retrievedAt)]);
                         break;
                     }
                 }

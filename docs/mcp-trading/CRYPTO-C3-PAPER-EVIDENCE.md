@@ -1,6 +1,6 @@
 # Crypto C3: 24/7 paper lifecycle (first increment)
 
-Status: **source only, October 26, 2026; not committed or deployed.** This increment turns C2's evidence-only evaluation into a scheduled 24/7 paper cycle with simulated limit orders, fills, exits and portfolio limits, plus a refreshed account fee tier. Candle replay and the crypto dashboard section are the remaining C3 build items. It authorizes no venue order: both crypto write flags stay false and no code path reaches a venue `placeOrder`.
+Status: **lifecycle committed in `b54a6e4` and deployed October 26 (migration `000035`, batch 19) with crypto paper activated; a candle-settlement correction (migration `000036`) is in source, pending deployment.** This increment turns C2's evidence-only evaluation into a scheduled 24/7 paper cycle with simulated limit orders, fills, exits and portfolio limits, plus a refreshed account fee tier. Candle replay and the crypto dashboard section are the remaining C3 build items. It authorizes no venue order: both crypto write flags stay false and no code path reaches a venue `placeOrder`.
 
 ## What changed
 
@@ -108,7 +108,7 @@ The two updated C2 tests reflect v3: history moved to the profile, and unknown h
 
 SQLite stores decimal columns as binary floats, so the SQLite feature test compares cash within 10⁻⁹. The PostgreSQL test asserts the exact value.
 
-## Deployment (owner action, not performed)
+## Deployment steps
 
 The runtime is on `656fc2f` with crypto paper policy v1 under contract v2, so the scheduled cycle refuses it until step 4.
 
@@ -129,3 +129,50 @@ Disable by setting `CRYPTO_PAPER_ENABLED=false` and recaching. Open simulated or
 - The forward observation period: at least 4 weeks and 30 closed trades.
 
 No profitability is claimed.
+
+## Deployment and activation — October 26
+
+The owner committed the increment as `b54a6e4`. A first deploy at 23:45:55 UTC checked out the older `672a34b`, so for about 90 seconds the runtime ran code without automatic equities execution. The market was closed and no order was involved. The owner redeployed `b54a6e4` at 23:47:20 UTC.
+
+Verified after the redeploy:
+- Runtime revision `b54a6e4`; `000034` and `000035` applied (batch 19); readiness 200.
+- `mcp:live-cycle` is back on the schedule. The equities activation is intact: enabled (v6), buys not paused, no emergency disable, no blocking reason. All health checks are ok; `automatic_trading` reports disabled only outside the session.
+
+Activation steps performed:
+1. Wrote private fee review `runtime/crypto-fee-review-20261026.json` (`0600`): tier `Intro`, the 27 exception pairs, `product_all_in`, `excluded_by_owner_direction`.
+2. Ran `mcp:crypto-fees --actor=1 --record`. It made one read-only GET and stored observation 1: `complete`, `Intro`, 0.005 / 0.009, the two accepted reasons. The response hash `2e58aac1…` is identical to the October 23 read.
+3. Applied policy version 2 (policy ID 2, contract v3) to portfolio 2. Still one cash entry and $400 cash: no re-credit.
+4. Backed up the runtime `.env` (`env-before-crypto-c3-*`) and set `CRYPTO_PAPER_ENABLED=true` and `CRYPTO_FEE_REFRESH_ENABLED=true`. Ran `optimize` and `queue:restart` and restarted FPM. Readiness 200.
+5. Confirmed the schedule:
+   - `mcp:crypto-paper --once --scheduled` every five minutes, in the background
+   - `mcp:crypto-fees --scheduled` hourly at minute 7
+   - `mcp:live-cycle` retained
+   - no standalone `mcp:crypto-market`
+   - both crypto write flags false, `BROKER_MODE=paper`
+
+**First scheduled v3 cycle.** Cycle 271 ran for the 23:50 UTC window and was recorded at 23:50:22. Equity was 400, the baseline was complete and there was no entry pause. No order was placed:
+- 16 products: `quote_volume_too_low`.
+- 9 products: `candle_conflict_requires_review`.
+
+## Candle settlement correction (source, pending deployment)
+
+The nine conflicts were not daily-history problems.
+- **What triggered them.** Each collection re-reads the trailing two hours of five-minute candles. Coinbase revises recently closed five-minute candles as late trades settle. A public comparison at 23:5x UTC found revised close, volume, high or low (never open) in 18 of 25 products. For example, AAVE-USD 23:10 was first stored with volume 0.262; the venue later reported 4.776.
+- **Why every product was blocked.** The collector counted every difference on the read, and the eligibility check blocked a product whenever any read containing that product or the benchmark had a count. Every read contains BTC-USD, so any five-minute revision on any product latched every product indefinitely.
+- **Not a C3 regression.** The C2 manual evaluation at 22:4x passed only because it ran before the second read.
+
+The correction:
+- **Settlement delay.** The collector stores five-minute and daily candles only 15 minutes after they close (`crypto.candle_settlement_minutes`), so the first stored observation is near-final. Yesterday's daily candle and the 00:00 UTC baseline candle become available at about 00:15–00:20 UTC. Until then, entries are unavailable; exits are unaffected.
+- **Revision records.** Each later differing observation is recorded once in a new table, `mcp_crypto_candle_revisions` (read, original candle ID, product, granularity, observed values, fingerprint; unique per candle and observation). It is never applied. The read-level `candle_conflicts` count is unchanged.
+- **Scoped block.** Eligibility now blocks a product only when a daily candle revision exists for that product or the benchmark within its 200-day history window, recorded by a read finished at the cutoff. Five-minute revisions and other products' revisions no longer block. Reads 2–14 counted five-minute revisions only: daily candles were current and not re-read after read 1. Historical read rows are not rewritten.
+
+Migration `000036` is additive (one new table) with a plain `down()`. Verification:
+
+| Suite | Tests | Passed | Skipped | Assertions |
+|---|---|---|---|---|
+| SQLite | 840 | 728 | 112 PostgreSQL-only | 5,084 |
+| PostgreSQL | 840 | 839 | 1 existing environment skip | 5,994 |
+
+Collector tests now cover settlement and revision deduplication. The evaluation tests show that five-minute and other-product daily revisions do not block, while a benchmark daily revision does. Pint and `git diff --check` passed.
+
+To deploy: commit, then `deploy.sh <rev> --migrate` with the private migration credentials (review with `--pretend` first). No configuration change is needed. The first cycle after about 00:20 UTC should show eligible products evaluated normally.

@@ -18,6 +18,8 @@ return [
     'coinbase_products' => array_values(array_filter(array_map('trim', explode(',', (string) env('COINBASE_MARKET_DATA_PRODUCTS', ''))))),
     'max_products' => 25,
 
+    // Coinbase revises recently closed candles as late trades settle; a candle is stored only this long after it closes.
+    'candle_settlement_minutes' => 15,
     // Trailing five-minute window re-read every cycle; closed candles only.
     'intraday_lookback_minutes' => 120,
     // UTC daily candles; refreshed when the newest stored closed day is older than yesterday.

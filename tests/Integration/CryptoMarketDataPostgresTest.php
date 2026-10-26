@@ -29,7 +29,7 @@ class CryptoMarketDataPostgresTest extends TestCase
 
     public function test_tables_land_in_the_application_schema(): void
     {
-        foreach (['mcp_crypto_market_reads', 'mcp_crypto_product_snapshots', 'mcp_crypto_quotes', 'mcp_crypto_candles'] as $table) {
+        foreach (['mcp_crypto_market_reads', 'mcp_crypto_product_snapshots', 'mcp_crypto_quotes', 'mcp_crypto_candles', 'mcp_crypto_candle_revisions'] as $table) {
             $this->assertNotNull(DB::selectOne("SELECT tablename FROM pg_tables WHERE schemaname = 'mcp_trading' AND tablename = ?", [$table]), $table);
         }
     }

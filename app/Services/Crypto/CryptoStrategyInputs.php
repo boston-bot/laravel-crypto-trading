@@ -76,9 +76,13 @@ class CryptoStrategyInputs
         if (! $benchmark['complete']) {
             $reasons[] = 'benchmark_history_missing_or_discontinuous';
         }
-        // A reported contradictory observation is not silently treated as verified history.
-        $conflicts = DB::table('mcp_crypto_market_reads')->where('venue', 'coinbase')->where('finished_at', '<=', $at)
-            ->where('candle_conflicts', '>', 0)->whereIn('id', DB::table('mcp_crypto_product_snapshots')->whereIn('product_id', [$productId, $p['benchmark_symbol']])->select('mcp_crypto_market_read_id'))->exists();
+        // A revised daily candle inside this product's or the benchmark's history window is not silently treated as verified
+        // history. Five-minute revisions do not feed the daily rules and do not block.
+        $end = $cutoff->utc()->startOfDay();
+        $conflicts = DB::table('mcp_crypto_candle_revisions')->where(['venue' => 'coinbase', 'granularity' => 'ONE_DAY'])
+            ->whereIn('product_id', [$productId, $p['benchmark_symbol']])
+            ->where('starts_at', '>=', CryptoMarketCollector::time($end->subDays($p['min_history_days'])))->where('starts_at', '<', CryptoMarketCollector::time($end))
+            ->whereIn('mcp_crypto_market_read_id', DB::table('mcp_crypto_market_reads')->where('venue', 'coinbase')->where('finished_at', '<=', $at)->select('id'))->exists();
         if ($conflicts) {
             $reasons[] = 'candle_conflict_requires_review';
         }

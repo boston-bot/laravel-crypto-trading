@@ -58,11 +58,11 @@ class CryptoMarketCollectorTest extends TestCase
         $this->assertSame([1, 2, 6], [count(array_keys($fake->paths, '/api/v3/brokerage/market/products', true)), $fake->count('product_book'), $fake->count('/candles')]);
         $this->assertSame(2, DB::table('mcp_crypto_product_snapshots')->where('mcp_crypto_market_read_id', $read->id)->count());
         $this->assertSame(2, DB::table('mcp_crypto_quotes')->where('mcp_crypto_market_read_id', $read->id)->count());
-        // 120-minute window from 21:44:29 floors to 21:40; closed through 23:40 => 24 candles; 400 closed UTC days.
-        $this->assertSame(24, DB::table('mcp_crypto_candles')->where(['product_id' => 'BTC-USD', 'granularity' => 'FIVE_MINUTE'])->count());
+        // 120-minute window from 21:44:29 floors to 21:40; settled (closed 15 minutes) through 23:25 => 21 candles; 400 closed UTC days.
+        $this->assertSame(21, DB::table('mcp_crypto_candles')->where(['product_id' => 'BTC-USD', 'granularity' => 'FIVE_MINUTE'])->count());
         $this->assertSame(400, DB::table('mcp_crypto_candles')->where(['product_id' => 'BTC-USD', 'granularity' => 'ONE_DAY'])->count());
-        $this->assertSame(848, (int) $read->candles_inserted);
-        $this->assertSame(0, DB::table('mcp_crypto_candles')->where('ends_at', '>', CryptoMarketCollector::time(CarbonImmutable::now()))->count(), 'No open candle is stored');
+        $this->assertSame(842, (int) $read->candles_inserted);
+        $this->assertSame(0, DB::table('mcp_crypto_candles')->where('ends_at', '>', CryptoMarketCollector::time(CarbonImmutable::now()->subMinutes(15)))->count(), 'No open or unsettled candle is stored');
     }
 
     public function test_repeated_reads_do_not_duplicate_candles_or_reread_current_daily_history(): void
@@ -75,9 +75,9 @@ class CryptoMarketCollectorTest extends TestCase
         $this->assertSame('complete', $result['status']);
         $second = DB::table('mcp_crypto_market_reads')->find($result['read_id']);
         $this->assertSame(1 + 2 * 2, (int) $second->requests, 'Daily candles are current, so only book and five-minute reads');
-        $this->assertSame(2, (int) $second->candles_inserted, 'Only the newly closed 23:40 candle per product');
+        $this->assertSame(2, (int) $second->candles_inserted, 'Only the newly settled 23:25 candle per product');
         $this->assertSame(0, (int) $second->candle_conflicts);
-        $this->assertSame(2 * (25 + 400), DB::table('mcp_crypto_candles')->count());
+        $this->assertSame(2 * (22 + 400), DB::table('mcp_crypto_candles')->count());
     }
 
     public function test_a_revised_candle_is_counted_but_never_overwrites_the_first_observation(): void
@@ -87,8 +87,14 @@ class CryptoMarketCollectorTest extends TestCase
         $fake->closeSuffix = '1';
         $result = app(CryptoMarketCollector::class)->tick();
 
-        $this->assertSame(2 * 24, (int) DB::table('mcp_crypto_market_reads')->find($result['read_id'])->candle_conflicts);
+        $this->assertSame(2 * 21, (int) DB::table('mcp_crypto_market_reads')->find($result['read_id'])->candle_conflicts);
         $this->assertSame(0, DB::table('mcp_crypto_candles')->where('close', '100.51')->count());
+        $revision = DB::table('mcp_crypto_candle_revisions')->first();
+        $this->assertSame(['FIVE_MINUTE', '100.51', $result['read_id']], [$revision->granularity, CryptoMarketCollector::plain((string) $revision->close), $revision->mcp_crypto_market_read_id]);
+        // Seeing the same revised values again is not a new revision; the read still counts what it saw.
+        $again = app(CryptoMarketCollector::class)->tick();
+        $this->assertSame(2 * 21, (int) DB::table('mcp_crypto_market_reads')->find($again['read_id'])->candle_conflicts);
+        $this->assertSame(2 * 21, DB::table('mcp_crypto_candle_revisions')->count());
     }
 
     public function test_unlisted_product_makes_the_read_partial_and_stores_nothing_for_it(): void
@@ -152,8 +158,8 @@ class CryptoMarketCollectorTest extends TestCase
         $this->travel(1)->seconds();
         $this->assertNull($data->freshQuote('BTC-USD'), 'Older than the configured maximum age is unknown');
 
-        $candles = $data->candles('BTC-USD', 'FIVE_MINUTE', CarbonImmutable::parse('2026-10-22T23:30:00Z'), CarbonImmutable::parse('2026-10-22T23:45:00Z'));
-        $this->assertSame(['23:30', '23:35'], array_map(fn ($c) => $c['starts_at']->format('H:i'), $candles));
+        $candles = $data->candles('BTC-USD', 'FIVE_MINUTE', CarbonImmutable::parse('2026-10-22T23:15:00Z'), CarbonImmutable::parse('2026-10-22T23:45:00Z'));
+        $this->assertSame(['23:15', '23:20'], array_map(fn ($c) => $c['starts_at']->format('H:i'), $candles));
         $this->assertSame('100.5', $candles[0]['close']);
     }
 

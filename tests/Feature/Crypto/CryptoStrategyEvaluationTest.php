@@ -196,7 +196,17 @@ class CryptoStrategyEvaluationTest extends TestCase
         $this->assertContains('daily_history_missing_or_discontinuous', $report['reasons']);
         $this->assertSame([], $report['bars']);
         $this->assertContains('benchmark_history_missing_or_discontinuous', app(CryptoStrategyInputs::class)->read('BTC-USD', $now, array_replace($p, ['benchmark_symbol' => 'ETH-USD']))['reasons']);
-        DB::table('mcp_crypto_market_reads')->update(['candle_conflicts' => 1]);
+        // Settling five-minute candles and other products' daily revisions do not block; a daily revision in the window does.
+        $revise = function (string $product, string $granularity) {
+            $candle = DB::table('mcp_crypto_candles')->where('granularity', $granularity)->orderByDesc('starts_at')->first();
+            DB::table('mcp_crypto_candle_revisions')->insert(['mcp_crypto_market_read_id' => $candle->mcp_crypto_market_read_id, 'candle_id' => $candle->id,
+                'venue' => 'coinbase', 'product_id' => $product, 'granularity' => $granularity, 'starts_at' => $candle->starts_at, 'open' => '1', 'high' => '1',
+                'low' => '1', 'close' => '1', 'volume' => '1', 'fingerprint' => hash('sha256', $product.$granularity), 'retrieved_at' => $candle->retrieved_at]);
+        };
+        $revise('BTC-USD', 'FIVE_MINUTE');
+        $revise('ETH-USD', 'ONE_DAY');
+        $this->assertNotContains('candle_conflict_requires_review', app(CryptoStrategyInputs::class)->read('BTC-USD', $now, $p)['reasons']);
+        $revise('BTC-USD', 'ONE_DAY');
         DB::table('mcp_crypto_product_snapshots')->update(['quote_volume_24h' => null]);
         $reasons = app(CryptoStrategyInputs::class)->read('BTC-USD', $now, $p)['reasons'];
         $this->assertContains('quote_volume_unknown', $reasons);
