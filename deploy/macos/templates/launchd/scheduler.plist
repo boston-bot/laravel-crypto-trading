@@ -16,6 +16,8 @@
         <key>PATH</key><string>@@BREW@@/bin:@@BREW@@/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
     <key>RunAtLoad</key><true/>
+    <!-- Laravel background jobs must outlive the short schedule:run parent. Account/slot locks fence overlap. -->
+    <key>AbandonProcessGroup</key><true/>
     <!-- All calendar fields omitted means every wall-clock minute; an elapsed interval drifts past due minutes. -->
     <key>StartCalendarInterval</key><dict/>
     <key>StandardOutPath</key><string>@@LOGS@@/scheduler.out.log</string>
