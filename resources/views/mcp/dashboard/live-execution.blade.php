@@ -13,7 +13,7 @@
     @if($controls['emergency_disabled'])
         <x-callout tone="bad" title="Emergency disable engaged">Every live claim is denied, buys and sells. A claimed order not yet sent is withdrawn.</x-callout>
     @endif
-    <x-callout tone="warn" title="{{ $live['writes_enabled'] ? 'Brokerage writes enabled by configuration' : 'Brokerage writes disabled' }}">This application has no broker order-placement gateway or dispatcher yet. Applying a policy or releasing a control never sends an order or enables writes.</x-callout>
+    <x-callout tone="warn" title="{{ $live['writes_enabled'] ? 'Brokerage writes enabled by configuration' : 'Brokerage writes disabled' }}">Automatic execution requires the separate account switch above. Applying a live policy does not enable it; changing the policy requires enabling automatic trading again.</x-callout>
     <dl class="kv kv-grid">
         <dt>Live policy</dt><dd>{{ $policy ? 'Version '.$policy->version.' · applied ' : 'None applied: every live claim is denied' }}@if($policy)<x-time :at="$policy->applied_at" /> · fingerprint <code>{{ substr($policy->fingerprint, 0, 12) }}</code>@endif</dd>
         <dt>Buy pause</dt><dd><x-pill :tone="$controls['buy_paused'] ? 'warn' : 'ok'">{{ $controls['buy_paused'] ? 'New entries paused' : 'Not paused' }}</x-pill></dd>
@@ -61,7 +61,7 @@
             @endforeach
             @php $type = old('live.order_type', $saved['order_type'] ?? 'market'); @endphp
             <label class="field">Order type<select name="live[order_type]">
-                <option value="market" @selected($type === 'market')>Market, with a price collar from the profile maximum entry</option>
+                <option value="market" @selected($type === 'market')>Market (entry quote checked against the profile maximum; fill price can vary)</option>
                 <option value="limit" @selected($type === 'limit')>Limit (whole shares)</option>
             </select></label>
             @php $approvalMode = (string) old('live.require_broker_approval', isset($saved['require_broker_approval']) ? ($saved['require_broker_approval'] ? '1' : '0') : ''); @endphp

@@ -25,6 +25,7 @@ class ConsoleInterfaceTest extends TestCase
         'mcp.research.unwatch', 'mcp.research.adopt', 'mcp.thesis.store', 'mcp.operations.phone', 'mcp.operations.health',
         'mcp.operations.test-alert', 'mcp.operations.summary', 'mcp.operations.database', 'mcp.control.store', 'mcp.control.watchlist', 'mcp.control.eligibility.apply', 'mcp.control.eligibility.assess', 'mcp.control.external-order.review', 'mcp.control.proposal', 'mcp.control.restore', 'mcp.control.apply',
         'mcp.live.policy', 'mcp.live.controls', 'mcp.live.link', 'mcp.live.absent', 'mcp.live.review',
+        'mcp.live.automatic.start', 'mcp.live.automatic.stop', 'mcp.live.buys.pause',
         'mcp.paper.execution.store', 'mcp.paper.execution.apply', 'mcp.paper.market.collect', 'mcp.paper.handoff', 'mcp.connect', 'mcp.renew', 'mcp.discover', 'mcp.accounts', 'mcp.bind'],
         'GET' => ['mcp.read', 'mcp.watchlist.read']];
 

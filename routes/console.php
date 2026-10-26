@@ -148,7 +148,7 @@ Artisan::command('mcp:paper-decisions {--once} {--sync : Process the current win
 })->purpose('Bounded non-executable paper proposals; requires explicit enablement, applied policy and reviewed AI configuration');
 
 // The combined forward-paper cycle owns collection when all three gates are on.
-if (config('paper.market_collection_enabled') && config('paper.market_inputs_enabled') &&
+if (! config('mcp.live_automation_enabled') && config('paper.market_collection_enabled') && config('paper.market_inputs_enabled') &&
     ! (config('paper.batch_collection_enabled') && config('paper.signals_enabled') && config('paper.signal_handoff_enabled') && config('paper.real_data_fills_enabled'))) {
     Schedule::command(config('paper.batch_collection_enabled') ? 'mcp:market-cycle --once --scheduled' : 'mcp:paper-collect --once --scheduled')->everyFiveMinutes()->withoutOverlapping(10);
 }
@@ -180,8 +180,13 @@ if (config('paper.watchlist_intake_enabled')) {
     Schedule::command('mcp:strategy-watchlist --once')->everyFiveMinutes()->withoutOverlapping(5);
 }
 
-if (config('paper.signals_enabled') && config('paper.signal_handoff_enabled') && config('paper.real_data_fills_enabled')) {
+if (! config('mcp.live_automation_enabled') && config('paper.signals_enabled') && config('paper.signal_handoff_enabled') && config('paper.real_data_fills_enabled')) {
     Schedule::command('mcp:signal-paper-cycle --once')->everyFiveMinutes()->withoutOverlapping(5);
+}
+
+if (config('mcp.live_automation_enabled')) {
+    // Follow the watchlist/monitoring slot by a minute; never hold up heartbeat and monitoring dispatch.
+    Schedule::command('mcp:live-cycle --once')->cron('1-59/5 * * * *')->runInBackground()->withoutOverlapping(10);
 }
 
 Artisan::command('mcp:symbol-warmup {--once} {--account= : Local operator connection ID}', function (): int {

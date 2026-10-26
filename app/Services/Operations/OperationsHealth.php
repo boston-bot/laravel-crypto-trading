@@ -9,6 +9,8 @@ use App\Models\Operations\ComponentStatus;
 use App\Models\Operations\NotificationDelivery;
 use App\Models\User;
 use App\Services\Crypto\CryptoMarketData;
+use App\Services\Execution\AutomaticTrading;
+use App\Services\Execution\ExecutionControls;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\MarketCalendar;
 use Carbon\CarbonImmutable;
@@ -61,6 +63,7 @@ final class OperationsHealth
         $failed = DB::table('failed_jobs')->where('failed_at', '>=', now()->subDay())->count();
         $checks['failed_jobs'] = ['status' => $failed > 0 ? 'warning' : 'ok', 'detail' => ['last_24h' => $failed]];
         $checks['data_age'] = $this->dataAge();
+        $checks['automatic_trading'] = $this->automaticHealth();
         $checks['crypto_data'] = $this->cryptoData->health();
         $free = $this->disk->freeBytes(storage_path());
         $gib = $free === null ? null : round($free / 1024 ** 3, 1);
@@ -92,5 +95,37 @@ final class OperationsHealth
         $stale = $ages === [] || in_array(null, $ages, true) || max($ages) > $limit;
 
         return ['status' => $stale ? 'critical' : 'ok', 'detail' => ['age_minutes' => $ages === [] || in_array(null, $ages, true) ? null : max($ages), 'limit_minutes' => $limit]];
+    }
+
+    private function automaticHealth(): array
+    {
+        if (! config('mcp.live_automation_enabled') || $this->calendar->at(CarbonImmutable::now())['status'] !== 'regular') {
+            return ['status' => 'disabled', 'detail' => []];
+        }
+        $active = $blocked = $overdue = 0;
+        foreach (McpConnection::whereIn('user_id', User::whereIn('email', config('mcp.operator_emails'))->select('id'))->whereNotNull('bound_account_id')->get() as $c) {
+            $scope = AccountScope::key($c);
+            $state = AutomaticTrading::current($scope);
+            if (! $state?->enabled || ExecutionControls::state($scope)['emergency_disabled']) {
+                continue;
+            }
+            $active++;
+            if (app(AutomaticTrading::class)->reason($c) !== null) {
+                $blocked++;
+
+                continue;
+            }
+            $last = DB::table('mcp_execution_cycles')->where('automation_id', $state->id)->latest('id')->first();
+            $at = CarbonImmutable::parse($last?->started_at ?? $state->recorded_at);
+            if ($at->lte(CarbonImmutable::now()->subMinutes(10)) || ($last?->status === 'running' && $at->lte(CarbonImmutable::now()->subMinutes(6))) ||
+                ($last?->status === 'failed') || in_array($last?->reason, ['unknown', 'reconciliation_unavailable'], true)) {
+                $overdue++;
+            } elseif ($last?->reason === 'open_order_requires_reconciliation') {
+                $blocked++;
+            }
+        }
+
+        return ['status' => $overdue ? 'critical' : ($blocked ? 'warning' : ($active ? 'ok' : 'disabled')),
+            'detail' => ['enabled_accounts' => $active, 'blocked_accounts' => $blocked, 'failed_or_overdue_accounts' => $overdue]];
     }
 }

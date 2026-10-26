@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'live_automation_enabled' => filter_var(env('MCP_LIVE_AUTOMATION_ENABLED', false), FILTER_VALIDATE_BOOL),
     // Absolute private directory outside database backups/releases. No automatic provisioning or recovery reset.
     'execution_recovery_dir' => env('MCP_EXECUTION_RECOVERY_DIR'),
     'live_exit_signals_enabled' => filter_var(env('MCP_LIVE_EXIT_SIGNALS_ENABLED', false), FILTER_VALIDATE_BOOL),

@@ -63,7 +63,7 @@ final class ExecutionJournalFixture
     }
 
     /** Every execution table with user triggers, children first. */
-    private const TABLES = ['fills', 'outcomes', 'broker_orders', 'approvals', 'events', 'dispatches', 'intents', 'policies', 'controls'];
+    private const TABLES = ['cycles', 'automation', 'fills', 'outcomes', 'broker_orders', 'approvals', 'events', 'dispatches', 'intents', 'policies', 'controls'];
 
     public static function cleanup(?int $connection): void
     {
@@ -86,6 +86,8 @@ final class ExecutionJournalFixture
             }
             DB::table('mcp_execution_intents')->whereIn('id', $ids)->delete();
             $unused = DB::table('mcp_execution_accounts')->whereIn('id', $accounts)->whereNotIn('id', DB::table('mcp_execution_intents')->select('execution_account_id'))->pluck('id');
+            DB::table('mcp_execution_cycles')->whereIn('execution_account_id', $unused)->delete();
+            DB::table('mcp_execution_automation')->whereIn('execution_account_id', $unused)->delete();
             DB::table('mcp_execution_policies')->whereIn('execution_account_id', $unused)->delete();
             DB::table('mcp_execution_controls')->whereIn('execution_account_id', $unused)->delete();
             DB::table('mcp_execution_accounts')->whereIn('id', $unused)->delete();

@@ -43,23 +43,33 @@ final class SignalPaperCycle
             app(BatchMarketInputCollector::class)->tick($account, true, function ($connection, $symbols) use (&$count) {
                 // Consume each stored symbol before gathering the next, even within a quote batch.
                 // Opening evidence and old-order fills precede new intents. Existing order-type fill rules remain in force.
-                $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->first();
-                if (! $portfolio || ! RuleEligibilityPolicies::current($portfolio)) {
-                    return;
-                }
-                if (config('paper.session_valuations_enabled')) {
-                    app(PaperSessionValuations::class)->capture($connection, $connection->user_id);
-                }
-                foreach (SimulationOrder::where('paper_portfolio_id', $portfolio->id)->whereIn('symbol', $symbols)->whereIn('status', ['open', 'partial'])->orderBy('id')->get() as $order) {
-                    if (isset($order->intent['strategy_signal_id'])) {
-                        app(RealDataPaperFills::class)->process($connection, $connection->user_id, $order->id);
-                    }
-                }
-                $count += $this->evaluate($connection, $symbols);
+                $count += $this->consume($connection, $symbols);
             });
         }
 
         return $count;
+    }
+
+    /** Shared collection consumer; live orchestration may call this after its own independent live evaluation. */
+    public function consume(McpConnection $connection, array $symbols): int
+    {
+        if (! config('paper.signal_handoff_enabled') || ! config('paper.signals_enabled') || ! config('paper.real_data_fills_enabled')) {
+            return 0;
+        }
+        $portfolio = Portfolio::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->first();
+        if (! $portfolio || ! RuleEligibilityPolicies::current($portfolio)) {
+            return 0;
+        }
+        if (config('paper.session_valuations_enabled')) {
+            app(PaperSessionValuations::class)->capture($connection, $connection->user_id);
+        }
+        foreach (SimulationOrder::where('paper_portfolio_id', $portfolio->id)->whereIn('symbol', $symbols)->whereIn('status', ['open', 'partial'])->orderBy('id')->get() as $order) {
+            if (isset($order->intent['strategy_signal_id'])) {
+                app(RealDataPaperFills::class)->process($connection, $connection->user_id, $order->id);
+            }
+        }
+
+        return $this->evaluate($connection, $symbols);
     }
 
     private function evaluate(McpConnection $connection, ?array $symbols = null): int

@@ -73,8 +73,21 @@ final class ExecutionRecoveryFence
         });
     }
 
+    /** Persist activation/stop outside schema backups before the corresponding owner event commits. */
+    public function activation(string $scope, string $request): void
+    {
+        abort_unless(DB::transactionLevel() > 0, 409, 'execution_recovery_account_lock_required');
+        $this->locked($scope, function ($file, $state) use ($scope, $request) {
+            $this->verify($scope, $state);
+            $state['automation_request'] = $request;
+            $this->write($file, $state);
+        });
+    }
+
     private function verify(string $scope, array $state): void
     {
+        abort_unless(($state['automation_request'] ?? null) === AutomaticTrading::current($scope)?->request_id,
+            409, 'execution_recovery_automation_changed');
         $claims = DB::table('mcp_execution_dispatches as d')->join('mcp_execution_intents as i', 'i.id', '=', 'd.intent_id')
             ->join('mcp_execution_accounts as a', 'a.id', '=', 'i.execution_account_id')->where('a.scope', $scope)->whereNotNull('d.claim_token');
         if ($state['claim'] === null) {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\McpConnection;
+use App\Services\Execution\AutomaticTrading;
 use App\Services\Execution\BrokerOutcomes;
 use App\Services\Execution\ExecutionControls;
 use App\Services\Execution\ExecutionJournal;
@@ -16,6 +17,31 @@ use Illuminate\Http\Request;
  */
 class LiveExecutionController extends Controller
 {
+    public function startAutomatic(Request $request, AutomaticTrading $automatic)
+    {
+        $data = $request->validate(['request_id' => ['required', 'uuid'], 'base_version' => ['required', 'integer', 'min:0'],
+            'confirm_automatic' => ['accepted'], 'confirm_exclusive_executor' => ['accepted']]);
+        $automatic->set($this->connection($request), $request->user()->id, $data['request_id'], true, (int) $data['base_version'], true);
+
+        return $this->done('Automatic trading enabled under your current live policy. The next scheduled cycle may submit real orders.');
+    }
+
+    public function stopAutomatic(Request $request, AutomaticTrading $automatic)
+    {
+        $data = $request->validate(['request_id' => ['required', 'uuid']]);
+        $automatic->set($this->connection($request), $request->user()->id, $data['request_id'], false, 0);
+
+        return $this->done('All new order submissions stopped. Orders already being submitted or accepted by Robinhood may still fill; review them in Robinhood.');
+    }
+
+    public function pauseBuys(Request $request, ExecutionControls $controls)
+    {
+        $data = $request->validate(['request_id' => ['required', 'uuid'], 'paused' => ['required', 'boolean']]);
+        $controls->pauseBuys($this->connection($request), $request->user()->id, $data['request_id'], $request->boolean('paused'));
+
+        return $this->done($request->boolean('paused') ? 'New buys paused. Automatic exits remain available while trading is enabled.' : 'New buys resumed under the current live policy.');
+    }
+
     public function policy(Request $request, LivePolicies $policies)
     {
         $data = $request->validate(['base_version' => ['required', 'integer', 'min:0'], 'request_id' => ['required', 'uuid'],

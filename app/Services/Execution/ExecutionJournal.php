@@ -41,17 +41,22 @@ final class ExecutionJournal
      * Record an unapproved draft from the shared deterministic engine. Quantities and the policy fingerprint
      * are evidence to revalidate at the future live boundary, never proof of buying power or live permission.
      */
-    public function stage(McpConnection $connection, int $actor, int $signalId, array $draft): OrderIntent
+    public function stage(McpConnection $connection, int $actor, int $signalId, array $draft, ?int $automationId = null): OrderIntent
     {
         $draft = $this->draft($draft);
 
-        return DB::transaction(function () use ($connection, $actor, $signalId, $draft) {
+        return DB::transaction(function () use ($connection, $actor, $signalId, $draft, $automationId) {
             $current = $this->connection($connection, $actor);
             $scope = AccountScope::key($current);
             DB::table('mcp_execution_accounts')->insertOrIgnore(['scope' => $scope]);
             $account = DB::table('mcp_execution_accounts')->where('scope', $scope)->lockForUpdate()->first();
             $signal = StrategySignal::whereKey($signalId)->where('mcp_connection_id', $current->id)->firstOrFail();
             $cycle = StrategyCycle::findOrFail($signal->cycle_id);
+            if ($automationId !== null) {
+                abort_if($reason = app(AutomaticTrading::class)->reason($current, $automationId), 409, $reason ?? 'Automatic trading unavailable.');
+                $activation = AutomaticTrading::current($scope);
+                abort_unless($signal->position_source === 'live' && $cycle->position_source === 'live' && $signal->recorded_at->gte($activation->recorded_at), 409, 'automatic_signal_predates_activation');
+            }
             abort_unless($signal->side !== 'SELL' || ($signal->position_source === 'live' && $cycle->position_source === 'live'), 409, 'Live exits require live position evidence.');
             abort_unless($signal->status === 'signal' && in_array($signal->side, ['BUY', 'SELL'], true) &&
                 $signal->asset_class === 'equity' && $signal->venue === 'robinhood_agentic' && $signal->rule_version === SignalRules::VERSION &&
@@ -61,6 +66,9 @@ final class ExecutionJournal
                 'signal_input_fingerprint' => $signal->input_fingerprint, 'rule_version' => $signal->rule_version,
                 'parameters_version' => $signal->parameters_version, 'profile_id' => $signal->profile_id,
                 'watchlist_revision_id' => $signal->watchlist_revision_id, 'market_input_id' => $signal->market_input_id] + $draft;
+            if ($automationId !== null) {
+                $payload['automation_id'] = $automationId;
+            }
             $fingerprint = hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
             if ($prior = OrderIntent::where('execution_account_id', $account->id)->where('signal_id', $signalId)->first()) {
                 abort_unless($prior->fingerprint === $fingerprint && $prior->auth_generation === $current->auth_generation &&
@@ -111,6 +119,9 @@ final class ExecutionJournal
                 return null;
             }
             abort_unless(config('mcp.brokerage_writes_enabled'), 409, 'Brokerage writes are disabled.');
+            if (isset($intent->payload['automation_id'])) {
+                abort_if($reason = app(AutomaticTrading::class)->reason($current, $intent->payload['automation_id']), 409, $reason ?? 'Automatic trading unavailable.');
+            }
             abort_if($reason = $this->checks->reason($current, $intent), 409, $reason ?? 'Submission denied.');
             $token = (string) Str::uuid();
             app(ExecutionRecoveryFence::class)->reserve($intent, AccountScope::key($current), $token);
@@ -166,6 +177,10 @@ final class ExecutionJournal
             };
             if ($reason === null && ($denial = $this->checks->reason($current, $intent)) !== null) {
                 $reason = 'withdrawn_'.substr(preg_replace('/[^a-z0-9_]/', '_', strtolower($denial)), 0, 80);
+            }
+            if ($reason === null && isset($intent->payload['automation_id']) &&
+                ($denial = app(AutomaticTrading::class)->reason($current, $intent->payload['automation_id'])) !== null) {
+                $reason = 'withdrawn_'.$denial;
             }
             if ($reason !== null) {
                 $this->transition($dispatch, 'withdrawn', $reason);

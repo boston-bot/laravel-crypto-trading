@@ -1,7 +1,7 @@
 @extends('layouts.console')
 @section('title', $pages[$page])
 @section('nav', $page)
-@section('eyebrow', $page === 'control' ? 'Paper planning · simulation only' : 'Monitor · read only')
+@section('eyebrow', $page === 'control' ? 'Account policy · trading controls' : 'Account monitoring')
 @section('heading', $pages[$page])
 
 @section('content')

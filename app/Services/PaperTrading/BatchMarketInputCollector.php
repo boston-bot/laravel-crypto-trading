@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Broker\Agentic\BrokerBackoff;
 use App\Services\Broker\Agentic\ReadError;
 use App\Services\Broker\Agentic\ReadFailure;
+use App\Services\Execution\LivePositionFacts;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\MarketCalendar;
 use Carbon\CarbonImmutable;
@@ -55,10 +56,12 @@ final class BatchMarketInputCollector
                 $universe = app(SymbolUniverse::class);
                 $symbols = $universe->reads($connection, $now);
                 $held = $universe->holdings($connection, $now);
+                $liveHeld = config('mcp.live_automation_enabled') ? app(LivePositionFacts::class)->symbols($connection, $now) : [];
                 $latest = MarketInput::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->where('origin', 'broker_read')
                     ->selectRaw('symbol, MAX(recorded_at) AS last_recorded')->groupBy('symbol')->pluck('last_recorded', 'symbol')->all();
                 // Oldest observations rotate first within each priority group after an incomplete cycle.
-                usort($symbols, fn ($a, $b) => ((int) in_array($b, $held, true) <=> (int) in_array($a, $held, true))
+                usort($symbols, fn ($a, $b) => ((int) in_array($b, $liveHeld, true) <=> (int) in_array($a, $liveHeld, true))
+                    ?: ((int) in_array($b, $held, true) <=> (int) in_array($a, $held, true))
                     ?: strcmp($latest[$a] ?? '', $latest[$b] ?? '') ?: strcmp($a, $b));
                 // Refuse an oversized universe; never silently drop holdings or alter watchlist policy.
                 if (count($symbols) > 250) {

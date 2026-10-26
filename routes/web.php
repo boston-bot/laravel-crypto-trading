@@ -54,6 +54,10 @@ Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAc
     Route::post('/control/versions/{version}/restore', [ControlCenterController::class, 'restore'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.restore');
     Route::post('/control/versions/{version}/apply-paper', [ControlCenterController::class, 'apply'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.apply');
     Route::post('/control/live/policy', [LiveExecutionController::class, 'policy'])->middleware('throttle:10,1')->name('mcp.live.policy');
+    Route::post('/control/live/automatic/start', [LiveExecutionController::class, 'startAutomatic'])->middleware('throttle:10,1')->name('mcp.live.automatic.start');
+    // A stop must remain available even after the start endpoint's throttle has been exhausted.
+    Route::post('/control/live/automatic/stop', [LiveExecutionController::class, 'stopAutomatic'])->name('mcp.live.automatic.stop');
+    Route::post('/control/live/buys/pause', [LiveExecutionController::class, 'pauseBuys'])->middleware('throttle:30,1')->name('mcp.live.buys.pause');
     Route::post('/control/live/controls', [LiveExecutionController::class, 'controls'])->middleware('throttle:10,1')->name('mcp.live.controls');
     Route::post('/control/live/intents/{intent}/link', [LiveExecutionController::class, 'link'])->whereNumber('intent')->middleware('throttle:10,1')->name('mcp.live.link');
     Route::post('/control/live/intents/{intent}/absent', [LiveExecutionController::class, 'absent'])->whereNumber('intent')->middleware('throttle:10,1')->name('mcp.live.absent');

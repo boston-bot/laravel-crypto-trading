@@ -82,6 +82,9 @@
         </div>
     </header>
     <main class="content" id="content">
+        @if($connection?->bound_account_id)
+            @include('mcp.dashboard.automatic-trading', ['automatic' => app(App\Services\Execution\AutomaticTrading::class)->overview($connection)])
+        @endif
         @yield('content')
     </main>
 </div>
