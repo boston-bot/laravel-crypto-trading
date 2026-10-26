@@ -113,6 +113,7 @@ final class ExecutionJournal
             abort_unless(config('mcp.brokerage_writes_enabled'), 409, 'Brokerage writes are disabled.');
             abort_if($reason = $this->checks->reason($current, $intent), 409, $reason ?? 'Submission denied.');
             $token = (string) Str::uuid();
+            app(ExecutionRecoveryFence::class)->reserve($intent, AccountScope::key($current), $token);
             $this->transition($dispatch, 'submitting', 'submission_claimed', ['claim_token' => $token, 'claimed_at' => now()]);
 
             return $token;
@@ -160,6 +161,7 @@ final class ExecutionJournal
                 ExecutionControls::state($account->scope)['emergency_disabled'] => 'withdrawn_emergency_disabled',
                 $intent->expires_at->lte(CarbonImmutable::now()) => 'withdrawn_deadline_passed',
                 ! $authorized => 'withdrawn_authorization_changed',
+                ($recovery = app(ExecutionRecoveryFence::class)->reason($account->scope)) !== null => 'withdrawn_'.$recovery,
                 default => null,
             };
             if ($reason === null && ($denial = $this->checks->reason($current, $intent)) !== null) {

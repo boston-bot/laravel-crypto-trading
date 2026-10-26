@@ -30,6 +30,7 @@ final class LiveExecutionFixture
     public static function seed(LiveBrokerGateway $broker, array $policy = []): array
     {
         [$c] = StrategySignalFixture::seed();
+        ExecutionJournalFixture::initializeFence($c);
         config(['robinhood_mcp.approval_setting_enabled' => true, 'robinhood_mcp.account_eligibility_enabled' => true]);
         self::sync($c, $broker);
         SignalExecutionFixture::quote($c);

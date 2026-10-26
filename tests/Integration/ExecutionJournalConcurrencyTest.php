@@ -194,7 +194,8 @@ class ExecutionJournalConcurrencyTest extends TestCase
             foreach ($tasks as [$operation, $id]) {
                 $worker = new Process([PHP_BINARY, base_path('tests/Support/mcp-execution-journal-worker.php'), $operation,
                     (string) $connection, (string) $id, now()->toISOString()], base_path(),
-                    ['APP_ENV' => 'testing', 'APP_KEY' => config('app.key'), 'DB_CONNECTION' => 'pgsql_test', 'DB_URL' => '', 'LOG_CHANNEL' => 'null']);
+                    ['APP_ENV' => 'testing', 'APP_KEY' => config('app.key'), 'DB_CONNECTION' => 'pgsql_test', 'DB_URL' => '', 'LOG_CHANNEL' => 'null',
+                        'MCP_EXECUTION_RECOVERY_DIR' => config('mcp.execution_recovery_dir')]);
                 $worker->setTimeout(30);
                 $worker->start();
                 $workers[] = $worker;

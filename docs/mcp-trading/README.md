@@ -1,5 +1,7 @@
 # MCP trading application: start here
 
+October 26 M6 recovery source follow-up: an independent private local claim checkpoint now blocks dispatch when a restored PostgreSQL snapshot predates a possibly sent order, including snapshots with only staged state or no intent yet. First-use operator provisioning requires writes disabled and no intents; missing/damaged/mismatched state never resets automatically. This increment is not deployed and changes no runtime policy or brokerage setting. [Behavior, tests, recovery limits and next steps](M6-RECOVERY-TEST-EVIDENCE.md).
+
 October 26 M6 source increment: full local admission now reruns after broker preview; default-off account-eligibility reads verify current agentic authorization; the shared rules engine now records exits from broker-confirmed app fills, with separate live/paper source identity, restart-safe stop/exit history and live reentry cooldown. Migration `000033` is tested only in the dedicated database. No runtime deployment, activation or broker request. [Behavior, verification and remaining gates](M6-LIVE-EXITS-AND-SUBMISSION-EVIDENCE.md).
 
 October 25 M6 fourth source increment: the order-placing gateway and dispatcher exist (separate review/place-only session, pinned write schemas, `ref_id`, order/approval/unknown journaling, owner-run `mcp:live-order`), tested only against fakes. Writes remain disabled; runtime `1232e12` records Robinhood's approval setting, currently off for the bound account. [Evidence and pilot prerequisites](M6-EXECUTION-GATEWAY-EVIDENCE.md).

@@ -34,6 +34,7 @@
         <env name="LEGACY_CRYPTO_SCHEDULES_ENABLED" value="false" force="true"/>
         <env name="MCP_MONITORING_ENABLED" value="false" force="true"/>
         <env name="BROKERAGE_WRITES_ENABLED" value="false" force="true"/>
+        <env name="MCP_EXECUTION_RECOVERY_DIR" value="" force="true"/>
         <env name="COINBASE_WRITES_ENABLED" value="false" force="true"/>
         <env name="ROBINHOOD_CRYPTO_WRITES_ENABLED" value="false" force="true"/>
         <env name="CRYPTO_STRATEGY_EVALUATION_ENABLED" value="false" force="true"/>

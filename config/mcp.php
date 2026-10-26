@@ -1,6 +1,8 @@
 <?php
 
 return [
+    // Absolute private directory outside database backups/releases. No automatic provisioning or recovery reset.
+    'execution_recovery_dir' => env('MCP_EXECUTION_RECOVERY_DIR'),
     'live_exit_signals_enabled' => filter_var(env('MCP_LIVE_EXIT_SIGNALS_ENABLED', false), FILTER_VALIDATE_BOOL),
     'external_order_detection_enabled' => filter_var(env('MCP_EXTERNAL_ORDER_DETECTION_ENABLED', false), FILTER_VALIDATE_BOOL),
     'legacy_schedules_enabled' => filter_var(env('LEGACY_CRYPTO_SCHEDULES_ENABLED', false), FILTER_VALIDATE_BOOL),

@@ -269,6 +269,8 @@ October 19 source increment: leveraged/inverse classification now uses SEC filin
 
 M5 validates simulated execution and evaluation of the deterministic, watchlist-driven rules (October 18 direction). M6 requires explicit owner live settings and broker approval support, clean order state, an emergency-disable drill, and fault-injection tests. A successful monitoring week is not permission to trade or proof of investment edge.
 
+October 26 M6 recovery source amendment: submission also requires an independently provisioned local claim checkpoint retained outside PostgreSQL backups. The journal syncs it before committing each claim and checks it again before place. A database restored behind that checkpoint cannot turn an old staged intent into a new submission. Missing/corrupt/mismatched checkpoints block execution; there is no automatic recovery reset. PostgreSQL remains authoritative for all business/order state; the file is a rollback sentinel, not a second trading ledger. [Evidence and disaster-recovery limits](M6-RECOVERY-TEST-EVIDENCE.md).
+
 The owner's October 17 instruction permitted beginning M5 design/development before the proving period; the October 18 waiver now closes M4 under that exception. Record deployments affecting the monitored runtime and continue verifying reliability after material changes. Neither acceptance nor M5 development enables live trading or proves investment performance.
 
 ## 13. Source references and verification date

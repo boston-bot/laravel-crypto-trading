@@ -6,6 +6,7 @@ use App\Models\McpConnection;
 use App\Models\PaperTrading\Portfolio;
 use App\Models\PaperTrading\StrategyCycle;
 use App\Models\PaperTrading\StrategySignal;
+use App\Services\Execution\ExecutionRecoveryFence;
 use App\Services\Monitoring\AccountScope;
 use App\Services\PaperTrading\SignalRules;
 use App\Support\Mcp\TestDatabaseGuard;
@@ -17,8 +18,27 @@ final class ExecutionJournalFixture
     public static function seed(): array
     {
         [$connection] = SimulationFixture::seed();
+        self::initializeFence($connection);
 
         return [$connection, self::signal($connection)];
+    }
+
+    public static function initializeFence(McpConnection $connection): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql' || DB::transactionLevel() !== 0) {
+            return;
+        }
+        $path = config('mcp.execution_recovery_dir').'/'.hash('sha256', AccountScope::key($connection)).'.json';
+        if (is_file($path)) {
+            return;
+        }
+        $writes = config('mcp.brokerage_writes_enabled');
+        try {
+            config(['mcp.brokerage_writes_enabled' => false]);
+            app(ExecutionRecoveryFence::class)->initialize($connection, $connection->user_id);
+        } finally {
+            config(['mcp.brokerage_writes_enabled' => $writes]);
+        }
     }
 
     public static function signal(McpConnection $connection, string $symbol = 'DEMO'): StrategySignal

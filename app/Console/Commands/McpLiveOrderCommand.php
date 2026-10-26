@@ -7,7 +7,9 @@ use App\Models\PaperTrading\StrategySignal;
 use App\Models\User;
 use App\Services\Execution\ExecutionDispatcher;
 use App\Services\Execution\ExecutionJournal;
+use App\Services\Execution\ExecutionRecoveryFence;
 use App\Services\Execution\SubmissionChecks;
+use App\Services\Monitoring\AccountScope;
 use Illuminate\Console\Command;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -22,7 +24,7 @@ class McpLiveOrderCommand extends Command
 
     protected $description = 'Plan, stage and (unless --stage-only) send one live order for a recorded signal; denied unless every live gate passes';
 
-    public function handle(SubmissionChecks $checks, ExecutionJournal $journal, ExecutionDispatcher $dispatcher): int
+    public function handle(SubmissionChecks $checks, ExecutionJournal $journal, ExecutionDispatcher $dispatcher, ExecutionRecoveryFence $fence): int
     {
         $operators = User::whereIn('email', config('mcp.operator_emails'))->pluck('id');
         $connection = McpConnection::whereIn('user_id', $operators)->whereKey($this->option('account'))->whereNotNull('bound_account_id')->first();
@@ -34,8 +36,9 @@ class McpLiveOrderCommand extends Command
             return self::FAILURE;
         }
         $plan = $checks->plan($connection, $signal);
-        if ($plan['reason'] !== null) {
-            $this->line(json_encode(['signal_id' => $signal->id, 'outcome' => 'denied', 'reason' => $plan['reason']], JSON_THROW_ON_ERROR));
+        $reason = $plan['reason'] ?? $fence->reason(AccountScope::key($connection));
+        if ($reason !== null) {
+            $this->line(json_encode(['signal_id' => $signal->id, 'outcome' => 'denied', 'reason' => $reason], JSON_THROW_ON_ERROR));
 
             return self::FAILURE;
         }
