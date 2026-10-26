@@ -879,6 +879,8 @@ October 26 operator follow-up: deployed `66b3a93` and migration `000033` verifie
 
 ### Execution recovery checkpoint (October 26 source increment)
 
+Deployment follow-up: owner-deployed `672a34b` verified October 26 at 14:51–14:52 UTC. The runtime path below is now configured and its first-use checkpoint initialized successfully with zero intents and writes disabled. Configuration/workers/FPM refreshed, private permissions and recovery check passed, readiness 200. No live policy or broker approval change. [Actual provisioning evidence](M6-RECOVERY-TEST-EVIDENCE.md#owner-deployment-and-first-use-provisioning). The remaining instructions describe first use on a new account; do not rerun initialization for the existing checkpoint.
+
 This safeguard is source only, subsequent to runtime `66b3a93`. Deploy the reviewed committed increment through the normal procedure; no new migration is required. Keep `BROKERAGE_WRITES_ENABLED=false`. In the private runtime environment, configure an absolute private path outside the checkout and the database backup/offsite directories, for example:
 
 ```dotenv
