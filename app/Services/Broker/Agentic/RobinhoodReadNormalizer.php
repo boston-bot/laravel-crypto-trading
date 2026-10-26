@@ -26,7 +26,9 @@ final class RobinhoodReadNormalizer
                 'order_type' => $row['type'] ?? null, 'quantity' => $row['quantity'] ?? null,
                 'filled_quantity' => $row['cumulative_quantity'] ?? null, 'price' => $row['price'] ?? null,
                 'stop_price' => $row['stop_price'] ?? null, 'average_price' => $row['average_price'] ?? null,
-                'fees' => $row['fees'] ?? null, 'time_in_force' => $row['time_in_force'] ?? null, 'asset_class' => 'equity'],
+                'fees' => $row['fees'] ?? null, 'time_in_force' => $row['time_in_force'] ?? null, 'asset_class' => 'equity',
+                'ref_id' => $row['ref_id'] ?? null, 'market_hours' => $row['market_hours'] ?? null, 'created_at' => $row['created_at'] ?? null,
+                'last_transaction_at' => $row['last_transaction_at'] ?? null, 'executions' => self::executions($row['executions'] ?? null)],
             Operation::Instruments => ['id' => $row['instrument_id'] ?? null, 'symbol' => $row['symbol'] ?? null,
                 'name' => $row['name'] ?? null, 'asset_class' => 'equity'],
             Operation::Classification => self::classification($row),
@@ -44,6 +46,26 @@ final class RobinhoodReadNormalizer
             Operation::EarningsCalendar => self::earnings($row),
             default => throw new ReadFailure(ReadError::Unsupported),
         };
+    }
+
+    /** Broker execution records for fill accounting. Missing stays unknown; a malformed entry refuses the whole read. */
+    private static function executions(mixed $rows): ?array
+    {
+        if ($rows === null) {
+            return null;
+        }
+        if (! is_array($rows) || ! array_is_list($rows)) {
+            throw new ReadFailure(ReadError::Malformed);
+        }
+
+        return array_map(function ($row) {
+            if (! is_array($row)) {
+                throw new ReadFailure(ReadError::Malformed);
+            }
+
+            return ['id' => $row['id'] ?? null, 'quantity' => $row['quantity'] ?? null, 'price' => $row['price'] ?? null,
+                'fees' => $row['fees'] ?? null, 'timestamp' => $row['timestamp'] ?? null];
+        }, $rows);
     }
 
     /** One company-quarter report event. Unknown timing values, malformed dates or quarters refuse the whole read. */

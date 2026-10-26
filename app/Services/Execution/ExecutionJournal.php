@@ -2,25 +2,35 @@
 
 namespace App\Services\Execution;
 
+use App\Models\Execution\BrokerOrderBinding;
 use App\Models\Execution\OrderIntent;
 use App\Models\McpConnection;
+use App\Models\Monitoring\BrokerOrderRead;
+use App\Models\Monitoring\ExternalOrder;
+use App\Models\Monitoring\ExternalOrderReview;
 use App\Models\PaperTrading\StrategyCycle;
 use App\Models\PaperTrading\StrategySignal;
 use App\Models\User;
 use App\Services\Broker\Agentic\RobinhoodOrderContract;
 use App\Services\Monitoring\AccountScope;
+use App\Services\Monitoring\ExternalOrders;
+use App\Services\Monitoring\IncidentRecorder;
 use App\Services\PaperTrading\SignalRules;
 use App\Support\Mcp\Decimal;
 use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use LogicException;
 use Ramsey\Uuid\Uuid;
 
-/** Durable journal/outbox only. No network, scheduler, live balances or broker gateway. */
+/** Durable journal/outbox and broker-confirmed outcome binding. No network, scheduler or broker write gateway. */
 final class ExecutionJournal
 {
+    /** Claimed states whose broker outcome is unresolved or still open. */
+    public const BLOCKING = ['submitting', 'unknown', 'accepted', 'partially_filled'];
+
     public function __construct(private SubmissionChecks $checks) {}
 
     /**
@@ -88,14 +98,15 @@ final class ExecutionJournal
 
                 return null;
             }
-            // Includes the same account through a different connection or authorization generation.
+            // Includes the same account through a different connection or authorization generation. An open broker
+            // order also blocks: one live order per account keeps buying power and position checks exact.
             $unresolved = DB::table('mcp_execution_dispatches as d')->join('mcp_execution_intents as i', 'i.id', '=', 'd.intent_id')
-                ->where('i.execution_account_id', $intent->execution_account_id)->whereIn('d.status', ['submitting', 'unknown'])->exists();
+                ->where('i.execution_account_id', $intent->execution_account_id)->whereIn('d.status', self::BLOCKING)->exists();
             if ($unresolved) {
                 return null;
             }
             abort_unless(config('mcp.brokerage_writes_enabled'), 409, 'Brokerage writes are disabled.');
-            abort_if($reason = $this->checks->reason($intent), 409, $reason ?? 'Submission denied.');
+            abort_if($reason = $this->checks->reason($current, $intent), 409, $reason ?? 'Submission denied.');
             $token = (string) Str::uuid();
             $this->transition($dispatch, 'submitting', 'submission_claimed', ['claim_token' => $token, 'claimed_at' => now()]);
 
@@ -119,6 +130,155 @@ final class ExecutionJournal
                 $this->transition($dispatch, 'unknown', 'submission_outcome_unknown');
             }
         });
+    }
+
+    /**
+     * The claim owner's last local check immediately before the network request. Writes disabled, an emergency
+     * disable, an expired deadline or a changed authorization withdraws the claim: nothing was sent, so this is
+     * not ambiguous. Returns true only while the caller still owns a sendable claim.
+     */
+    public function beforeSend(McpConnection $connection, int $actor, int $intentId, string $token): bool
+    {
+        return DB::transaction(function () use ($connection, $actor, $intentId, $token) {
+            $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
+            $this->operator($current, $actor);
+            $intent = OrderIntent::whereKey($intentId)->where('mcp_connection_id', $current->id)->firstOrFail();
+            $account = DB::table('mcp_execution_accounts')->where('id', $intent->execution_account_id)->lockForUpdate()->firstOrFail();
+            $dispatch = $this->owned($intentId, $token, ['submitting']);
+            $authorized = $current->status === 'connected' && $current->account_role === 'agentic_monitoring' && $current->bound_account_id &&
+                $current->auth_generation === $intent->auth_generation && AccountScope::key($current) === $account->scope;
+            $reason = match (true) {
+                ! config('mcp.brokerage_writes_enabled') => 'withdrawn_writes_disabled',
+                ExecutionControls::state($account->scope)['emergency_disabled'] => 'withdrawn_emergency_disabled',
+                $intent->expires_at->lte(CarbonImmutable::now()) => 'withdrawn_deadline_passed',
+                ! $authorized => 'withdrawn_authorization_changed',
+                default => null,
+            };
+            if ($reason !== null) {
+                $this->transition($dispatch, 'withdrawn', $reason);
+            }
+
+            return $reason === null;
+        });
+    }
+
+    /**
+     * The broker acknowledged the request with its order ID. Binding the ID is what lets reconciliation and external
+     * order detection recognise the order as this app's. It records acceptance, not a fill.
+     */
+    public function accepted(McpConnection $connection, int $actor, int $intentId, string $token, string $brokerOrderId): void
+    {
+        abort_unless($brokerOrderId !== '' && strlen($brokerOrderId) <= 128 && ! preg_match('/\s/', $brokerOrderId), 422, 'Invalid broker order reference.');
+        DB::transaction(function () use ($connection, $actor, $intentId, $token, $brokerOrderId) {
+            $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
+            $this->operator($current, $actor);
+            $intent = OrderIntent::whereKey($intentId)->where('mcp_connection_id', $current->id)->firstOrFail();
+            DB::table('mcp_execution_accounts')->where('id', $intent->execution_account_id)->lockForUpdate()->firstOrFail();
+            $dispatch = DB::table('mcp_execution_dispatches')->where('intent_id', $intentId)->lockForUpdate()->firstOrFail();
+            $bound = BrokerOrderBinding::where('intent_id', $intentId)->first();
+            if ($bound) {
+                abort_unless($dispatch->claim_token !== null && hash_equals($dispatch->claim_token, $token) &&
+                    hash_equals($bound->broker_id_hash, hash('sha256', $brokerOrderId)), 409, 'Intent already bound to a different broker order.');
+
+                return;
+            }
+            $dispatch = $this->owned($intentId, $token, ['submitting']);
+            BrokerOrderBinding::create(['intent_id' => $intentId, 'broker_id_hash' => hash('sha256', $brokerOrderId), 'broker_order_id' => $brokerOrderId,
+                'source' => 'submission_response', 'recorded_at' => now()]);
+            $this->transition($dispatch, 'accepted', 'broker_acknowledged_order');
+        });
+    }
+
+    /**
+     * Owner resolution of an unknown outcome to an order the broker actually reports. The order must match the
+     * intent's symbol, side and quantity, and is reviewed as an external order by the same authenticated action.
+     */
+    public function link(McpConnection $connection, int $actor, int $intentId, int $externalOrderId, string $request, string $note): void
+    {
+        Validator::make(['request' => $request, 'note' => $note], ['request' => ['required', 'uuid'], 'note' => ['required', 'string', 'max:500']])->validate();
+        DB::transaction(function () use ($connection, $actor, $intentId, $externalOrderId, $request, $note) {
+            $current = $this->connection($connection, $actor);
+            $intent = OrderIntent::whereKey($intentId)->where('mcp_connection_id', $current->id)->firstOrFail();
+            $account = DB::table('mcp_execution_accounts')->where('id', $intent->execution_account_id)->lockForUpdate()->firstOrFail();
+            abort_unless($account->scope === AccountScope::key($current), 409, 'Intent authorization changed.');
+            $dispatch = DB::table('mcp_execution_dispatches')->where('intent_id', $intentId)->lockForUpdate()->firstOrFail();
+            if ($prior = BrokerOrderBinding::where('request_id', $request)->first()) {
+                abort_unless($prior->intent_id === $intentId && $prior->external_order_id === $externalOrderId, 409, 'Request already used for a different link.');
+
+                return;
+            }
+            abort_unless($dispatch->status === 'unknown', 409, 'Only an unknown outcome can be linked.');
+            $external = ExternalOrder::whereKey($externalOrderId)->where('scope', $account->scope)->firstOrFail();
+            $order = $external->payload['order'] ?? [];
+            abort_unless($this->candidate($intent, $order, CarbonImmutable::parse($dispatch->claimed_at)), 409, 'Broker order does not match the intent.');
+            abort_if(BrokerOrderBinding::where('broker_id_hash', $external->broker_id_hash)->exists(), 409, 'Broker order already linked.');
+            BrokerOrderBinding::create(['intent_id' => $intentId, 'broker_id_hash' => $external->broker_id_hash, 'broker_order_id' => $order['id'],
+                'source' => 'owner_link', 'actor_id' => $actor, 'external_order_id' => $external->id, 'request_id' => $request, 'recorded_at' => now()]);
+            if (! ExternalOrderReview::where('external_order_id', $external->id)->exists()) {
+                ExternalOrderReview::create(['external_order_id' => $external->id, 'actor_id' => $actor, 'request_id' => $request,
+                    'payload' => ['note' => $note, 'linked_intent_id' => $intentId], 'reviewed_at' => now()]);
+            }
+            if ($external->mcp_connection_id === $current->id && ! app(ExternalOrders::class)->pending($current)->exists()) {
+                app(IncidentRecorder::class)->resolve($current, ExternalOrders::INCIDENT);
+            }
+            $this->transition($dispatch, 'accepted', 'owner_linked_broker_order');
+        });
+    }
+
+    /**
+     * Owner confirmation that an unknown request created no order. Requires a fresh, complete order-history read
+     * taken after the submission deadline that shows no candidate order and no unreviewed external candidate.
+     */
+    public function absent(McpConnection $connection, int $actor, int $intentId): void
+    {
+        DB::transaction(function () use ($connection, $actor, $intentId) {
+            $current = $this->connection($connection, $actor);
+            $intent = OrderIntent::whereKey($intentId)->where('mcp_connection_id', $current->id)->firstOrFail();
+            $account = DB::table('mcp_execution_accounts')->where('id', $intent->execution_account_id)->lockForUpdate()->firstOrFail();
+            abort_unless($account->scope === AccountScope::key($current), 409, 'Intent authorization changed.');
+            $dispatch = DB::table('mcp_execution_dispatches')->where('intent_id', $intentId)->lockForUpdate()->firstOrFail();
+            if ($dispatch->status === 'absent') {
+                return;
+            }
+            abort_unless($dispatch->status === 'unknown', 409, 'Only an unknown outcome can be confirmed absent.');
+            $read = BrokerOrderRead::where('mcp_connection_id', $current->id)->where('scope', $account->scope)->where('auth_generation', $current->auth_generation)->latest('id')->first();
+            abort_unless($read && $read->complete && ($read->payload['read']['coverage'] ?? null) === 'equities' &&
+                ($read->payload['contract_fingerprint'] ?? null) === config('robinhood_mcp.operations.orders.fingerprint') &&
+                ! $read->retrieved_at->isFuture() && $read->retrieved_at->gt(CarbonImmutable::now()->subMinutes(5)) &&
+                $read->retrieved_at->gte($intent->expires_at->addMinutes(2)), 409, 'A complete order history read after the deadline is required.');
+            $claimed = CarbonImmutable::parse($dispatch->claimed_at);
+            foreach ($read->payload['read']['records'] ?? [] as $row) {
+                abort_if($this->candidate($intent, $row['data'] ?? [], $claimed), 409, 'Broker reports a matching order; link it instead.');
+            }
+            foreach (app(ExternalOrders::class)->pending($current)->get() as $external) {
+                abort_if($this->candidate($intent, $external->payload['order'] ?? [], $claimed), 409, 'An unreviewed matching order exists; link it instead.');
+            }
+            $this->transition($dispatch, 'absent', 'owner_confirmed_no_broker_order');
+        });
+    }
+
+    /** Matching evidence only. A missing creation time counts as a candidate, never as proof of absence. */
+    private function candidate(OrderIntent $intent, array $order, CarbonImmutable $claimed): bool
+    {
+        $created = $order['created_at'] ?? null;
+        try {
+            $recent = ! is_string($created) || CarbonImmutable::parse($created)->gte($claimed->subMinute());
+        } catch (\Throwable) {
+            $recent = true;
+        }
+
+        return is_string($order['id'] ?? null) && ($order['symbol'] ?? null) === $intent->payload['symbol'] &&
+            ($order['side'] ?? null) === strtolower($intent->payload['side']) && $recent &&
+            is_string($order['quantity'] ?? null) && preg_match('/^\d+(?:\.\d+)?$/D', $order['quantity']) &&
+            Decimal::from($order['quantity'])->compareTo(Decimal::from($intent->payload['quantity'])) === 0;
+    }
+
+    private function owned(int $intentId, string $token, array $statuses): object
+    {
+        $dispatch = DB::table('mcp_execution_dispatches')->where('intent_id', $intentId)->lockForUpdate()->firstOrFail();
+        abort_unless($dispatch->claim_token !== null && hash_equals($dispatch->claim_token, $token) && in_array($dispatch->status, $statuses, true), 409, 'Submission ownership changed.');
+
+        return $dispatch;
     }
 
     /** Local cancellation is allowed only before a claim. Broker cancellation is a separate future operation. */

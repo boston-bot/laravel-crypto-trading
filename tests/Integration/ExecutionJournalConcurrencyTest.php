@@ -3,6 +3,7 @@
 namespace Tests\Integration;
 
 use App\Models\Execution\OrderIntent;
+use App\Models\McpConnection;
 use App\Services\Execution\ExecutionJournal;
 use App\Services\Execution\SubmissionChecks;
 use App\Services\Monitoring\AccountScope;
@@ -51,14 +52,14 @@ class ExecutionJournalConcurrencyTest extends TestCase
 
         return new ExecutionJournal(new class extends SubmissionChecks
         {
-            public function reason(OrderIntent $intent): ?string
+            public function reason(McpConnection $connection, OrderIntent $intent): ?string
             {
                 return null; // No network calls: synthetic admission solely for journal lifecycle tests.
             }
         });
     }
 
-    public function test_default_checks_refuse_even_with_write_flag_and_do_not_consume_the_outbox(): void
+    public function test_checks_without_live_policy_refuse_even_with_write_flag_and_do_not_consume_the_outbox(): void
     {
         [$c, $s] = $this->fixture();
         $journal = app(ExecutionJournal::class);
@@ -67,10 +68,10 @@ class ExecutionJournalConcurrencyTest extends TestCase
             config(['mcp.brokerage_writes_enabled' => $flag]);
             try {
                 $journal->claim($c, $c->user_id, $intent->id);
-                $this->fail('Unimplemented submission checks must deny.');
+                $this->fail('Checks without an applied live policy must deny.');
             } catch (HttpException $error) {
                 $this->assertSame(409, $error->getStatusCode());
-                $this->assertSame($flag ? 'live_submission_checks_unimplemented' : 'Brokerage writes are disabled.', $error->getMessage());
+                $this->assertSame($flag ? 'live_policy_missing' : 'Brokerage writes are disabled.', $error->getMessage());
             }
         }
         $this->assertSame('staged', DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->value('status'));

@@ -1,5 +1,7 @@
 # M6 execution journal foundation
 
+Superseded in part, October 25 (later): production `SubmissionChecks` no longer always denies, and the lifecycle now continues through broker-confirmed outcomes. See [live policy, checks and outcomes](M6-LIVE-POLICY-AND-OUTCOMES-EVIDENCE.md). The record below describes the first increment as delivered.
+
 October 25, 2026 Central. The owner requested beginning live-execution implementation following discussion of a small supervised pilot. This authorizes development; no live policy, brokerage mutation, approval-setting change or activation was requested or performed. Source only. M6 is now partial; M5 acceptance remains partial.
 
 ## Delivered behavior

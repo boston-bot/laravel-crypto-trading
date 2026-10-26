@@ -42,27 +42,39 @@ final class ExecutionJournalFixture
             'expires_at' => now()->addMinutes(4)->toISOString(), 'policy_fingerprint' => hash('sha256', 'unapproved-fixture-policy')], $changes);
     }
 
+    /** Every execution table with user triggers, children first. */
+    private const TABLES = ['fills', 'outcomes', 'broker_orders', 'events', 'dispatches', 'intents', 'policies', 'controls'];
+
     public static function cleanup(?int $connection): void
     {
         if ($connection === null) {
             return;
         }
         TestDatabaseGuard::check(DB::connection()->getDriverName(), DB::connection()->getDatabaseName(), 'postgres');
+        $bound = McpConnection::find($connection);
+        $scope = $bound?->bound_account_id ? AccountScope::key($bound) : null;
         // Test owner only: transactional trigger disable permits narrowly scoped committed-fixture cleanup.
-        DB::transaction(function () use ($connection) {
-            foreach (['events', 'dispatches', 'intents'] as $suffix) {
+        DB::transaction(function () use ($connection, $scope) {
+            foreach (self::TABLES as $suffix) {
                 DB::statement('ALTER TABLE "mcp_trading"."mcp_execution_'.$suffix.'" DISABLE TRIGGER USER');
             }
             $ids = DB::table('mcp_execution_intents')->where('mcp_connection_id', $connection)->pluck('id');
-            $accounts = DB::table('mcp_execution_intents')->whereIn('id', $ids)->pluck('execution_account_id');
-            DB::table('mcp_execution_events')->whereIn('intent_id', $ids)->delete();
-            DB::table('mcp_execution_dispatches')->whereIn('intent_id', $ids)->delete();
+            $accounts = DB::table('mcp_execution_intents')->whereIn('id', $ids)->pluck('execution_account_id')
+                ->merge(DB::table('mcp_execution_accounts')->where('scope', $scope)->pluck('id'))->unique()->values();
+            foreach (['fills', 'outcomes', 'broker_orders', 'events', 'dispatches'] as $suffix) {
+                DB::table('mcp_execution_'.$suffix)->whereIn('intent_id', $ids)->delete();
+            }
             DB::table('mcp_execution_intents')->whereIn('id', $ids)->delete();
-            DB::table('mcp_execution_accounts')->whereIn('id', $accounts)->whereNotIn('id', DB::table('mcp_execution_intents')->select('execution_account_id'))->delete();
-            foreach (['events', 'dispatches', 'intents'] as $suffix) {
+            $unused = DB::table('mcp_execution_accounts')->whereIn('id', $accounts)->whereNotIn('id', DB::table('mcp_execution_intents')->select('execution_account_id'))->pluck('id');
+            DB::table('mcp_execution_policies')->whereIn('execution_account_id', $unused)->delete();
+            DB::table('mcp_execution_controls')->whereIn('execution_account_id', $unused)->delete();
+            DB::table('mcp_execution_accounts')->whereIn('id', $unused)->delete();
+            foreach (self::TABLES as $suffix) {
                 DB::statement('ALTER TABLE "mcp_trading"."mcp_execution_'.$suffix.'" ENABLE TRIGGER USER');
             }
         });
+        // Owner links review external orders; reviews are keyed by order, not connection.
+        DB::table('mcp_external_order_reviews')->whereIn('external_order_id', DB::table('mcp_external_orders')->where('mcp_connection_id', $connection)->select('id'))->delete();
         IntegrationCleanup::connection($connection);
     }
 }

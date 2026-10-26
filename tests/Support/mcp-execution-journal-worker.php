@@ -25,7 +25,7 @@ config(['mcp.operator_emails' => [User::findOrFail($c->user_id)->email], 'mcp.br
 // Journal race test only: no broker adapter exists and no HTTP client is allowed.
 $journal = new ExecutionJournal(new class extends SubmissionChecks
 {
-    public function reason(OrderIntent $intent): ?string
+    public function reason(McpConnection $connection, OrderIntent $intent): ?string
     {
         return null;
     }

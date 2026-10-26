@@ -40,9 +40,11 @@ final readonly class BrokerRecord implements JsonSerializable
             throw new ReadFailure(ReadError::Malformed);
         }
         $decimals = ['dividend_per_share', 'book_bid', 'book_ask', 'book_bid_quantity', 'book_ask_quantity', 'quantity', 'filled_quantity', 'price', 'bid', 'ask', 'last', 'cash', 'equity', 'buying_power', 'market_value', 'amount', 'unleveraged_buying_power', 'average_buy_price', 'stop_price', 'average_price', 'fees', 'regular_last', 'extended_last', 'equity_value', 'options_value', 'crypto_value', 'futures_value', 'event_contracts_value', 'mutual_funds_value', 'fixed_income_value', 'pending_deposits', 'eps_estimate', 'eps_actual'];
-        $strings = ['asset_type', 'market_date', 'ex_dividend_date', 'record_date', 'payable_date', 'dividend_schedule_status', 'id', 'account_id', 'instrument_id', 'account_kind', 'symbol', 'status', 'side', 'order_type', 'time_in_force', 'currency', 'date', 'session_status', 'nickname', 'account_type', 'brokerage_account_type', 'management_type', 'account_scope', 'asset_class', 'position_type', 'name', 'bid_as_of', 'ask_as_of', 'last_as_of', 'regular_last_as_of', 'extended_last_as_of', 'last_session', 'report_date', 'report_timing'];
+        $strings = ['asset_type', 'market_date', 'ex_dividend_date', 'record_date', 'payable_date', 'dividend_schedule_status', 'id', 'account_id', 'instrument_id', 'account_kind', 'symbol', 'status', 'side', 'order_type', 'time_in_force', 'currency', 'date', 'session_status', 'nickname', 'account_type', 'brokerage_account_type', 'management_type', 'account_scope', 'asset_class', 'position_type', 'name', 'bid_as_of', 'ask_as_of', 'last_as_of', 'regular_last_as_of', 'extended_last_as_of', 'last_session', 'report_date', 'report_timing', 'ref_id', 'market_hours', 'created_at', 'last_transaction_at'];
         foreach ($fields as $key => $value) {
-            if (in_array($key, ['item_count', 'fiscal_year', 'fiscal_quarter'], true)) {
+            if ($key === 'executions') {
+                $fields[$key] = $value === null ? null : self::executions($value);
+            } elseif (in_array($key, ['item_count', 'fiscal_year', 'fiscal_quarter'], true)) {
                 if (! is_int($value) || $value < 0) {
                     throw new ReadFailure(ReadError::Malformed);
                 }
@@ -83,6 +85,32 @@ final readonly class BrokerRecord implements JsonSerializable
         }
 
         return new self($operation, $fields, $sourceAsOf);
+    }
+
+    /** Plain decimal strings stay strings so stored fill evidence keeps the broker's exact text. */
+    private static function executions(mixed $rows): array
+    {
+        if (! is_array($rows) || ! array_is_list($rows)) {
+            throw new ReadFailure(ReadError::Malformed);
+        }
+        foreach ($rows as $row) {
+            if (! is_array($row) || array_keys($row) !== ['id', 'quantity', 'price', 'fees', 'timestamp'] || ! is_string($row['id']) || $row['id'] === '' ||
+                ! is_string($row['timestamp']) || ! preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/D', $row['timestamp'])) {
+                throw new ReadFailure(ReadError::Malformed);
+            }
+            foreach (['quantity', 'price', 'fees'] as $key) {
+                try {
+                    $value = Decimal::from($row[$key]);
+                } catch (\InvalidArgumentException) {
+                    throw new ReadFailure(ReadError::Malformed);
+                }
+                if ($value->compareTo(Decimal::from('0')) < 0) {
+                    throw new ReadFailure(ReadError::Malformed);
+                }
+            }
+        }
+
+        return $rows;
     }
 
     public function jsonSerialize(): array

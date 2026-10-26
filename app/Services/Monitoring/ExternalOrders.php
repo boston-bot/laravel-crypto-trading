@@ -2,6 +2,7 @@
 
 namespace App\Services\Monitoring;
 
+use App\Models\Execution\BrokerOrderBinding;
 use App\Models\McpConnection;
 use App\Models\Monitoring\BrokerOrderRead;
 use App\Models\Monitoring\ExternalOrder;
@@ -11,12 +12,13 @@ use App\Models\User;
 use App\Services\Broker\Agentic\ReadError;
 use App\Services\Broker\Agentic\ReadFailure;
 use App\Services\Broker\Agentic\TrustedHttp;
+use App\Services\Execution\BrokerOutcomes;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
-/** Broker evidence cannot assert app ownership. No agentic submission boundary exists before M6. */
+/** Broker evidence cannot assert app ownership; only a broker ID the app bound at its execution boundary can. */
 final class ExternalOrders
 {
     public const INCIDENT = 'external_orders_review_required';
@@ -49,22 +51,33 @@ final class ExternalOrders
                 if (($order['account_id'] ?? null) !== $current->bound_account_id || ! is_string($order['id'] ?? null) || $order['id'] === '') {
                     throw new ReadFailure(ReadError::AccountMismatch);
                 }
-                // Every status counts, including already filled/cancelled orders and IDs resembling paper/legacy IDs.
+                // Only a broker ID bound by this app's own submission response or an owner link is the app's order.
+                // Every other status counts, including already filled/cancelled orders and IDs resembling paper/legacy IDs.
+                if ($this->appOrder(hash('sha256', $order['id']), $snapshot->scope)) {
+                    continue;
+                }
                 ExternalOrder::firstOrCreate(['mcp_connection_id' => $current->id, 'scope' => $snapshot->scope,
                     'broker_id_hash' => hash('sha256', $order['id'])], ['snapshot_id' => $snapshot->id,
                         'auth_generation' => $current->auth_generation, 'payload' => ['order' => $order, 'source_as_of' => $row['source_as_of'] ?? null,
-                            'source' => $read['source'], 'classification_rule' => 'no_agentic_submission_boundary_v1'],
+                            'source' => $read['source'], 'classification_rule' => 'app_bound_broker_ids_excluded_v1'],
                         'retrieved_at' => $retrieved, 'detected_at' => now()]);
             }
-            BrokerOrderRead::create(['mcp_connection_id' => $current->id, 'scope' => $snapshot->scope, 'snapshot_id' => $snapshot->id,
+            $stored = BrokerOrderRead::create(['mcp_connection_id' => $current->id, 'scope' => $snapshot->scope, 'snapshot_id' => $snapshot->id,
                 'read_claim' => $claim,
                 'auth_generation' => $current->auth_generation, 'complete' => ($read['completeness'] ?? null) === 'complete' && ($read['continuation'] ?? null) === null,
                 'payload' => ['read' => $read,
                     'contract_fingerprint' => config('robinhood_mcp.operations.orders.fingerprint')], 'retrieved_at' => $retrieved, 'recorded_at' => now()]);
+            app(BrokerOutcomes::class)->record($current, $stored);
             if ($this->pending($current)->exists()) {
                 $this->incidents->record($current, self::INCIDENT, 'critical', 'external_orders');
             }
         });
+    }
+
+    private function appOrder(string $hash, string $scope): bool
+    {
+        return BrokerOrderBinding::where('broker_id_hash', $hash)->whereIn('intent_id', DB::table('mcp_execution_intents as i')
+            ->join('mcp_execution_accounts as a', 'a.id', '=', 'i.execution_account_id')->where('a.scope', $scope)->select('i.id'))->exists();
     }
 
     public function pending(McpConnection $connection): Builder

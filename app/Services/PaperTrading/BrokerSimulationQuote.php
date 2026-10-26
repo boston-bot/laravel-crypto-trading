@@ -24,6 +24,13 @@ final readonly class BrokerSimulationQuote
     public static function fromStored(McpConnection $connection, int $inputId, CarbonImmutable $cutoff, int $maxAge): self
     {
         abort_unless(config('paper.real_data_fills_enabled'), 409, 'Real-data paper fills are disabled.');
+
+        return self::observe($connection, $inputId, $cutoff, $maxAge);
+    }
+
+    /** The same stored-evidence validation without the paper fills gate, for the live submission checks. Never an order. */
+    public static function observe(McpConnection $connection, int $inputId, CarbonImmutable $cutoff, int $maxAge): self
+    {
         $input = MarketInput::whereKey($inputId)->where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))->firstOrFail();
         abort_unless($input->origin === 'broker_read' && ($input->payload['provider'] ?? null) === TrustedHttp::RESOURCE, 409, 'Broker observation provenance is unverified.');
         if ($reason = app(PaperMarketInputs::class)->executionReason($input, $cutoff, $maxAge)) {
