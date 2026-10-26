@@ -24,6 +24,7 @@ class ConsoleInterfaceTest extends TestCase
     private const ALLOWED_ACTIONS = ['POST' => ['logout', 'mcp.dashboard.sync', 'mcp.incident.ack', 'mcp.research.evidence', 'mcp.research.request', 'mcp.research.watch',
         'mcp.research.unwatch', 'mcp.research.adopt', 'mcp.thesis.store', 'mcp.operations.phone', 'mcp.operations.health',
         'mcp.operations.test-alert', 'mcp.operations.summary', 'mcp.operations.database', 'mcp.control.store', 'mcp.control.watchlist', 'mcp.control.eligibility.apply', 'mcp.control.eligibility.assess', 'mcp.control.external-order.review', 'mcp.control.proposal', 'mcp.control.restore', 'mcp.control.apply',
+        'mcp.live.policy', 'mcp.live.controls', 'mcp.live.link', 'mcp.live.absent', 'mcp.live.review',
         'mcp.paper.execution.store', 'mcp.paper.execution.apply', 'mcp.paper.market.collect', 'mcp.paper.handoff', 'mcp.connect', 'mcp.renew', 'mcp.discover', 'mcp.accounts', 'mcp.bind'],
         'GET' => ['mcp.read', 'mcp.watchlist.read']];
 
@@ -60,7 +61,7 @@ class ConsoleInterfaceTest extends TestCase
             }
         }
         // The redesign keeps the core controls reachable.
-        foreach (['mcp.dashboard.sync', 'mcp.incident.ack', 'mcp.research.watch', 'mcp.research.request', 'mcp.thesis.store', 'mcp.connect', 'mcp.read', 'logout'] as $expected) {
+        foreach (['mcp.dashboard.sync', 'mcp.incident.ack', 'mcp.research.watch', 'mcp.research.request', 'mcp.thesis.store', 'mcp.connect', 'mcp.read', 'logout', 'mcp.live.controls', 'mcp.live.policy'] as $expected) {
             $this->assertArrayHasKey($expected, $seen);
         }
         $this->assertNotEmpty($connection->bound_account_id);

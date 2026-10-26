@@ -14,6 +14,7 @@ use App\Models\PaperTrading\MandateVersion;
 use App\Models\PaperTrading\StrategySignal;
 use App\Models\Research\Run as ResearchRun;
 use App\Models\Research\Source as ResearchSource;
+use App\Services\Execution\LiveExecutionOverview;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\ExternalOrders;
 use App\Services\Monitoring\Monitor;
@@ -73,6 +74,7 @@ class MonitoringController extends Controller
             $control['execution'] = $scope ? app(ExecutionOverview::class)->for($connection, $control['paper']) : null;
             $control['external_orders'] = $scope ? ['pending' => app(ExternalOrders::class)->pending($connection)->latest('id')->paginate(10, ['*'], 'external_orders_page')->withQueryString(),
                 'entry_pause_reason' => app(ExternalOrders::class)->entryReason($connection)] : null;
+            $control['live'] = $scope ? app(LiveExecutionOverview::class)->for($connection) : null;
             $control['signals'] = $scope ? StrategySignal::where('mcp_connection_id', $connection->id)
                 ->where('paper_portfolio_id', $control['paper']['portfolio']->id ?? 0)->latest('id')->paginate(10, ['*'], 'signals_page')->withQueryString() : null;
             $control['eligibility'] = $scope ? ['policy' => RuleEligibilityPolicies::selected($connection),

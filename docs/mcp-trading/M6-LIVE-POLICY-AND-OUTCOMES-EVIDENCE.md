@@ -128,10 +128,49 @@ Mandatory fault tests now exercised at the journal boundary with fakes:
 
 These are local fakes, not broker-level evidence. No broker write tool exists or was called.
 
+## Control Center owner forms (follow-up increment)
+
+October 25, after the owner committed the service increment and asked to proceed. A "Live execution boundary" panel on the Control Center shows:
+
+- whether brokerage writes are enabled (the panel states that no placement gateway exists);
+- the applied live policy version, time and fingerprint prefix;
+- buy pause and emergency disable state, and the external-order entry gate;
+- the ten most recent live intents with their journal status and latest broker-confirmed observation;
+- broker-confirmed fills, labelled separately from paper.
+
+Five routes, each authenticated, `operate-finances`, operator-only, account-scope bound, CSRF-protected and throttled at 10/min. Every route calls the existing service, which rechecks identity and authorization under its locks:
+
+| Route | Action |
+|---|---|
+| `POST /mcp/control/live/policy` | Apply a live policy version. All fields; an unchecked fractional box is an explicit `false`; unexpected fields are refused. |
+| `POST /mcp/control/live/controls` | Record buy pause and emergency disable with a reason. A one-click **Engage emergency disable** button keeps the current buy pause. |
+| `POST /mcp/control/live/intents/{intent}/link` | Link an unknown outcome to an observed same-symbol, same-side broker order not already bound. |
+| `POST /mcp/control/live/intents/{intent}/absent` | Confirm an unknown outcome created no order (complete post-deadline history required). |
+| `POST /mcp/control/live/reconciliation/review` | Review an execution reconciliation incident. |
+
+The console form audit (`ConsoleInterfaceTest`) now lists these five routes as reviewed, and requires the controls and policy forms to be reachable. A `.btn-danger` style using existing tokens was added; `npm run build` passed. None of these actions enables writes or sends an order.
+
+Tests: `LiveExecutionControlsTest`, **4 tests / 52 assertions**, covers:
+
+- guest redirect, non-operator 403 and wrong account scope 409;
+- missing confirmation, out-of-bound values and unexpected fields (422);
+- CSRF 419 outside the testing environment;
+- idempotent request IDs and explicit-false fractional settings;
+- append-only controls and the engaged-state display;
+- linking the matching order but refusing a wrong-side order, and owner review attribution;
+- absence refused without post-deadline history;
+- reconciliation review resolution.
+
+Full SQLite **702 passed / 56 skips, 4,886 assertions** (758 total). Full PostgreSQL **757 passed / one existing environment skip, 5,406 assertions** (758 total).
+
+The first full run exposed two test gaps, both fixed:
+- the console form audit correctly rejected the new routes until they were reviewed and added;
+- on PostgreSQL, the transition trigger correctly refused the test's simulated `staged`→`unknown` shortcut; the simulation now passes through `submitting`.
+
 ## Limitations and remaining work before any live pilot
 
-1. **Execution gateway and dispatcher.** No broker write gateway, dispatcher, command, route, scheduler entry or UI exists. The policy, controls, link, absence and review operations are service-level only. Owner web forms with CSRF/authorization, and an emergency-disable control reachable from the console, are next.
-2. **Broker contract review.** Reviewed `place_equity_order`/`review_equity_order` contracts, preview and approval mapping, and whether the broker honors a client `ref_id` for deduplication are not verified. The journal UUID is not proven to deduplicate at the broker.
+1. **Execution gateway and dispatcher.** No broker write gateway, dispatcher, command or scheduler entry exists. Owner forms now exist for policy, controls, unknown-outcome resolution and reconciliation review (see above).
+2. **Broker contract review.** The October 19 read-only metadata review recorded that `ref_id` is the broker's idempotency key and that `place_equity_order` can route an order to the customer for approval in the Robinhood app. The full input/response schemas exist only in the runtime connection's encrypted capability manifest; nothing in the repository has them. Placement code must not be written against guessed argument names. The next review needs owner approval to read that stored manifest (local and read-only) or a new read-only `tools/list`.
 3. **Live exits.** Live sell signals still come from the paper exit engine. Generating exits from live, attributed holdings without a second strategy engine is open.
 4. **Account trading eligibility.** It is checked only at binding time. A fresh stored accounts read (`agentic_allowed`, not deactivated) at submission is not implemented.
 5. **Sleeve accounting.** Every broker holding in the dedicated account consumes sleeve capacity. Realized P&L and confirmed-performance reporting, kept separate from paper, are not built.

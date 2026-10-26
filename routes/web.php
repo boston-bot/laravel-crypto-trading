@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ControlCenterController;
 use App\Http\Controllers\ExperimentController;
+use App\Http\Controllers\LiveExecutionController;
 use App\Http\Controllers\LocalSessionController;
 use App\Http\Controllers\McpConnectionController;
 use App\Http\Controllers\MonitoringController;
@@ -52,6 +53,11 @@ Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAc
     Route::post('/control/proposal', [ControlCenterController::class, 'proposal'])->middleware('throttle:10,1')->name('mcp.control.proposal');
     Route::post('/control/versions/{version}/restore', [ControlCenterController::class, 'restore'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.restore');
     Route::post('/control/versions/{version}/apply-paper', [ControlCenterController::class, 'apply'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.control.apply');
+    Route::post('/control/live/policy', [LiveExecutionController::class, 'policy'])->middleware('throttle:10,1')->name('mcp.live.policy');
+    Route::post('/control/live/controls', [LiveExecutionController::class, 'controls'])->middleware('throttle:10,1')->name('mcp.live.controls');
+    Route::post('/control/live/intents/{intent}/link', [LiveExecutionController::class, 'link'])->whereNumber('intent')->middleware('throttle:10,1')->name('mcp.live.link');
+    Route::post('/control/live/intents/{intent}/absent', [LiveExecutionController::class, 'absent'])->whereNumber('intent')->middleware('throttle:10,1')->name('mcp.live.absent');
+    Route::post('/control/live/reconciliation/review', [LiveExecutionController::class, 'review'])->middleware('throttle:10,1')->name('mcp.live.review');
     Route::post('/paper/signal-execution/apply', [PaperExecutionController::class, 'applySignalPolicy'])->middleware('throttle:10,1')->name('mcp.paper.signal-execution.apply');
     Route::post('/paper/execution', [PaperExecutionController::class, 'store'])->middleware('throttle:10,1')->name('mcp.paper.execution.store');
     Route::post('/paper/execution/{version}/apply', [PaperExecutionController::class, 'apply'])->whereNumber('version')->middleware('throttle:10,1')->name('mcp.paper.execution.apply');

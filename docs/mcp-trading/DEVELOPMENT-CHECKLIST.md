@@ -379,10 +379,11 @@ October 25: owner requested beginning implementation following discussion of a s
 
 October 25 (second increment): owner requested live policy and submission checks, then broker-confirmed outcomes, with live writes disabled and fakes/PostgreSQL only. Migration `000031` (test schema only) adds versioned live policies, owner buy-pause/emergency controls, broker order bindings, immutable outcomes and deduplicated execution fills. The always-deny stub is replaced by real local checks on broker-confirmed state. Focused SQLite **8 / 77**, focused PostgreSQL **29 / 260**; full SQLite **698 passed / 56 skips, 4,826 assertions** (754 total); full PostgreSQL **753 passed / one existing environment skip, 5,346 assertions** (754 total). No runtime migration, deployment, flag change, live policy on a real account or broker call. [Detailed evidence and remaining gates](M6-LIVE-POLICY-AND-OUTCOMES-EVIDENCE.md).
 
-- [x] Explicit versioned owner live policy with code bounds; intents bound to its fingerprint (service level; no web form yet).
-- [x] Separate buy pause and full emergency disable; emergency disable withdraws a claimed-but-unsent order (service level).
+- [x] Explicit versioned owner live policy with code bounds; intents bound to its fingerprint.
+- [x] Separate buy pause and full emergency disable; emergency disable withdraws a claimed-but-unsent order.
 - [x] Last-boundary live checks from broker-confirmed snapshot, quote, eligibility, profile, session baseline, daily loss, sleeve/position/risk sizing and per-session cap; sells limited to app-attributed broker-held shares. Account trading eligibility at submission remains open.
 - [x] Broker-confirmed outcome journal: acceptance binding, reconciliation to partial/filled/cancelled/rejected, per-execution fill dedupe, owner link/absent resolution of unknown outcomes, contradiction incidents; app-bound orders excluded from external-order detection.
+- [x] Control Center owner forms for live policy, buy pause/emergency disable (one-click engage), unknown-outcome link/absence and reconciliation review; authenticated, operator-only, CSRF-protected, throttled. SQLite **702 / 56 skips**, PostgreSQL **757 / 1 skip** (758 each). No order path.
 
 October 18: the owner waived M4's seven-session period and continued M5. This does not authorize M6 brokerage mutations or live-mode activation. Under the October 18 strategy/execution split, M6's execution gateway stays separate from the read gateway and accepts only signal-based orders that passed every M5 gate.
 

@@ -122,8 +122,11 @@
         </div>
     @endforeach
     {{ $control['external_orders']['pending']->links() }}
-    <p class="note">This application has no agentic live-submission path yet, so all observed broker orders require review, including completed or cancelled orders. Reviewing an order does not cancel it or authorize a future trade. The latest complete equity-order read must be less than five minutes old when detection is enabled.</p>
+    <p class="note">Only broker orders this application bound at its execution boundary are excluded; every other observed order requires review, including completed or cancelled orders. Reviewing an order does not cancel it or authorize a future trade. The latest complete equity-order read must be less than five minutes old when detection is enabled.</p>
 </x-panel>
+@if($control['live'])
+    @include('mcp.dashboard.live-execution', ['live' => $control['live']])
+@endif
 <x-panel title="Dedicated strategy watchlists" subtitle="ChatGPT supplies symbols. This application checks eligibility and makes deterministic paper decisions." icon="shield">
     <p>Intake {{ config('paper.watchlist_intake_enabled') ? 'enabled' : 'disabled' }} · every five minutes when enabled. Membership only nominates symbols; execution eligibility remains unverified. The current execution allowlist remains in force.</p>
     <p>{{ ($watchlist['fresh'] ?? false) ? 'Fresh membership available' : 'No fresh membership: new strategy entries blocked' }} · {{ count($watchlist['symbols'] ?? []) }} nominated symbols · {{ count($watchlist['data_symbols'] ?? []) }} data-only symbols.</p>

@@ -553,6 +553,8 @@ table.data code { white-space: nowrap; overflow-wrap: normal; }
 .btn-secondary { --btn-bg: var(--surface-2); }
 .btn-ghost { --btn-bg: transparent; --btn-border: transparent; --btn-fg: var(--muted); }
 .btn-ghost:hover { --btn-bg: var(--surface-2); --btn-fg: var(--text); border-color: transparent; }
+.btn-danger { --btn-bg: color-mix(in srgb, var(--bad) 14%, var(--surface)); --btn-fg: var(--bad); --btn-border: color-mix(in srgb, var(--bad) 55%, transparent); }
+.btn-danger:hover { border-color: var(--bad); }
 .btn[data-busy]::after {
     content: ""; width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite;
 }
