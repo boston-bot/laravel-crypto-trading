@@ -901,7 +901,9 @@ After a restore, keep writes disabled and services that dispatch stopped. Recove
 
 ### Automatic trading and quick UI stop (October 26)
 
-**Deployed/active:** runtime `01a80f5`, migration `000034` applied. Engine/write flags enabled; account automatic activation v1 recorded at 16:04:06 UTC after the owner's sole-executor confirmation. Saved live policy v1, including 2% daily pause and broker approval off, is unchanged. Readiness and checkpoint checks pass; the first normal scheduled run started at 16:06:06 UTC. Use the UI controls below for immediate operational changes. [Rollout record and current limitations](M6-AUTOMATIC-EXECUTION-EVIDENCE.md#owner-authorized-deployment-and-activation).
+**Deployed/active:** runtime `656fc2f`, migration `000034` applied. Engine/write flags enabled; account automatic activation v3 recorded at 16:15:24 UTC after correcting the scheduler's native background lifetime. Saved live policy v1, including 2% daily pause and broker approval off, is unchanged; the owner confirmed sole execution. Readiness and checkpoint checks pass. The corrected ordinary 16:16 run survived its parent and completed reconciliation. Use the UI controls below for immediate operational changes. [Rollout record and current limitations](M6-AUTOMATIC-EXECUTION-EVIDENCE.md#owner-authorized-deployment-and-activation).
+
+The first corrected cycle finished at 16:18:11 UTC: 16 live evaluations, no submission attempts or intents. Automation remains on; no live fill is claimed. The Stop/Pause/On panel was rendered read-only against deployed account state and readiness remained 200.
 
 The owner authorized automatic equities trading under saved live policy v1 and confirmed this app is the account's sole executor. Keep legacy crypto and paid AI schedules disabled. Migration `000034` adds only activation/run audit tables; take a verified encrypted backup/restore drill and use the existing verified schema-owner migration review/deployment procedure. Preserve the independent execution checkpoint. Deployment itself does not enable an account.
 
