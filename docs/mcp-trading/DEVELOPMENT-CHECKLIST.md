@@ -373,6 +373,9 @@ October 25 M5 research follow-up (source only): historical quote replay now acce
 
 ## M6 — Controlled execution, separately enabled
 
+October 25: owner requested beginning implementation following discussion of a small supervised pilot. The first source increment adds immutable encrypted intents, a transactional dispatch/outbox row, shared-account PostgreSQL ownership, token fencing and conservative `submitting`/`unknown` recovery. Production submission checks always deny, including with the write flag enabled. Full SQLite **690 passed / 47 skips, 4,749 assertions**; PostgreSQL **736 passed / one existing environment skip, 5,173 assertions** (737 total each). Composer and scoped Pint passed. Migration `000030` adds four tables/two trigger functions in the test schema only; no backfill, runtime migration, deployment, flag change or broker call. M6 is now partial; the complete lifecycle, actual dispatcher, live checks, approval support and reconciliation remain open. M5 acceptance is unchanged. [Detailed evidence and remaining gates](M6-EXECUTION-JOURNAL-EVIDENCE.md).
+
+- [x] Initial journal foundation: atomic unapproved intent/outbox creation, immutable signal provenance, exact decimal validation, one stable idempotency key, shared-account claim serialization and conservative crash states (source only; no external dispatcher).
 
 October 18: the owner waived M4's seven-session period and continued M5. This does not authorize M6 brokerage mutations or live-mode activation. Under the October 18 strategy/execution split, M6's execution gateway stays separate from the read gateway and accepts only signal-based orders that passed every M5 gate.
 
@@ -386,7 +389,7 @@ October 18: the owner waived M4's seven-session period and continued M5. This do
 
 Mandatory fault tests: two workers claim the same intent; crash immediately before/after external request; response lost after acceptance; duplicate delivery; refresh-token race; partial fill then cancellation; policy changed while awaiting approval; expired quote; manual buy consumes funds; missing order-history page; emergency disable during queued work; restored backup contains stale intents. Every ambiguous external outcome blocks new exposure until reconciled.
 
-Evidence: pending. Live authorization: none supplied by this documentation.
+Evidence: [initial journal foundation](M6-EXECUTION-JOURNAL-EVIDENCE.md); remaining M6 acceptance pending. Live authorization: none supplied by this documentation.
 
 ## Crypto track — Coinbase and Robinhood Crypto
 
