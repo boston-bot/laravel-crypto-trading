@@ -33,6 +33,7 @@
             </a>
         @endforeach
         <a href="{{ route('mcp.paper') }}" class="nav-item" @if($active === 'paper') aria-current="page" @endif><x-icon name="wallet" /><span>Paper Trading</span></a>
+        <a href="{{ route('mcp.paper.crypto') }}" class="nav-item" @if($active === 'crypto-paper') aria-current="page" @endif><x-icon name="spark" /><span>Crypto Paper</span></a>
         <p class="nav-label">Strategy research</p>
         <a href="{{ route('mcp.experiments.index') }}" class="nav-item" @if($active === 'experiments') aria-current="page" @endif><x-icon name="performance" /><span>Experiments</span></a>
         <p class="nav-label">Brokerage</p>

@@ -49,8 +49,9 @@ final class CryptoMarketData
         }
         $at ??= CarbonImmutable::now();
         $limit = (int) config('crypto.collection_max_age_minutes');
-        $complete = DB::table('mcp_crypto_market_reads')->where(['venue' => CryptoMarketCollector::VENUE, 'status' => 'complete'])->max('finished_at');
-        $latest = DB::table('mcp_crypto_market_reads')->where('venue', CryptoMarketCollector::VENUE)->whereNotNull('finished_at')->orderByDesc('finished_at')->orderByDesc('id')->first(['status', 'error']);
+        // A history backfill is not evidence that the five-minute collection is running.
+        $complete = DB::table('mcp_crypto_market_reads')->where(['venue' => CryptoMarketCollector::VENUE, 'status' => 'complete'])->where('trigger', '!=', 'backfill')->max('finished_at');
+        $latest = DB::table('mcp_crypto_market_reads')->where('venue', CryptoMarketCollector::VENUE)->where('trigger', '!=', 'backfill')->whereNotNull('finished_at')->orderByDesc('finished_at')->orderByDesc('id')->first(['status', 'error']);
         $age = $complete === null ? null : (int) CarbonImmutable::parse($complete)->diffInMinutes($at, true);
         $status = match (true) {
             $age === null || $age > $limit => 'critical',

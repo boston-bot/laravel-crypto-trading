@@ -1,6 +1,6 @@
 # Crypto C3: 24/7 paper lifecycle (first increment)
 
-Status: **lifecycle committed in `b54a6e4` and deployed October 26 (migration `000035`, batch 19) with crypto paper activated; a candle-settlement correction (migration `000036`) is in source, pending deployment.** This increment turns C2's evidence-only evaluation into a scheduled 24/7 paper cycle with simulated limit orders, fills, exits and portfolio limits, plus a refreshed account fee tier. Candle replay and the crypto dashboard section are the remaining C3 build items. It authorizes no venue order: both crypto write flags stay false and no code path reaches a venue `placeOrder`.
+Status: **lifecycle committed in `b54a6e4` and deployed October 26 (migration `000035`, batch 19) with crypto paper activated; the candle-settlement correction is deployed in `0ec26f5` (migration `000036`, batch 20).** This increment turns C2's evidence-only evaluation into a scheduled 24/7 paper cycle with simulated limit orders, fills, exits and portfolio limits, plus a refreshed account fee tier. Candle replay and the crypto dashboard section are the remaining C3 build items. It authorizes no venue order: both crypto write flags stay false and no code path reaches a venue `placeOrder`.
 
 ## What changed
 
@@ -154,7 +154,7 @@ Activation steps performed:
 - 16 products: `quote_volume_too_low`.
 - 9 products: `candle_conflict_requires_review`.
 
-## Candle settlement correction (source, pending deployment)
+## Candle settlement correction (deployed in `0ec26f5`)
 
 The nine conflicts were not daily-history problems.
 - **What triggered them.** Each collection re-reads the trailing two hours of five-minute candles. Coinbase revises recently closed five-minute candles as late trades settle. A public comparison at 23:5x UTC found revised close, volume, high or low (never open) in 18 of 25 products. For example, AAVE-USD 23:10 was first stored with volume 0.262; the venue later reported 4.776.
@@ -176,3 +176,83 @@ Migration `000036` is additive (one new table) with a plain `down()`. Verificati
 Collector tests now cover settlement and revision deduplication. The evaluation tests show that five-minute and other-product daily revisions do not block, while a benchmark daily revision does. Pint and `git diff --check` passed.
 
 To deploy: commit, then `deploy.sh <rev> --migrate` with the private migration credentials (review with `--pretend` first). No configuration change is needed. The first cycle after about 00:20 UTC should show eligible products evaluated normally.
+
+**Deployment follow-up, October 26–27.** The owner committed and deployed `0ec26f5` at 23:58:37 UTC. Migration `000036` applied in batch 20. Readiness 200; schedule unchanged; `crypto_paper` and `crypto_data` ok; both crypto write flags false.
+- **Cycle 273 (00:00 UTC):** 16 products `quote_volume_too_low` and 9 `daily_history_missing_or_discontinuous`, as expected while October 26's daily candle settled. No conflict reason. 49 recorded revisions, all five-minute.
+- **Cycle 276 (00:15 UTC):** the nine liquid products were evaluated normally. BTC, NEAR and ZEC were `wait/trigger_not_crossed`; ETH, HYPE, QNT, SOL, SUI and XRP were `wait/no_setup`. 16 products were low volume. Equity was 400, the baseline was complete and there was no pause. No order (none was warranted). One fee observation: the hourly refresh correctly skipped a recent observation. No daily revisions.
+
+## Replay and dashboard increment (source, pending deployment)
+
+**Replay engine.** The shared `StrategyReplay` gains a `crypto_limit` order mode instead of a second engine. Equity modes are unchanged; existing replay, experiment and variant tests pass. Differences in crypto mode:
+
+| Setting | Equity modes | Crypto mode |
+|---|---|---|
+| Profile window | 275 bars | The live 200 bars; replay starts only once a full window exists |
+| Price through the trigger | One cent | One price increment |
+| Fill rounding | 4 decimals | Entries round up and exits round down to each product's price increment |
+| Sizing | Share-based | The instrument-aware `RiskSizer` path (base increments and venue minimums/maximums) |
+| Fees | Equity schedule | Venue notional fees at the greater rate |
+| Liquidity | Not modeled | Entry needs the prior day's base volume × close of at least $10M, approximating the live 24-hour quote-volume rule |
+
+Crypto results list their limitations:
+- daily bars approximate five-minute triggers and stops
+- today's collection list, increments and fee tier are applied to the past
+- no spread, quote-age or book-size data
+- no daily loss pause
+- exits do not free cash or capacity until the next day
+
+**`CryptoReplays` and `mcp:crypto-replay --actor --portfolio --request [--start]`.** The replay runs the current policy over stored daily candles. It uses only settled candles from successful reads, contiguous from each product's first stored day to yesterday (UTC). It excludes, with a stated reason, any product with:
+- a gap
+- any daily revision
+- no product metadata
+- no current fee schedule
+- a fee schedule different from the benchmark's
+
+It requires the benchmark. Runs use the existing `mcp_strategy_replays` table with crypto identity and are labeled `retrospective_daily_replay_not_forward_results`. Retries are frozen per request UUID, and a replay makes no network call, order or ledger change.
+
+**`mcp:crypto-history --days=N` (1–2000, default 1095).** One public read of settled daily candles before each configured product's earliest stored day. It is recorded as a `backfill` read with provenance; any overlap follows the first-observation and revision rules. Backfill reads do not count toward collection health.
+
+**Dashboard (`/mcp/paper/crypto`, nav "Crypto Paper").** An authenticated, operator-scoped, read-only page, using a repeatable-read snapshot on PostgreSQL. It shows:
+- switches, with venue writes shown explicitly
+- current equity, cash, reserved cash, realized and open P&L, fees and return
+- maximum drawdown and a UTC daily-close equity curve rebuilt from the ledger and stored daily closes, with unknown days left blank
+- observation progress (closed trades out of 30, days out of 28), hit rate and profit factor
+- buy-and-hold since the sleeve opened, for BTC and for an equal weight of the list
+- 24-hour cycle coverage and waiting reasons
+- open positions with bid marks and recorded stops
+- the latest 25 simulated orders with fills and fees
+- closed round trips net of every fee
+- the latest cycle per product
+- the fee tier and review
+- the latest replay, labeled retrospective
+
+The `x-money` component accepts an optional `scale` (default 2, so existing pages are unchanged) for small crypto prices.
+
+**Migration `000037` (forward-only).**
+- `mcp_strategy_replays.mcp_connection_id` becomes nullable, with new `paper_portfolio_id`, `asset_class` and `venue` columns. Existing rows default to equity / Robinhood agentic.
+- A partial unique index covers crypto requests, and a PostgreSQL identity check requires equity rows to have a connection and crypto rows to have a portfolio and no connection.
+- The crypto read check constraint now also accepts the `backfill` trigger.
+
+**Verification.**
+
+| Suite | Tests | Passed | Skipped | Assertions |
+|---|---|---|---|---|
+| SQLite | 848 | 736 | 112 PostgreSQL-only | 5,139 |
+| PostgreSQL | 848 | 847 | 1 existing environment skip | 6,053 |
+
+Composer validation, Pint and `git diff --check` passed. No CSS or JS changed, so no asset rebuild is required.
+
+New tests cover:
+- crypto-mode window, tick-rounded fills, increment sizing, tick-rounded stop exits with fees, and the liquidity gate
+- a labeled replay with stored-data-only frozen retries and no ledger effect
+- each exclusion reason and the benchmark requirement
+- backfill extent, provenance and health exclusion
+- the replay command
+- the dashboard's content after a real entry and stop-out: exact closed-trade net, no writes, no venue requests, authentication, empty state and operator gate
+- the PostgreSQL replay identity and read-trigger constraints
+
+**To deploy:**
+1. Commit, then run `deploy.sh <rev> --migrate` (review `000037` with `--pretend`).
+2. Run `mcp:crypto-history --days=1095`.
+3. Run `mcp:crypto-replay --actor=1 --portfolio=2 --request=<uuid>`.
+4. Open `/mcp/paper/crypto`.

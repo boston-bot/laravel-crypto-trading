@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ControlCenterController;
+use App\Http\Controllers\CryptoPaperDashboardController;
 use App\Http\Controllers\ExperimentController;
 use App\Http\Controllers\LiveExecutionController;
 use App\Http\Controllers\LocalSessionController;
@@ -39,6 +40,7 @@ Route::prefix('mcp/robinhood')->middleware([McpResponsePrivacy::class, 'auth', F
 
 Route::prefix('mcp')->middleware([McpResponsePrivacy::class, 'auth', FinancialAccess::class.':operate-finances'])->group(function (): void {
     Route::get('/paper', PaperDashboardController::class)->name('mcp.paper');
+    Route::get('/paper/crypto', CryptoPaperDashboardController::class)->name('mcp.paper.crypto');
     Route::get('/experiments', [ExperimentController::class, 'index'])->name('mcp.experiments.index');
     Route::post('/experiments', [ExperimentController::class, 'store'])->middleware('throttle:10,1')->name('mcp.experiments.store');
     Route::get('/experiments/{experiment}', [ExperimentController::class, 'show'])->whereUuid('experiment')->name('mcp.experiments.show');

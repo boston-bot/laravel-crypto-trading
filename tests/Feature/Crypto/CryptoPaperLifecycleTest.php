@@ -383,4 +383,29 @@ class CryptoPaperLifecycleTest extends TestCase
         $this->assertDatabaseCount('mcp_paper_sim_orders', 0);
         $this->assertFalse(StrategyCycle::firstOrFail()->payload['paper_orders']);
     }
+
+    public function test_dashboard_shows_the_sleeve_positions_orders_and_closed_trades_without_writes(): void
+    {
+        $this->get('/mcp/paper/crypto')->assertRedirect('/login');
+        $this->actingAs($this->owner)->get('/mcp/paper/crypto')->assertOk()->assertSee('No crypto paper sleeve');
+        $policy = $this->policy();
+        $this->market();
+        $this->cycle($policy);
+        $this->actingAs($this->owner)->get('/mcp/paper/crypto')->assertOk()->assertSee('Open positions')->assertSee('BTC-USD')
+            ->assertSee('Simulated results only')->assertSee('Venue writes off')->assertSee('0 / 30');
+        $this->travel(5)->minutes();
+        $this->quote('90.00', '90.02');
+        $this->cycle($policy);
+        $before = [SimulationOrder::count(), SimulationEvent::count(), StrategyCycle::count(), Portfolio::first()->ledger_version];
+        $response = $this->actingAs($this->owner)->get('/mcp/paper/crypto')->assertOk()->assertSee('Initial stop hit')->assertSee('1 / 30');
+        $data = $response->viewData('data');
+        $this->assertSame(1, $data['stats']['closed']);
+        $this->assertSame(-1, Decimal::from($data['trades'][0]['net'])->compareTo(Decimal::from('0')));
+        $this->assertNear(Decimal::from($data['trades'][0]['proceeds'])->minus(Decimal::from($data['trades'][0]['cost'])), $data['trades'][0]['net']);
+        $this->assertSame([], $data['positions']);
+        $this->assertSame($before, [SimulationOrder::count(), SimulationEvent::count(), StrategyCycle::count(), Portfolio::first()->ledger_version]);
+        $this->assertSame([], $this->venue->paths);
+        config(['mcp.operator_emails' => ['someone-else@example.test']]);
+        $this->actingAs($this->owner)->get('/mcp/paper/crypto')->assertForbidden();
+    }
 }

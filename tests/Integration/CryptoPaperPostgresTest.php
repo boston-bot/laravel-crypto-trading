@@ -127,7 +127,12 @@ class CryptoPaperPostgresTest extends TestCase
             'side' => 'BUY', 'type' => 'limit', 'status' => 'open', 'quantity' => '1', 'price_bound' => '1', 'accepted_at' => now(), 'expires_at' => now()];
         $observation = ['venue' => 'coinbase', 'actor_id' => $this->actor, 'trigger' => 'manual', 'status' => 'complete', 'reasons' => '[]',
             'request_started_at' => now(), 'recorded_at' => now()];
-        foreach ([['mcp_paper_sim_orders', $order], ['mcp_crypto_fee_observations', $observation]] as [$table, $row]) {
+        $replay = ['mcp_connection_id' => null, 'paper_portfolio_id' => null, 'asset_class' => 'crypto', 'venue' => 'coinbase', 'scope' => 'x',
+            'request_id' => (string) Str::uuid(), 'actor_id' => $this->actor, 'replay_version' => 'v', 'profile_version' => 'v', 'rule_version' => 'v',
+            'parameters_hash' => 'h', 'status' => 'incomplete', 'reason' => 'r', 'input_fingerprint' => 'f', 'payload' => 'x', 'recorded_at' => now()];
+        $read = ['request_id' => (string) Str::uuid(), 'venue' => 'coinbase', 'contract' => 'c', 'trigger' => 'unreviewed', 'status' => 'running',
+            'requested_products' => '[]', 'started_at' => now()];
+        foreach ([['mcp_paper_sim_orders', $order], ['mcp_crypto_fee_observations', $observation], ['mcp_strategy_replays', $replay], ['mcp_crypto_market_reads', $read]] as [$table, $row]) {
             try {
                 DB::transaction(fn () => DB::table($table)->insert($row));
                 $this->fail("$table accepted an invalid row.");
@@ -136,6 +141,9 @@ class CryptoPaperPostgresTest extends TestCase
             }
         }
         $this->assertSame('mcp_trading', DB::selectOne("SELECT schemaname FROM pg_tables WHERE tablename = 'mcp_crypto_fee_observations'")->schemaname);
+        // Backfill reads are an accepted trigger.
+        DB::table('mcp_crypto_market_reads')->insert(array_replace($read, ['trigger' => 'backfill']));
+        $this->assertSame(1, DB::table('mcp_crypto_market_reads')->where('request_id', $read['request_id'])->delete());
         $this->assertSame('24', (string) DB::selectOne("SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = 'mcp_trading' AND table_name = 'mcp_paper_sim_orders' AND column_name = 'symbol'")->character_maximum_length);
     }
 }

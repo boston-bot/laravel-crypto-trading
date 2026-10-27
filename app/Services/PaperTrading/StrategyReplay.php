@@ -43,9 +43,12 @@ final class StrategyReplay
     {
         ksort($bars);
         $mode = $settings['order_mode'] ?? 'whole_share_limit';
-        if (! in_array($mode, ['whole_share_limit', 'fractional_market'], true) || ($mode === 'fractional_market' && ! RobinhoodOrderContract::allowsFractional('market'))) {
+        if (! in_array($mode, ['whole_share_limit', 'fractional_market', 'crypto_limit'], true) || ($mode === 'fractional_market' && ! RobinhoodOrderContract::allowsFractional('market'))) {
             throw new \InvalidArgumentException('Unsupported replay order mode.');
         }
+        // Crypto limit orders use each product's venue increments, the instrument-aware sizer and the live 200-bar window.
+        $instruments = $mode === 'crypto_limit' ? $settings['instruments'] : null;
+        $window = $instruments === null ? self::LIVE_WINDOW : $settings['profile_window'];
         $scale = $mode === 'fractional_market' ? RobinhoodOrderContract::FRACTIONAL_MAX_DECIMALS : 0;
         // Market fills use their own slippage assumption for entries, exits and planned risk.
         $settings = $mode === 'fractional_market' ? ['slippage_bps' => $settings['market_slippage_bps']] + $settings : $settings;
@@ -55,6 +58,8 @@ final class StrategyReplay
             $index[$symbol] = array_flip(array_column($series, 0));
         }
         $first = max($p['market_filter_sma_sessions'], $p['slow_sma_sessions']);
+        // Live crypto evaluation requires a full window, so replay starts only once one exists.
+        $first = $instruments === null ? $first : max($first, $window);
         $zero = Decimal::from('0');
         $cash = Decimal::from($equity);
         $positions = [];
@@ -62,12 +67,14 @@ final class StrategyReplay
         $lastClose = [];
         $trades = [];
         $curve = [];
-        $counts = ['setups' => 0, 'entries' => 0, 'skipped_zero_size' => 0, 'skipped_capacity' => 0, 'skipped_chase_or_no_cross' => 0, 'market_filter_off_days' => 0];
+        $counts = ['setups' => 0, 'entries' => 0, 'skipped_zero_size' => 0, 'skipped_capacity' => 0, 'skipped_chase_or_no_cross' => 0, 'market_filter_off_days' => 0]
+            + ($instruments === null ? [] : ['skipped_liquidity' => 0]);
         $peak = Decimal::from($equity);
         $drawdown = $zero;
         $exposed = 0;
-        $sell = function (string $symbol, array $position, string $price, string $reason, string $date, int $i) use (&$cash, &$trades, &$lastExit, $settings): void {
-            $fill = Decimal::from($price)->multipliedBy(Decimal::from('1')->minus($this->bps($settings['slippage_bps'])))->rounded(4, RoundingMode::DOWN);
+        $sell = function (string $symbol, array $position, string $price, string $reason, string $date, int $i) use (&$cash, &$trades, &$lastExit, $settings, $instruments): void {
+            $fill = Decimal::from($price)->multipliedBy(Decimal::from('1')->minus($this->bps($settings['slippage_bps'])));
+            $fill = $instruments === null ? $fill->rounded(4, RoundingMode::DOWN) : InstrumentSizing::down($fill, $instruments[$symbol]['price_increment']);
             $quantity = Decimal::from($position['quantity']);
             $fee = $this->costs->fee($settings['cost_schedule'], 'SELL', $quantity, $fill);
             $cash = $cash->plus($quantity->multipliedBy($fill))->minus($fee);
@@ -85,12 +92,12 @@ final class StrategyReplay
             if (($startDate !== null && $date < $startDate) || ($endDate !== null && $date > $endDate)) {
                 continue;
             }
-            $bench = array_slice($benchmark, max(0, $i - self::LIVE_WINDOW), min($i, self::LIVE_WINDOW));
+            $bench = array_slice($benchmark, max(0, $i - $window), min($i, $window));
             $profiles = [];
             foreach ($bars as $symbol => $series) {
                 $at = $index[$symbol][$prev] ?? null;
                 $profiles[$symbol] = $at === null ? null
-                    : $this->profiles->compute(array_slice($series, max(0, $at - self::LIVE_WINDOW + 1), min($at + 1, self::LIVE_WINDOW)), $bench, $p, ['status' => 'pass', 'reason' => 'not_reconstructed_in_replay']);
+                    : $this->profiles->compute(array_slice($series, max(0, $at - $window + 1), min($at + 1, $window)), $bench, $p, ['status' => 'pass', 'reason' => 'not_reconstructed_in_replay']);
             }
             $marks = $lastClose;
             foreach ($bars as $symbol => $series) {
@@ -137,20 +144,30 @@ final class StrategyReplay
 
                         continue;
                     }
-                    // The first tradable price above the trigger: the open after a gap, otherwise one cent through it.
+                    // Approximates the live 24-hour quote volume rule with the prior day's base volume at its close.
+                    $prior = $instruments === null ? null : $series[$index[$symbol][$prev] ?? -1] ?? null;
+                    if ($instruments !== null && ($prior === null || Decimal::from($prior[5])->multipliedBy(Decimal::from($prior[4]))->compareTo(Decimal::from($settings['min_daily_quote_volume'])) < 0)) {
+                        $counts['skipped_liquidity']++;
+
+                        continue;
+                    }
+                    // The first tradable price above the trigger: the open after a gap, otherwise one tick (a cent for equities) through it.
+                    $tick = Decimal::from($instruments === null ? '0.01' : $instruments[$symbol]['price_increment']);
                     $price = Decimal::from($bar[1])->compareTo($trigger) > 0 ? Decimal::from($bar[1])
-                        : (Decimal::from($bar[2])->compareTo($trigger) > 0 ? $trigger->plus(Decimal::from('0.01')) : null);
+                        : (Decimal::from($bar[2])->compareTo($trigger) > 0 ? ($instruments === null ? $trigger->plus($tick) : InstrumentSizing::down($trigger, (string) $tick)->plus($tick)) : null);
                     $signal = $price === null ? null : $this->rules->entry($profile, (string) $price, $p);
                     if (($signal['status'] ?? null) !== 'signal') {
                         $counts['skipped_chase_or_no_cross']++;
 
                         continue;
                     }
-                    $fill = $price->multipliedBy(Decimal::from('1')->plus($this->bps($settings['slippage_bps'])))->rounded(4, RoundingMode::UP);
+                    $fill = $price->multipliedBy(Decimal::from('1')->plus($this->bps($settings['slippage_bps'])));
+                    $fill = $instruments === null ? $fill->rounded(4, RoundingMode::UP) : InstrumentSizing::up($fill, $instruments[$symbol]['price_increment']);
                     $stop = $fill->minus(Decimal::from($profile['indicators']['atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
                     // Reflect opening gaps, realized opening losses and fees from preceding entries.
                     // Intraday marks are unknown; retain opening marks and each new position's fill.
-                    $size = $this->sizer->calculate($this->mark($cash, $positions, $marks), $cash, $fill, $stop, $settings, null, $scale);
+                    $size = $instruments === null ? $this->sizer->calculate($this->mark($cash, $positions, $marks), $cash, $fill, $stop, $settings, null, $scale)
+                        : $this->sizer->calculate($this->mark($cash, $positions, $marks), $cash, $fill, $stop, $settings, instrument: $instruments[$symbol] + ['asset_class' => 'crypto']);
                     $quantity = Decimal::from($size['quantity']);
                     if ($quantity->compareTo($zero) <= 0) {
                         $counts['skipped_zero_size']++;
@@ -215,11 +232,15 @@ final class StrategyReplay
             'trades' => $trades, 'equity_curve' => $curve,
             'execution' => ['order_mode' => $mode, 'quantity_scale' => $scale, 'slippage_bps' => $settings['slippage_bps']],
             'risk' => ['max_open_positions' => $settings['max_open_positions'], 'max_position_pct' => $settings['max_position_pct'], 'risk_per_trade_pct' => $settings['risk_per_trade_pct']],
-            'limitations' => ['daily_bars_approximate_five_minute_triggers_and_stops', 'earnings_blackout_not_reconstructed', 'opening_delay_not_modeled',
-                'current_watchlist_applied_to_past_selection_bias', 'no_intraday_quotes_or_book_liquidity',
-                ...($scale === 0 ? ['whole_share_limit_orders_per_reviewed_broker_contract']
-                    : ['fractional_market_orders_regular_hours_only', 'market_order_slippage_assumed_not_measured', 'symbol_fractional_eligibility_assumed']),
-                'intraday_exit_cash_and_capacity_unavailable_until_next_session', 'intraday_sizing_uses_opening_marks_and_new_entry_fills']];
+            'limitations' => $instruments !== null ? ['daily_bars_approximate_five_minute_triggers_and_stops', 'current_collection_list_applied_to_past_selection_bias',
+                'current_venue_increments_and_fee_tier_applied_to_past', 'prior_day_base_volume_times_close_approximates_24h_quote_volume',
+                'no_spread_quote_age_or_book_liquidity', 'daily_loss_pause_not_modeled', 'intraday_exit_cash_and_capacity_unavailable_until_next_day',
+                'intraday_sizing_uses_opening_marks_and_new_entry_fills']
+                : ['daily_bars_approximate_five_minute_triggers_and_stops', 'earnings_blackout_not_reconstructed', 'opening_delay_not_modeled',
+                    'current_watchlist_applied_to_past_selection_bias', 'no_intraday_quotes_or_book_liquidity',
+                    ...($scale === 0 ? ['whole_share_limit_orders_per_reviewed_broker_contract']
+                        : ['fractional_market_orders_regular_hours_only', 'market_order_slippage_assumed_not_measured', 'symbol_fractional_eligibility_assumed']),
+                    'intraday_exit_cash_and_capacity_unavailable_until_next_session', 'intraday_sizing_uses_opening_marks_and_new_entry_fills']];
     }
 
     private function mark(Decimal $cash, array $positions, array $closes): Decimal

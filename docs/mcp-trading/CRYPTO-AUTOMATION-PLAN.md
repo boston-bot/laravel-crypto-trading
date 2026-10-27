@@ -101,7 +101,7 @@ Acceptance: exact-decimal unit tests; immutable signal records carrying rule and
 
 ### C3 — Replay and forward paper (about 1 week to build, at least 4 weeks to observe) — lifecycle increment in source October 26
 
-First increment (source only, not deployed): scheduled 24/7 paper cycle, simulated limit orders with displayed-book fills, exits through the shared rules, UTC loss baseline/latch, position cap, cooldown, held-product collection, scheduled read-only fee-tier refresh with an owner tier review, health check and additive migration `000035`. Replay and the dashboard section remain. [Evidence and deployment steps](CRYPTO-C3-PAPER-EVIDENCE.md).
+First increment (source only, not deployed): scheduled 24/7 paper cycle, simulated limit orders with displayed-book fills, exits through the shared rules, UTC loss baseline/latch, position cap, cooldown, held-product collection, scheduled read-only fee-tier refresh with an owner tier review, health check and additive migration `000035`. Deployed and activated October 26–27 (`b54a6e4`, settlement correction `0ec26f5`). Replay and the crypto dashboard page are in source with migration `000037`, pending deployment; then the observation period. [Evidence and deployment steps](CRYPTO-C3-PAPER-EVIDENCE.md).
 
 Original scope:
 

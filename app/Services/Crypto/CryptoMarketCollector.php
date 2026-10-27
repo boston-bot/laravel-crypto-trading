@@ -58,6 +58,55 @@ final class CryptoMarketCollector
         }
     }
 
+    /**
+     * One bounded read of older settled daily candles before each configured product's earliest stored day, for retrospective
+     * replay only. Recorded as a `backfill` read with provenance; overlapping days follow the first-observation/revision rule.
+     */
+    public function backfill(int $days): array
+    {
+        if (! config('crypto.market_data_enabled')) {
+            return ['status' => 'disabled'];
+        }
+        $products = config('crypto.coinbase_products');
+        if ($days < 1 || $days > 2000 || ! is_array($products) || $products === [] || count($products) > (int) config('crypto.max_products') ||
+            count(array_unique($products)) !== count($products) || array_filter($products, fn ($id) => ! is_string($id) || ! preg_match(CoinbasePublicMarketData::PRODUCT_PATTERN, $id))) {
+            return ['status' => 'invalid_configuration'];
+        }
+        $lock = Cache::lock('crypto-market-collector', 600);
+        if (! $lock->get()) {
+            return ['status' => 'busy'];
+        }
+        try {
+            $readId = DB::table('mcp_crypto_market_reads')->insertGetId(['request_id' => (string) Str::uuid(), 'venue' => self::VENUE,
+                'contract' => CoinbasePublicMarketData::CONTRACT, 'trigger' => 'backfill', 'status' => 'running',
+                'requested_products' => json_encode(array_values($products), JSON_THROW_ON_ERROR), 'started_at' => self::time(CarbonImmutable::now())]);
+            $from = CarbonImmutable::now()->utc()->startOfDay()->subDays($days);
+            [$complete, $inserted, $conflicts, $error] = [0, 0, 0, null];
+            foreach ($products as $id) {
+                $earliest = DB::table('mcp_crypto_candles')->where(['venue' => self::VENUE, 'product_id' => $id, 'granularity' => 'ONE_DAY'])->min('starts_at');
+                try {
+                    if ($earliest !== null && CarbonImmutable::parse($earliest)->gt($from)) {
+                        $rows = $this->gateway->closedCandles($id, 'ONE_DAY', $from, CarbonImmutable::parse($earliest));
+                        [$added, $differing] = DB::transaction(fn () => $this->candles($readId, $id, 'ONE_DAY', $rows, CarbonImmutable::now()));
+                        $inserted += $added;
+                        $conflicts += $differing;
+                    }
+                    $complete++;
+                } catch (CryptoMarketDataException $failure) {
+                    $error ??= $failure->reason;
+                }
+            }
+            $status = $complete === count($products) ? 'complete' : ($complete > 0 ? 'partial' : 'failed');
+            DB::table('mcp_crypto_market_reads')->where('id', $readId)->update(['status' => $status, 'error' => $status === 'complete' ? null : $error,
+                'products_complete' => $complete, 'requests' => $this->gateway->requests(), 'candles_inserted' => $inserted, 'candle_conflicts' => $conflicts,
+                'finished_at' => self::time(CarbonImmutable::now())]);
+
+            return ['status' => $status, 'read_id' => $readId, 'products' => count($products), 'complete' => $complete, 'candles' => $inserted, 'error' => $status === 'complete' ? null : $error];
+        } finally {
+            $lock->release();
+        }
+    }
+
     /** @param  list<string>  $products */
     private function read(array $products, string $trigger): array
     {
