@@ -8,6 +8,7 @@ use App\Models\PaperTrading\StrategyReplayRun;
 use App\Models\User;
 use App\Services\Crypto\CryptoMarketCollector;
 use App\Services\Crypto\CryptoMarketData;
+use App\Services\Crypto\CryptoParameters;
 use App\Services\Crypto\CryptoPolicies;
 use App\Services\Crypto\CryptoReplays;
 use Carbon\CarbonImmutable;
@@ -137,5 +138,29 @@ class CryptoReplaysTest extends TestCase
             }
         }
         $this->assertSame(0, StrategyReplayRun::count());
+    }
+
+    public function test_research_replay_of_a_regime_playbook_leaves_the_applied_policy_alone(): void
+    {
+        $policy = $this->policy();
+        $run = app(CryptoReplays::class)->run($this->owner->id, $policy->paper_portfolio_id, (string) Str::uuid(),
+            variants: [['id' => 'maker_fees', 'costs' => ['maker_rate' => '0.005', 'taker_rate' => '0.005']]], playbook: CryptoParameters::REGIME_TREND);
+        $this->assertSame(['complete', 'regime_daily_replay_v1', 'regime_rules_v1', CryptoParameters::REGIME_TREND],
+            [$run->status, $run->replay_version, $run->rule_version, $run->payload['input']['playbook']]);
+        $this->assertSame(['BTC-USD'], $run->payload['symbols']);
+        // The 200-day average needs 200 completed days: the first replay day is the 201st stored day.
+        $this->assertSame('2026-04-05', $run->payload['result']['start']);
+        $this->assertSame('100', $run->payload['input']['settings']['max_position_pct']);
+        $this->assertSame('maker_fees', $run->payload['comparison']['variants'][0]['id']);
+        $this->assertSame(CryptoParameters::VERSION, InstrumentPolicy::latest('version')->first()->payload['parameters']['version']);
+        try {
+            app(CryptoReplays::class)->run($this->owner->id, $policy->paper_portfolio_id, (string) Str::uuid(),
+                variants: [['id' => 'no_exit', 'parameters' => ['exit_on_fast_sma_close' => false]]], playbook: CryptoParameters::REGIME_TREND);
+            $this->fail('Swing research keys accepted for a regime playbook.');
+        } catch (HttpException $e) {
+            $this->assertSame(422, $e->getStatusCode());
+        }
+        $this->artisan('mcp:crypto-replay', ['--actor' => $this->owner->id, '--portfolio' => $policy->paper_portfolio_id, '--request' => (string) Str::uuid(),
+            '--playbook' => CryptoParameters::REGIME_MOMENTUM])->expectsOutputToContain('crypto_regime_momentum_v1')->assertSuccessful();
     }
 }

@@ -281,7 +281,7 @@ Deployed `b68b847` with migration `000037` (batch 21). Readiness 200; schedule u
 
 These are retrospective research findings with the stated limitations. They are not a basis for parameter changes without owner review and out-of-sample checks. Forward paper continues unchanged under policy v2.
 
-## Research comparison (source, pending deployment)
+## Research comparison (deployed)
 
 `mcp:crypto-replay … --variants=<json>` accepts up to six research variants. Each variant may set:
 - **`parameters`:** the existing reviewed `ResearchVariants` bounds, e.g. `exit_on_fast_sma_close: false`.
@@ -316,3 +316,204 @@ Planned comparison set:
 | `zero_fees` | 0% per side | Commission-free sensitivity. A venue's spread markup is not modeled. |
 | `no_exit_maker` | First two combined | Do the two fixes add up? |
 | `no_exit_maker_five` | All three | All three changes together |
+
+### Comparison results — October 27 (replay 2)
+
+Request `84fc9317-9416-4533-84e1-9d10e615f2b8`, variant file `runtime/crypto-replay-variants-20261027.json`.
+
+| Window | Dates | BTC buy-and-hold |
+|---|---|---|
+| Full | 2024-05-15 → 2026-10-26 | +30.0% |
+| Early | 2024-05-15 → 2025-08-05 | +85.4% |
+| Late | 2025-08-06 → 2026-10-26 | −29.9% |
+
+Return % (profit factor) for each window, then full-period fees:
+
+| Run | Full | Early | Late | Fees (full) |
+|---|---|---|---|---|
+| Baseline (policy v2) | −22.9 (0.79) | −20.1 (0.71) | +1.2 (1.03) | $116.79 |
+| `no_fast_sma_exit` | −41.0 (0.61) | −33.7 (0.56) | −10.4 (0.73) | $75.11 |
+| `maker_fees` (0.50%) | −11.4 (0.89) | −14.2 (0.78) | +8.6 (1.21) | $69.83 |
+| `five_positions` | −42.2 (0.68) | −34.6 (0.64) | −15.5 (0.71) | $129.05 |
+| `zero_fees` | +6.2 (1.06) | −5.7 (0.88) | +19.0 (1.50) | $0 |
+| `no_exit_maker` | −35.6 (0.66) | −30.3 (0.59) | −7.1 (0.81) | $43.95 |
+| `no_exit_maker_five` | −45.4 (0.65) | −35.2 (0.64) | −17.8 (0.61) | $51.18 |
+
+Findings:
+1. **Removing the fast moving-average exit makes results worse in both halves.** The replay-1 exit-reason attribution (that exit "lost" $316.67) was misleading: it cuts losers early, and without it they lose more. The developer hypothesis is withdrawn.
+2. **Five positions is worse in both halves.** More concurrent entries add weaker setups and more fees.
+3. **Lower fees are the only change that helps in both halves.** Even with zero fees the early half is negative, and over the full period the strategy trails BTC buy-and-hold by about 24 points.
+4. **The market filter limited damage in the falling late half** (baseline +1.2% while BTC fell 29.9%), but the strategy captured little of the rising early half (−20.1% against +85.4%).
+
+Conclusion: no tested variant meets the bar of helping and being profitable in both halves. Policy v2 is unchanged, and forward paper continues as an observation, not as a candidate for live crypto. Any different strategy design is an owner decision.
+
+## Strategy redesign — pre-registration (recorded 2026-10-27 01:08 UTC, before any candidate result was computed)
+
+The owner asked for a strategy that wins. The swing playbook failed its comparison above. This section fixes the candidates, settings and pass/fail rules before testing, so that settings are not tuned to the data. History was backfilled to 2,000 days (read 31: 14,784 more settled daily candles).
+
+**Common assumptions.**
+- $400 start; each decision is made on day *t*'s close and executed at day *t*+1's open.
+- Intro taker fee of 0.90% per side plus 10 bp slippage. Maker 0.50% is reported as well, but pass/fail uses taker.
+- Fractional quantities with a $1 minimum order; venue increments are ignored in this research prototype.
+- Settled daily candles only.
+- Prototype computation uses exact decimals in a scratch research script, not the application engine. Any candidate that passes is then implemented as a versioned playbook in the shared PHP engine, with tests, before any policy change.
+
+**Candidates.** Settings are standard textbook values, not fitted:
+
+| ID | Rule |
+|---|---|
+| T1 BTC trend | Hold 100% BTC while the prior close is above its 200-day simple moving average; otherwise hold cash |
+| T2 BTC+ETH trend | Two 50% sleeves, each applying T1's rule to its own coin |
+| T3 Momentum rotation | Every Monday (UTC), rank eligible list coins by 90-day return and hold the top 3 with a positive 90-day return, equal weight. Eligible means at least 200 days of history and prior-day volume × close of at least $10M. Hold only while BTC is above its 200-day SMA; otherwise cash. Only membership changes trade (no rebalancing trims). Known bias: today's list applied to the past. |
+| T4 BTC trend, volatility target | T1, with the held fraction = min(1, 50% ÷ annualized 30-day realized volatility of BTC). The fraction is adjusted only when it differs from the current one by more than 20 percentage points. |
+
+**Periods.** The common evaluation period starts on the first day with 200 days of BTC history in the stored data and ends yesterday. It is also split into three equal sub-periods.
+
+**Pass rules.** All must hold, at taker fees:
+1. Over the full period, the return-to-drawdown ratio (CAGR ÷ maximum drawdown) is higher than BTC buy-and-hold's.
+2. In every sub-period, the maximum drawdown is lower than BTC buy-and-hold's.
+3. The full-period net return is positive, and the net return is positive in at least two of the three sub-periods.
+
+A candidate that passes is a forward-paper candidate, not a live strategy. If none passes, that is the result.
+
+### Redesign results (computed after the pre-registration above)
+
+Full period 2021-11-22 → 2026-10-26, split into three sub-periods:
+- p1: 2021-11-22 → 2023-07-14, mostly bear.
+- p2: 2023-07-15 → 2025-03-05, bull.
+- p3: 2025-03-06 → 2026-10-26, choppy and falling.
+
+Results at taker fees (0.90% per side plus 10 bp slippage). Return / max drawdown, in %:
+
+| Strategy | Full | p1 | p2 | p3 | Full CAGR ÷ max DD | Trades | Fees |
+|---|---|---|---|---|---|---|---|
+| BTC buy-and-hold | +35.0 / 73.3 | −48.8 / 73.3 | +195.8 / 26.2 | −12.6 / 53.1 | 0.09 | 1 | $3.57 |
+| T1 BTC trend | +73.6 / 37.6 | +4.8 / 30.1 | +95.7 / 31.9 | −17.0 / 26.3 | 0.31 | 39 | $198.44 |
+| T2 BTC+ETH trend | +52.9 / 33.8 | +2.7 / 29.7 | +60.4 / 30.1 | −6.6 / 34.9 | 0.27 | 68 | $161.05 |
+| T3 momentum top 3 | +59.7 / 48.2 | −24.4 / 42.0 | +179.7 / 44.2 | −17.1 / 35.0 | 0.21 | 265 | $377.50 |
+| **T4 BTC trend, volatility target** | **+85.1 / 34.9** | **+6.0 / 25.6** | **+98.2 / 30.8** | **−11.7 / 23.3** | **0.38** | 45 | $190.96 |
+
+**Every candidate fails the pre-registered rules.** All four pass rule 1 (better return-to-drawdown than BTC), and T1, T2 and T4 pass rule 3 (positive returns). All four fail rule 2 because in the p2 bull period their drawdowns (about 30–44%) exceeded BTC's 26.2%. The pre-registered verdict is "none passes"; the rules are not changed after the fact.
+
+**Maker-fee sensitivity** (0.50% per side), full period:
+
+| Strategy | Return % | Max DD % | Return ÷ drawdown |
+|---|---|---|---|
+| T4 | +113.4 | 32.2 | 0.52 |
+| T1 | +103.0 | 35.0 | 0.44 |
+| T3 | +112.8 | 47.0 | 0.35 |
+| BTC buy-and-hold | +35.6 | 73.3 | 0.09 |
+
+Same pass/fail outcome.
+
+**Observations (not pass claims).**
+- T4 roughly halved BTC's worst drawdown in every falling period and more than doubled its full-period return.
+- In exchange, it captured about half of the 2023–25 bull run, with a somewhat deeper drawdown than BTC there.
+- Fees consumed about $191 on a $400 sleeve over five years, so fee level remains material.
+- T3 is the most fee-intensive and is biased by using today's list in the past.
+
+The research script is the scratch tool `research.py`, run on an export of stored settled candles. No application, policy, ledger or schedule change was made.
+
+## Strategy redesign round 2 — pre-registration (recorded 2026-10-27 01:13 UTC, before any round-2 result was computed)
+
+The owner asked for a second round in addition to building T4. This is the last planned round: each extra round raises the chance of selecting a candidate that only fit this history by luck, and eight candidates have now been tried. The data, costs, periods and pass rules are identical to round 1 and are not changed. The candidates are classic trend designs with standard textbook settings, not tuned to round-1 results:
+
+| ID | Rule |
+|---|---|
+| R1 Time-series momentum | Hold 100% BTC while its 365-day return (prior close vs the close 365 days earlier) is positive; otherwise cash |
+| R2 Moving-average cross | Hold 100% BTC while its 50-day SMA is above its 200-day SMA; otherwise cash |
+| R3 Donchian channel | Enter BTC when the prior close is the highest close of the last 55 days; exit when the prior close is the lowest of the last 20 days; otherwise keep the current state |
+| R4 BTC+ETH volatility-targeted trend | Two independent 50% sleeves, each applying T4's rule (200-day SMA filter, 50% volatility target, 20-point adjustment band) to its own coin |
+
+The full table of all eight candidates will be reported, including failures.
+
+### Round 2 results
+
+Same data, costs and periods as round 1 (taker fees). Return / max drawdown, in %:
+
+| Strategy | Full | p1 | p2 | p3 | Full CAGR ÷ max DD | Trades | Fees |
+|---|---|---|---|---|---|---|---|
+| BTC buy-and-hold | +35.0 / 73.3 | −48.8 / 73.3 | +195.8 / 26.2 | −12.6 / 53.1 | 0.09 | 1 | $3.57 |
+| **R1 365-day momentum** | **+239.6 / 28.7** | **+15.8 / 4.1** | **+195.8 / 26.2** | **−2.8 / 28.7** | **0.98** | **4** | **$40.80** |
+| R2 50/200 cross | +25.7 / 41.8 | −7.0 / 37.7 | +85.5 / 26.1 | −28.6 / 31.3 | 0.11 | 11 | $44.00 |
+| R3 Donchian 55/20 | +31.8 / 43.4 | −14.5 / 25.0 | +118.7 / 21.2 | −27.7 / 38.8 | 0.13 | 38 | $182.51 |
+| R4 BTC+ETH volatility target | +65.8 / 29.2 | +6.8 / 23.5 | +61.8 / 29.2 | −2.1 / 29.6 | 0.37 | 88 | $158.77 |
+
+**Every round-2 candidate also fails.**
+- **R2 and R3** pass rule 2 but fail rule 3: negative in two thirds.
+- **R1 and R4** fail rule 2. R1 fails by an exact tie: it held BTC for the whole p2 bull period, so its drawdown equals BTC's 26.2%. A rule requiring a strictly lower drawdown cannot be met by any strategy that is fully invested for a whole period.
+- **Verdict:** under the pre-registered rules, none of the eight candidates passes.
+
+**Observations (not pass claims).**
+- R1 has the best full-period result of all eight: about seven times BTC's return-to-drawdown ratio, a worst loss of 4% in the crash third, and low fees.
+- R1's evidence rests on only 4 trades in five years. Its result depends on a handful of timing decisions, so it is the most exposed to luck.
+- T4 makes ten times as many decisions, with a smaller edge.
+- Both should be judged on forward paper, not on this history.
+
+## Regime playbooks in the application (source, pending deployment)
+
+At the owner's request, T4 was built into the application, together with R1, the strongest round-2 result. They share one playbook family; the applied policy selects the version. No new migration.
+
+**Rules (`RegimeRules`, `regime_rules_v1`).**
+- Pure and exact-decimal.
+- Two signals: `sma_above` (prior close above its N-day average) and `return_positive` (prior close above the close N days earlier).
+- An optional volatility target: held fraction = min(1, target ÷ annualized volatility of 30 daily log returns). Log returns use a 40-digit atanh series; the square root comes from brick/math. No binary floats are used.
+- `rebalance()` enters from flat, exits to flat, and otherwise trades only outside the band.
+- `needed()` states the history required: N closes for an average, N + 1 for a return, window + 1 for volatility.
+
+**Playbook versions (`CryptoParameters::named`).**
+
+| Version | Research ID | Rule |
+|---|---|---|
+| `crypto_regime_trend_v1` | T4 | BTC, 200-day average, 50% volatility target, 20-point band |
+| `crypto_regime_momentum_v1` | R1 | BTC, 365-day return, fully held, 100-point band (enter and exit only) |
+
+The swing version and its hash are unchanged.
+
+**Policy contract `crypto_paper_policy_v4`.**
+- `mcp:crypto-policy … --playbook=<version>` records the playbook. Contract-v3 swing policies remain valid.
+- Regime policies carry `REGIME_OWNER`: $400, a **100% position cap and one position** (the swing limits were 25% and three), and the same 5% daily loss pause.
+- `CryptoPolicies::compatible()` requires the contract, fingerprint, the code's playbook definition, matching sleeve limits and execution settings.
+
+**Live 24/7 cycle.** Regime policies evaluate only the playbook product plus any holdings:
+- The target comes from yesterday's settled close. The current fraction is the bid-marked holding ÷ marked equity.
+- One rebalance per UTC day, retried if an order expires unfilled.
+- Buys pass liquidity, fee, valuation, daily-loss-pause and open-order gates.
+- An exit to cash is never held back by those gates or by the once-per-day limit.
+- A holding outside the playbook, such as a leftover swing position, is sold.
+- Sizing moves the marked value to target × equity, capped by the position limit and unreserved cash, reserving the greater fee rate. Quantities round down to the venue increment.
+- Signals are immutable `regime_rules_v1` evidence with no symbol profile.
+
+**Replay.**
+- `StrategyReplay::regime()` replays the same rules at each day's open with venue ticks and increments.
+- `mcp:crypto-replay … --playbook=<version>` replays any playbook for research without changing the applied policy.
+- Regime replay variants may change only fees.
+
+**Validation against the research.** The application replay was run on the same exported candles as the research script:
+- **First run:** it diverged in the first trend-design sub-period. The cause was an off-by-one in the application: it required 201 closes for a 200-day average, which skipped the 2021-11-22 entry.
+- **Fix:** `RegimeRules::needed()` and T4's `min_history_days` = 200.
+- **After the fix:** every period of both playbooks at both fee levels matches.
+
+| Playbook | Full return % | Max drawdown % | Executions | Fees |
+|---|---|---|---|---|
+| T4 at taker fees | +85.13 | 34.93 | 45 | $190.96 |
+| R1 at taker fees | +239.60 | 28.69 | 4 | $40.80 |
+
+The one visible difference is T4's p1 drawdown, 25.87% against 25.6% in the research, from rounding to the $0.01 price tick.
+
+**Verification.**
+
+| Suite | Tests | Passed | Skipped | Assertions |
+|---|---|---|---|---|
+| SQLite | 858 | 746 | 112 PostgreSQL-only | 5,212 |
+| PostgreSQL | 858 | 857 | 1 existing environment skip | 6,126 |
+
+Pint and `git diff --check` passed. New tests cover:
+- the exact volatility against a 50-digit independent reference (17 digits agree)
+- the history needs of each signal, band behavior and enter/exit-only momentum
+- live entry to target, holding inside the band and on the same day, and an exit to cash on a trend break
+- selling a holding outside the playbook, and the loss pause blocking buys but not sells
+- playbook validation and compatibility of contract-v3 swing policies
+- a research replay of another playbook leaving the applied policy unchanged, and the fee-only variant rule
+
+**Owner decision before activation.** Applying either regime policy changes the paper sleeve's limits from a 25% cap and three positions to a 100% cap and one position. It ends observation of the swing playbook, which its replays already disqualified. On the dashboard, regime playbooks are observed by days rather than a 30-trade target, since they trade rarely.

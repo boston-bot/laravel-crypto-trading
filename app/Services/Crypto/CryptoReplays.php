@@ -9,6 +9,7 @@ use App\Models\PaperTrading\Portfolio;
 use App\Models\PaperTrading\StrategyReplayRun;
 use App\Models\User;
 use App\Services\PaperTrading\ProfileCalculator;
+use App\Services\PaperTrading\RegimeRules;
 use App\Services\PaperTrading\ResearchVariants;
 use App\Services\PaperTrading\SignalRules;
 use App\Services\PaperTrading\StrategyReplay;
@@ -36,22 +37,24 @@ final class CryptoReplays
     public function __construct(private StrategyReplay $engine, private TradingCosts $costs) {}
 
     /** @param list<array{id: string, parameters?: array, risk?: array, costs?: array{maker_rate: string, taker_rate: string}}> $variants */
-    public function run(int $actor, int $portfolioId, string $requestId, ?string $start = null, array $variants = []): StrategyReplayRun
+    public function run(int $actor, int $portfolioId, string $requestId, ?string $start = null, array $variants = [], ?string $playbook = null): StrategyReplayRun
     {
         Validator::make(['request' => $requestId, 'start' => $start], ['request' => ['required', 'uuid'], 'start' => ['nullable', 'date_format:Y-m-d']])->validate();
-        $variants = $this->variants($variants);
         [$portfolio, $policy] = $this->authorize($actor, $portfolioId);
+        // A research replay may name another playbook; it never changes the applied policy.
+        $parameters = $playbook === null ? $policy->payload['parameters'] : CryptoParameters::named($playbook);
+        $regime = CryptoParameters::regime($parameters);
+        $variants = $this->variants($variants, $regime);
         if ($repeat = $this->repeat($portfolio, $requestId)) {
             return $repeat;
         }
         $now = CarbonImmutable::now();
         $today = $now->utc()->startOfDay();
-        $parameters = $policy->payload['parameters'];
         $p = $parameters['values'];
         $benchmark = $p['benchmark_symbol'];
         $products = config('crypto.coinbase_products');
         abort_unless(is_array($products) && count($products) > 0 && count($products) <= 25, 422, 'Configure 1–25 collection products.');
-        $products = array_values(array_unique([...$products, $benchmark]));
+        $products = $regime ? [$p['product']] : array_values(array_unique([...$products, $benchmark]));
         sort($products);
         $bars = $instruments = $excluded = $fingerprints = $costs = [];
         foreach ($products as $product) {
@@ -84,11 +87,13 @@ final class CryptoReplays
                 unset($bars[$product], $instruments[$product], $fingerprints[$product]);
             }
         }
-        $owner = $policy->payload['owner'];
-        $settings = ['order_mode' => 'crypto_limit', 'instruments' => $instruments, 'profile_window' => $p['min_history_days'],
-            'min_daily_quote_volume' => $p['min_quote_volume_24h'], 'slippage_bps' => $p['slippage_bps'], 'cost_schedule' => $cost,
-            'risk_per_trade_pct' => $owner['risk_per_trade_pct'], 'max_position_pct' => $owner['max_position_pct'], 'max_open_positions' => $owner['max_open_positions']];
-        $input = ['adapter' => self::ADAPTER_VERSION, 'replay' => StrategyReplay::VERSION, 'profile' => ProfileCalculator::VERSION, 'rules' => SignalRules::VERSION,
+        $owner = CryptoPolicies::owner($parameters['version']);
+        $settings = $regime ? ['order_mode' => 'crypto_regime', 'instrument' => ($instruments[$p['product']] ?? []) + ['product' => $p['product']],
+            'slippage_bps' => $p['slippage_bps'], 'cost_schedule' => $cost, 'max_position_pct' => $owner['max_position_pct']]
+            : ['order_mode' => 'crypto_limit', 'instruments' => $instruments, 'profile_window' => $p['min_history_days'],
+                'min_daily_quote_volume' => $p['min_quote_volume_24h'], 'slippage_bps' => $p['slippage_bps'], 'cost_schedule' => $cost,
+                'risk_per_trade_pct' => $owner['risk_per_trade_pct'], 'max_position_pct' => $owner['max_position_pct'], 'max_open_positions' => $owner['max_open_positions']];
+        $input = ['adapter' => self::ADAPTER_VERSION, 'replay' => $regime ? StrategyReplay::REGIME_VERSION : StrategyReplay::VERSION, 'playbook' => $parameters['version'], 'profile' => ProfileCalculator::VERSION, 'rules' => SignalRules::VERSION,
             'parameters' => $parameters['hash'], 'policy_id' => $policy->id, 'policy_hash' => $policy->fingerprint, 'settings' => $settings,
             'equity' => $owner['initial_cash'], 'bars' => $fingerprints, 'as_of' => $today->toDateString(), 'start' => $start, 'variants' => $variants];
         $reason = match (true) {
@@ -98,7 +103,8 @@ final class CryptoReplays
         };
         $result = null;
         if ($reason === null) {
-            $result = $this->engine->run($bars, $bars[$benchmark], $p, $settings, $owner['initial_cash'], $start, $today->subDay()->toDateString());
+            $result = $regime ? $this->engine->regime($bars[$p['product']], $p, $settings, $owner['initial_cash'], $start, $today->subDay()->toDateString())
+                : $this->engine->run($bars, $bars[$benchmark], $p, $settings, $owner['initial_cash'], $start, $today->subDay()->toDateString());
             $reason = $result['sessions'] > 0 ? 'retrospective_replay_recorded' : 'no_days_with_a_full_profile_window';
         }
         $complete = $reason === 'retrospective_replay_recorded';
@@ -107,7 +113,8 @@ final class CryptoReplays
             // Two independent halves, each from the starting cash: a change should help in both, not only in aggregate.
             $mid = CarbonImmutable::parse($result['start'])->addDays(intdiv((int) CarbonImmutable::parse($result['start'])->diffInDays(CarbonImmutable::parse($result['end'])), 2));
             $windows = ['early' => [$result['start'], $mid->toDateString()], 'late' => [$mid->addDay()->toDateString(), $result['end']]];
-            $replay = fn (array $values, array $with, ?string $from, ?string $to) => $this->engine->run($bars, $bars[$benchmark], $values, $with, $owner['initial_cash'], $from, $to);
+            $replay = fn (array $values, array $with, ?string $from, ?string $to) => $regime ? $this->engine->regime($bars[$p['product']], $values, $with, $owner['initial_cash'], $from, $to)
+                : $this->engine->run($bars, $bars[$benchmark], $values, $with, $owner['initial_cash'], $from, $to);
             $compare = function (array $values, array $with, array $full) use ($replay, $windows) {
                 $halves = [];
                 foreach ($windows as $name => [$from, $to]) {
@@ -126,15 +133,15 @@ final class CryptoReplays
             }
         }
 
-        return DB::transaction(function () use ($actor, $portfolioId, $requestId, $parameters, $complete, $reason, $result, $input, $products, $excluded, $comparison) {
+        return DB::transaction(function () use ($actor, $portfolioId, $requestId, $parameters, $complete, $reason, $result, $input, $products, $excluded, $comparison, $regime) {
             [$portfolio] = $this->authorize($actor, $portfolioId, true);
             if ($repeat = $this->repeat($portfolio, $requestId)) {
                 return $repeat;
             }
 
             return StrategyReplayRun::create(['mcp_connection_id' => null, 'paper_portfolio_id' => $portfolio->id, 'asset_class' => 'crypto', 'venue' => 'coinbase',
-                'scope' => $portfolio->scope, 'request_id' => $requestId, 'actor_id' => $actor, 'replay_version' => StrategyReplay::VERSION,
-                'profile_version' => ProfileCalculator::VERSION, 'rule_version' => SignalRules::VERSION, 'parameters_hash' => $parameters['hash'],
+                'scope' => $portfolio->scope, 'request_id' => $requestId, 'actor_id' => $actor, 'replay_version' => $regime ? StrategyReplay::REGIME_VERSION : StrategyReplay::VERSION,
+                'profile_version' => $regime ? 'not_applicable' : ProfileCalculator::VERSION, 'rule_version' => $regime ? RegimeRules::VERSION : SignalRules::VERSION, 'parameters_hash' => $parameters['hash'],
                 'status' => $complete ? 'complete' : 'incomplete', 'reason' => $reason, 'start_date' => $complete ? $result['start'] : null,
                 'end_date' => $complete ? $result['end'] : null, 'input_fingerprint' => hash('sha256', json_encode($input, JSON_THROW_ON_ERROR)),
                 'payload' => ['label' => 'retrospective_daily_replay_not_forward_results', 'input' => $input, 'symbols' => $products, 'excluded' => $excluded,
@@ -159,12 +166,14 @@ final class CryptoReplays
         ksort($reasons);
 
         return ['start' => $result['start'], 'end' => $result['end'], 'days' => $result['sessions'], 'final_equity' => $result['final_equity'],
-            'stats' => $result['stats'], 'benchmarks' => $result['benchmarks'], 'counts' => $result['counts'], 'fees' => (string) $fees->rounded(2, RoundingMode::HALF_EVEN),
+            'stats' => $result['stats'], 'benchmarks' => $result['benchmarks'], 'counts' => $result['counts'],
+            // Regime results report the fees actually charged, including rebalances inside an episode.
+            'fees' => $result['fees_paid'] ?? (string) $fees->rounded(2, RoundingMode::HALF_EVEN),
             'exit_reasons' => array_map(fn ($r) => ['trades' => $r['trades'], 'net' => (string) $r['net']->rounded(2, RoundingMode::HALF_EVEN)], $reasons)];
     }
 
     /** Research-only variants within the reviewed bounds; they never change the policy, ledger or forward cycle. */
-    private function variants(array $variants): array
+    private function variants(array $variants, bool $regime = false): array
     {
         abort_unless(array_is_list($variants) && count($variants) <= self::MAX_VARIANTS, 422, 'Use at most '.self::MAX_VARIANTS.' variants.');
         $seen = [hash('sha256', json_encode([[], [], null], JSON_THROW_ON_ERROR)) => 'baseline'];
@@ -173,6 +182,8 @@ final class CryptoReplays
             abort_unless(is_array($variant) && ! array_diff(array_keys($variant), ['id', 'parameters', 'risk', 'costs']) && is_string($variant['id'] ?? null) &&
                 preg_match('/^[a-z][a-z0-9_]{0,31}$/D', $variant['id']) && $variant['id'] !== 'baseline' && is_array($variant['parameters'] ?? []) &&
                 is_array($variant['risk'] ?? []) && (! isset($variant['costs']) || is_array($variant['costs'])), 422, 'Malformed replay variant.');
+            // Swing research keys do not apply to a regime playbook; its variants may only change fees.
+            abort_if($regime && (($variant['parameters'] ?? []) !== [] || ($variant['risk'] ?? []) !== []), 422, 'Regime replay variants may only change fees.');
             $parameters = ResearchVariants::parameters($variant['parameters'] ?? []);
             ksort($parameters);
             $risk = ResearchVariants::risk($variant['risk'] ?? []);
@@ -227,7 +238,7 @@ final class CryptoReplays
         $portfolio = Portfolio::whereKey($portfolioId)->where(['actor_id' => $actor, 'asset_class' => 'crypto', 'venue' => 'coinbase'])->whereNull('mcp_connection_id')
             ->when($lock, fn ($q) => $q->lockForUpdate())->firstOrFail();
         $policy = InstrumentPolicy::where('paper_portfolio_id', $portfolio->id)->latest('version')->firstOrFail();
-        abort_unless(($policy->payload['version'] ?? null) === CryptoPolicies::VERSION && $policy->payload['parameters'] === CryptoParameters::current(), 409, 'Policy version is unavailable or incompatible.');
+        abort_unless(CryptoPolicies::compatible($policy), 409, 'Policy version is unavailable or incompatible.');
 
         return [$portfolio, $policy];
     }

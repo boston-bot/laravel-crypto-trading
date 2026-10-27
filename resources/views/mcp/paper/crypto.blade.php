@@ -32,7 +32,7 @@
         <div class="paper-two-col">
             <x-panel title="Observation progress" subtitle="Judge results only after both targets" icon="clock">
                 <div class="paper-activity">
-                    <div><strong>{{ $progress['closed_trades'] }} / {{ $progress['target_trades'] }}</strong><span>closed trades</span></div>
+                    <div><strong>{{ $progress['closed_trades'] }}{{ $progress['target_trades'] === null ? '' : ' / '.$progress['target_trades'] }}</strong><span>closed trades</span></div>
                     <div><strong>{{ $progress['days'] }} / {{ $progress['target_days'] }}</strong><span>days observed</span></div>
                     <div><strong>{{ $stats['hit_rate_pct'] === null ? '—' : $stats['hit_rate_pct'].'%' }}</strong><span>hit rate</span></div>
                     <div><strong>{{ $stats['profit_factor'] ?? '—' }}</strong><span>profit factor</span></div>

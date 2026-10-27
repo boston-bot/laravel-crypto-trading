@@ -30,6 +30,8 @@ final class StrategyReplay
     // v3: research order modes and rule switches; the defaults reproduce v2.
     public const VERSION = 'daily_replay_v3';
 
+    public const REGIME_VERSION = 'regime_daily_replay_v1';
+
     /** Bars per profile, matching the live 400-calendar-day history window (about 275 sessions). */
     public const LIVE_WINDOW = 275;
 
@@ -241,6 +243,104 @@ final class StrategyReplay
                     ...($scale === 0 ? ['whole_share_limit_orders_per_reviewed_broker_contract']
                         : ['fractional_market_orders_regular_hours_only', 'market_order_slippage_assumed_not_measured', 'symbol_fractional_eligibility_assumed']),
                     'intraday_exit_cash_and_capacity_unavailable_until_next_session', 'intraday_sizing_uses_opening_marks_and_new_entry_fills']];
+    }
+
+    /**
+     * Regime replay for one product: each day's target comes from completed days only and executes at that day's open,
+     * at the adverse open plus slippage rounded to the price increment, with venue base increments and the reserved fee.
+     * Days before the target is computable hold cash. Pure: no network, storage or model.
+     */
+    public function regime(array $series, array $p, array $settings, string $equity, ?string $startDate = null, ?string $endDate = null): array
+    {
+        $rules = app(RegimeRules::class);
+        $i = $settings['instrument'];
+        $cost = $settings['cost_schedule'];
+        $slip = $this->bps($settings['slippage_bps']);
+        $cap = Decimal::from($settings['max_position_pct'])->dividedBy(Decimal::from('100'), 18);
+        $maker = Decimal::from($cost['maker_rate']);
+        $taker = Decimal::from($cost['taker_rate']);
+        $rate = $maker->compareTo($taker) > 0 ? $maker : $taker;
+        $window = RegimeRules::needed($p);
+        $zero = Decimal::from('0');
+        $cash = Decimal::from($equity);
+        $quantity = $zero;
+        $fees = $zero;
+        $executions = 0;
+        $trades = $curve = [];
+        $episode = null;
+        $peak = Decimal::from($equity);
+        $drawdown = $zero;
+        $exposed = 0;
+        $first = $startDate === null ? $window : 1;
+        for ($d = $first; $d < count($series); $d++) {
+            $date = $series[$d][0];
+            if (($startDate !== null && $date < $startDate) || ($endDate !== null && $date > $endDate)) {
+                continue;
+            }
+            $open = Decimal::from($series[$d][1]);
+            $target = $d >= $window ? $rules->target(array_slice($series, $d - $window, $window), $p) : null;
+            if ($target !== null && $target['status'] === 'complete') {
+                $value = $cash->plus($quantity->multipliedBy($open));
+                $current = $quantity->multipliedBy($open)->dividedBy($value, 18);
+                $side = RegimeRules::rebalance((string) $current, $target['fraction'], $p['rebalance_band_pct']);
+                $fraction = Decimal::from($target['fraction']);
+                $fraction = $fraction->compareTo($cap) > 0 ? $cap : $fraction;
+                if ($side === 'BUY') {
+                    $price = InstrumentSizing::up($open->multipliedBy(Decimal::from('1')->plus($slip)), $i['price_increment']);
+                    $spend = $fraction->multipliedBy($value)->minus($quantity->multipliedBy($open));
+                    $spend = $spend->compareTo($cash) > 0 ? $cash : $spend;
+                    $buy = InstrumentSizing::down($spend->dividedBy($price->multipliedBy(Decimal::from('1')->plus($rate)), 18, RoundingMode::DOWN), $i['base_increment']);
+                    if ($buy->compareTo(Decimal::from($i['base_min_size'])) >= 0 && $buy->multipliedBy($price)->compareTo(Decimal::from($i['quote_min_size'])) >= 0) {
+                        $fee = $this->costs->fee($cost, 'BUY', $buy, $price);
+                        $cash = $cash->minus($buy->multipliedBy($price))->minus($fee);
+                        $quantity = $quantity->plus($buy);
+                        $fees = $fees->plus($fee);
+                        $executions++;
+                        $episode ??= ['entry_date' => $date, 'entry_price' => (string) $price, 'cost' => $zero, 'proceeds' => $zero, 'bought' => $zero];
+                        $episode['cost'] = $episode['cost']->plus($buy->multipliedBy($price))->plus($fee);
+                        $episode['bought'] = $episode['bought']->plus($buy);
+                    }
+                } elseif ($side === 'SELL' && $quantity->compareTo($zero) > 0) {
+                    $price = InstrumentSizing::down($open->multipliedBy(Decimal::from('1')->minus($slip)), $i['price_increment']);
+                    $sell = $fraction->compareTo($zero) === 0 ? $quantity
+                        : InstrumentSizing::down($quantity->multipliedBy($current->minus($fraction))->dividedBy($current, 18, RoundingMode::DOWN), $i['base_increment']);
+                    if ($sell->compareTo($zero) > 0) {
+                        $fee = $this->costs->fee($cost, 'SELL', $sell, $price);
+                        $cash = $cash->plus($sell->multipliedBy($price))->minus($fee);
+                        $quantity = $quantity->minus($sell);
+                        $fees = $fees->plus($fee);
+                        $executions++;
+                        $episode['proceeds'] = $episode['proceeds']->plus($sell->multipliedBy($price))->minus($fee);
+                        if ($quantity->compareTo($zero) === 0) {
+                            $net = $episode['proceeds']->minus($episode['cost']);
+                            $trades[] = ['symbol' => $i['product'], 'setup' => 'regime', 'entry_date' => $episode['entry_date'], 'entry_price' => $episode['entry_price'],
+                                'exit_date' => $date, 'exit_price' => (string) $price, 'quantity' => (string) $episode['bought'], 'reason' => 'regime_exit',
+                                'sessions_held' => (int) (new \DateTimeImmutable($episode['entry_date']))->diff(new \DateTimeImmutable($date))->days,
+                                'net' => (string) $net->rounded(2, RoundingMode::HALF_EVEN), 'return_pct' => (string) $net->multipliedBy(Decimal::from('100'))->dividedBy($episode['cost'], 4)];
+                            $episode = null;
+                        }
+                    }
+                }
+            }
+            $value = $cash->plus($quantity->multipliedBy(Decimal::from($series[$d][4])));
+            $exposed += $quantity->compareTo($zero) > 0 ? 1 : 0;
+            $peak = $value->compareTo($peak) > 0 ? $value : $peak;
+            $fall = $peak->minus($value)->multipliedBy(Decimal::from('100'))->dividedBy($peak, 4);
+            $drawdown = $fall->compareTo($drawdown) > 0 ? $fall : $drawdown;
+            $curve[] = [$date, (string) $value->rounded(2, RoundingMode::HALF_EVEN)];
+        }
+
+        return ['version' => self::REGIME_VERSION, 'start' => $curve[0][0] ?? null, 'end' => $curve[array_key_last($curve)][0] ?? null, 'sessions' => count($curve),
+            'initial_equity' => $equity, 'final_equity' => $curve[array_key_last($curve)][1] ?? $equity,
+            'stats' => $this->stats($trades, $curve, $equity, $drawdown, $exposed), 'counts' => ['executions' => $executions],
+            'fees_paid' => (string) $fees->rounded(2, RoundingMode::HALF_EVEN),
+            'open_positions' => $quantity->compareTo($zero) > 0 ? [$i['product'] => ['quantity' => (string) $quantity, 'entry_price' => $episode['entry_price'], 'entry_date' => $episode['entry_date'], 'setup' => 'regime']] : [],
+            'benchmarks' => $this->benchmarks([$i['product'] => $series], $series, $curve[0][0] ?? null, $curve[array_key_last($curve)][0] ?? null),
+            'trades' => $trades, 'equity_curve' => $curve,
+            'execution' => ['order_mode' => 'crypto_regime', 'slippage_bps' => $settings['slippage_bps']],
+            'risk' => ['max_position_pct' => $settings['max_position_pct']],
+            'limitations' => ['daily_open_execution_approximates_first_settled_cycle', 'current_venue_increments_and_fee_tier_applied_to_past',
+                'no_spread_quote_age_or_book_liquidity', 'daily_loss_pause_not_modeled', 'single_product']];
     }
 
     private function mark(Decimal $cash, array $positions, array $closes): Decimal

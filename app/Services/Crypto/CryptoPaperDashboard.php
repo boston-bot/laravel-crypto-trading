@@ -67,7 +67,9 @@ final class CryptoPaperDashboard
                 'signals' => StrategySignal::where('cycle_id', $latest->id)->orderBy('symbol')->get(['symbol', 'status', 'side', 'reason'])->all()],
             'activity' => $this->activity($portfolio, $asOf), 'positions' => $positions, 'orders' => $this->orders($orders, $fills, $scales),
             'trades' => array_reverse($trades), 'stats' => $this->stats($trades), 'curve' => $curve,
-            'progress' => ['closed_trades' => count($trades), 'target_trades' => self::TARGET_TRADES, 'days' => (int) $since->diffInDays($asOf->utc()->startOfDay()), 'target_days' => self::TARGET_DAYS],
+            // Regime playbooks trade a few times a year; a closed-trade count is not their observation target.
+            'progress' => ['closed_trades' => count($trades), 'target_trades' => CryptoParameters::regime($policy->payload['parameters']) ? null : self::TARGET_TRADES,
+                'days' => (int) $since->diffInDays($asOf->utc()->startOfDay()), 'target_days' => self::TARGET_DAYS],
             'benchmarks' => $this->benchmarks($policy, $since, $asOf, $p),
             'fees_observation' => CryptoFeeObservation::where(['venue' => 'coinbase', 'actor_id' => $actor])->where('status', 'complete')->latest('retrieved_at')->first(),
             'replay' => StrategyReplayRun::where(['paper_portfolio_id' => $portfolio->id, 'asset_class' => 'crypto'])->where('status', 'complete')->latest('id')->first()];

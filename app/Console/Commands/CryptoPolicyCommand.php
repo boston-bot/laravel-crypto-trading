@@ -8,7 +8,7 @@ use Throwable;
 
 class CryptoPolicyCommand extends Command
 {
-    protected $signature = 'mcp:crypto-policy {--actor= : Configured local operator ID} {--request= : Stable UUID for this policy request} {--base=0 : Expected current policy version} {--costs= : Local JSON array of verified product-specific fee observations} {--fee-review= : Local JSON object with the owner review of one account fee tier}';
+    protected $signature = 'mcp:crypto-policy {--actor= : Configured local operator ID} {--request= : Stable UUID for this policy request} {--base=0 : Expected current policy version} {--costs= : Local JSON array of verified product-specific fee observations} {--fee-review= : Local JSON object with the owner review of one account fee tier} {--playbook=crypto_swing_research_v1 : crypto_swing_research_v1, crypto_regime_trend_v1 or crypto_regime_momentum_v1}';
 
     protected $description = 'Explicitly create/version the separate $400 crypto virtual sleeve; no collection, order or flag change';
 
@@ -34,8 +34,9 @@ class CryptoPolicyCommand extends Command
             if ($review !== null && (! is_array($review) || array_is_list($review))) {
                 throw new \InvalidArgumentException;
             }
-            $policy = $policies->apply((int) $this->option('actor'), (string) $this->option('request'), (int) $this->option('base'), $costs, $review);
+            $policy = $policies->apply((int) $this->option('actor'), (string) $this->option('request'), (int) $this->option('base'), $costs, $review, (string) $this->option('playbook'));
             $this->line(json_encode(['portfolio_id' => $policy->paper_portfolio_id, 'policy_id' => $policy->id, 'version' => $policy->version,
+                'playbook' => $policy->payload['parameters']['version'], 'owner_limits' => $policy->payload['owner'],
                 'mode' => 'paper', 'broker_executable' => false], JSON_THROW_ON_ERROR));
 
             return self::SUCCESS;

@@ -15,8 +15,10 @@ use App\Services\PaperTrading\InstrumentSizing;
 use App\Services\PaperTrading\PaperFillPrice;
 use App\Services\PaperTrading\PaperLedger;
 use App\Services\PaperTrading\PortfolioEntryLimits;
+use App\Services\PaperTrading\RegimeRules;
 use App\Services\PaperTrading\RiskSizer;
 use App\Support\Mcp\Decimal;
+use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
 use Ramsey\Uuid\Uuid;
 
@@ -80,27 +82,42 @@ final class CryptoPaperOrders
         $assumptions = ['mode' => 'crypto_displayed_book_v1', 'slippage_bps' => $p['slippage_bps'], 'quote_max_age_seconds' => $p['quote_max_age_seconds'],
             'cost_schedule' => $cost, 'base_increment' => $product['base_increment'], 'base_min_size' => $product['base_min_size'],
             'quote_min_size' => $product['quote_min_size'], 'price_increment' => $product['price_increment']];
+        $regime = $signal->rule_version === RegimeRules::VERSION;
         if ($signal->side === 'BUY') {
             $held = $this->valuation->held($portfolio);
             $pending = SimulationOrder::where('paper_portfolio_id', $portfolio->id)->where('side', 'BUY')->whereIn('status', self::OPEN)->whereNotIn('symbol', array_keys($held))->count();
             $value = $this->valuation->value($portfolio, $cutoff, $p['quote_max_age_seconds']);
             $baseline = $this->valuation->baseline($portfolio, $cutoff);
-            $pause = PortfolioEntryLimits::reason($value['equity'], $baseline['equity'] ?? null, count($held) + $pending, $policy->payload['owner'], $this->valuation->latched($portfolio, $cutoff));
+            // Adding to the regime product resizes an existing position rather than opening another.
+            $occupied = count($held) + $pending - ($regime && isset($held[$signal->symbol]) ? 1 : 0);
+            $pause = PortfolioEntryLimits::reason($value['equity'], $baseline['equity'] ?? null, $occupied, $policy->payload['owner'], $this->valuation->latched($portfolio, $cutoff));
             if ($pause !== null) {
                 return $record('no_order', $pause, facts: ['valuation' => $value, 'baseline' => $baseline]);
             }
             $bound = InstrumentSizing::up(PaperFillPrice::calculate('BUY', $quote['ask'], $p['slippage_bps'], 18), $product['price_increment']);
-            $stop = $bound->minus(Decimal::from($signal->payload['result']['facts']['entry_atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
             $available = Decimal::from($portfolio->cash)->minus(Decimal::from($portfolio->reserved_cash));
-            $size = app(RiskSizer::class)->calculate(Decimal::from($value['equity']), $available, $bound, $stop,
-                $policy->payload['owner'] + ['cost_schedule' => $cost, 'slippage_bps' => $p['slippage_bps']], instrument: $product + ['asset_class' => 'crypto']);
-            $facts = ['valuation' => $value, 'baseline' => $baseline, 'sizing' => $size, 'price_bound' => (string) $bound, 'initial_stop' => (string) $stop];
+            if ($regime) {
+                $size = $this->regimeSize($signal, $value, $available, $bound, $cost, $product, $policy->payload['owner']);
+                $facts = ['valuation' => $value, 'baseline' => $baseline, 'sizing' => $size, 'price_bound' => (string) $bound];
+            } else {
+                $stop = $bound->minus(Decimal::from($signal->payload['result']['facts']['entry_atr'])->multipliedBy(Decimal::from($p['initial_stop_atr'])));
+                $size = app(RiskSizer::class)->calculate(Decimal::from($value['equity']), $available, $bound, $stop,
+                    $policy->payload['owner'] + ['cost_schedule' => $cost, 'slippage_bps' => $p['slippage_bps']], instrument: $product + ['asset_class' => 'crypto']);
+                $facts = ['valuation' => $value, 'baseline' => $baseline, 'sizing' => $size, 'price_bound' => (string) $bound, 'initial_stop' => (string) $stop];
+            }
             if ($size['reason'] !== null) {
                 return $record('no_order', $size['reason'], facts: $facts);
             }
             $quantity = Decimal::from($size['quantity']);
         } else {
             $available = Decimal::from($position?->quantity ?? '0')->minus(Decimal::from($position?->reserved_quantity ?? '0'));
+            $facts = $signal->payload['result']['facts'];
+            // A regime reduction sells the share of the holding above the target; an exit or a swing sale sells all of it.
+            if ($regime && Decimal::from($facts['target_fraction'])->compareTo(Decimal::from('0')) > 0) {
+                $current = Decimal::from($facts['current_fraction']);
+                $available = $current->compareTo(Decimal::from('0')) > 0
+                    ? $available->multipliedBy($current->minus(Decimal::from($facts['target_fraction'])))->dividedBy($current, 18, RoundingMode::DOWN) : Decimal::from('0');
+            }
             $quantity = InstrumentSizing::down($available, $product['base_increment']);
             $bound = InstrumentSizing::down(PaperFillPrice::calculate('SELL', $quote['bid'], $p['slippage_bps'], 18), $product['price_increment']);
             $facts = ['available_quantity' => (string) $available, 'price_bound' => (string) $bound];
@@ -148,6 +165,39 @@ final class CryptoPaperOrders
         }
 
         return $record('order_created', null, $order, $facts);
+    }
+
+    /**
+     * Regime buy size: move the product's marked value up to target fraction × equity, never beyond the policy position cap or
+     * the unreserved cash, with the greater fee rate reserved. Quantity rounds down to the venue increment.
+     */
+    private function regimeSize(StrategySignal $signal, array $value, Decimal $available, Decimal $bound, array $cost, array $product, array $owner): array
+    {
+        $equity = Decimal::from($value['equity']);
+        $mark = $value['marks'][$signal->symbol] ?? null;
+        $current = $mark === null ? Decimal::from('0') : Decimal::from($mark['quantity'])->multipliedBy(Decimal::from($mark['bid']));
+        $fraction = Decimal::from($signal->payload['result']['facts']['target_fraction']);
+        $cap = Decimal::from($owner['max_position_pct'])->dividedBy(Decimal::from('100'), 18);
+        $target = ($fraction->compareTo($cap) > 0 ? $cap : $fraction)->multipliedBy($equity);
+        $spend = $target->minus($current);
+        $spend = $spend->compareTo($available) > 0 ? $available : $spend;
+        $maker = Decimal::from($cost['maker_rate']);
+        $taker = Decimal::from($cost['taker_rate']);
+        $rate = $maker->compareTo($taker) > 0 ? $maker : $taker;
+        $quantity = $spend->compareTo(Decimal::from('0')) > 0
+            ? InstrumentSizing::down($spend->dividedBy($bound->multipliedBy(Decimal::from('1')->plus($rate)), 18, RoundingMode::DOWN), $product['base_increment']) : Decimal::from('0');
+        if ($quantity->compareTo(Decimal::from($product['base_max_size'])) > 0) {
+            $quantity = InstrumentSizing::down(Decimal::from($product['base_max_size']), $product['base_increment']);
+        }
+        $reason = match (true) {
+            $quantity->compareTo(Decimal::from('0')) <= 0 => 'regime_size_zero',
+            $quantity->compareTo(Decimal::from($product['base_min_size'])) < 0 => 'below_base_minimum',
+            $quantity->multipliedBy($bound)->compareTo(Decimal::from($product['quote_min_size'])) < 0 => 'below_quote_minimum',
+            default => null,
+        };
+
+        return ['quantity' => $reason === null ? (string) $quantity : '0', 'reason' => $reason, 'target_value' => (string) $target,
+            'current_value' => (string) $current, 'spend' => (string) $spend, 'reserved_fee_rate' => (string) $rate];
     }
 
     /** One fill attempt against one stored quote. Displayed size is consumed at most once per observation and side. */

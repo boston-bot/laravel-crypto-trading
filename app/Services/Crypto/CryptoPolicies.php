@@ -16,10 +16,41 @@ use Illuminate\Support\Facades\Validator;
 /** Owner-applied, standalone virtual sleeve. No brokerage binding, permission change, scheduler or submission. */
 final class CryptoPolicies
 {
-    public const VERSION = 'crypto_paper_policy_v3';
+    // v4 records the selected playbook; v3 policies remain valid swing policies.
+    public const VERSION = 'crypto_paper_policy_v4';
+
+    public const COMPATIBLE = ['crypto_paper_policy_v3', self::VERSION];
 
     public const OWNER = ['initial_cash' => '400', 'risk_per_trade_pct' => '5', 'max_position_pct' => '25',
         'max_open_positions' => 3, 'daily_loss_pause_pct' => '5', 'universe' => 'any_eligible_spot_usd'];
+
+    /**
+     * A regime playbook holds one product at up to its full target fraction, so applying one raises the position cap
+     * from 25% to 100% of this paper sleeve and limits it to one position. The daily loss pause is unchanged.
+     */
+    public const REGIME_OWNER = ['initial_cash' => '400', 'max_position_pct' => '100', 'max_open_positions' => 1,
+        'daily_loss_pause_pct' => '5', 'universe' => 'single_product_regime'];
+
+    public static function owner(string $parameters): array
+    {
+        return CryptoParameters::regime(CryptoParameters::named($parameters)) ? self::REGIME_OWNER : self::OWNER;
+    }
+
+    /** Whether an applied policy matches a supported contract, its own fingerprint and the code's playbook definition. */
+    public static function compatible(InstrumentPolicy $policy): bool
+    {
+        $payload = $policy->payload;
+        $version = $payload['parameters']['version'] ?? null;
+        try {
+            $parameters = CryptoParameters::named((string) $version);
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+
+        return in_array($payload['version'] ?? null, self::COMPATIBLE, true) && hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR)) === $policy->fingerprint &&
+            ($payload['version'] === self::VERSION || $version === CryptoParameters::VERSION) && $payload['parameters'] === $parameters &&
+            $payload['owner'] === self::owner($version) && ($payload['execution'] ?? null) === self::EXECUTION;
+    }
 
     /** Simulated limit orders against the stored displayed book; never a venue order. */
     public const EXECUTION = ['order_type' => 'limit', 'order_ttl_seconds' => 600, 'fill_model' => 'displayed_best_bid_ask_v1',
@@ -28,9 +59,10 @@ final class CryptoPolicies
     /** Fee-tier read reasons an owner review can accept. A cost-plus or unknown commission is never accepted. */
     public const REVIEWABLE_FEE_REASONS = ['product_applicability_requires_owner_review', 'tax_unknown_or_requires_all_in_review'];
 
-    public function apply(int $actor, string $request, int $base = 0, array $costs = [], ?array $feeReview = null): InstrumentPolicy
+    public function apply(int $actor, string $request, int $base = 0, array $costs = [], ?array $feeReview = null, string $parameters = CryptoParameters::VERSION): InstrumentPolicy
     {
         Validator::make(['request' => $request, 'base' => $base], ['request' => 'required|uuid', 'base' => 'integer|min:0'])->validate();
+        abort_unless(in_array($parameters, [CryptoParameters::VERSION, CryptoParameters::REGIME_TREND, CryptoParameters::REGIME_MOMENTUM], true), 422, 'Unknown crypto playbook.');
         abort_if(count($costs) > 25, 422, 'At most 25 product fee schedules per policy.');
         $schedules = [];
         foreach ($costs as $cost) {
@@ -40,7 +72,7 @@ final class CryptoPolicies
         }
         ksort($schedules);
         $payload = ['version' => self::VERSION, 'asset_class' => 'crypto', 'venue' => 'coinbase', 'mode' => 'paper',
-            'owner' => self::OWNER, 'parameters' => CryptoParameters::current(), 'costs' => $schedules,
+            'owner' => self::owner($parameters), 'parameters' => CryptoParameters::named($parameters), 'costs' => $schedules,
             'fee_review' => $feeReview === null ? null : $this->review($feeReview), 'execution' => self::EXECUTION,
             'broker_executable' => false, 'purpose' => 'unvalidated_research'];
         $fingerprint = hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));

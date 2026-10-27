@@ -17,6 +17,7 @@ use App\Services\Broker\BrokerCredentialResolver;
 use App\Services\Broker\Coinbase\CoinbaseJwtSigner;
 use App\Services\Crypto\CryptoFeeObservations;
 use App\Services\Crypto\CryptoMarketCollector;
+use App\Services\Crypto\CryptoParameters;
 use App\Services\Crypto\CryptoPolicies;
 use App\Services\Crypto\CryptoStrategyEvaluation;
 use App\Services\Operations\OperationsHealth;
@@ -64,9 +65,9 @@ class CryptoPaperLifecycleTest extends TestCase
             'tax_treatment' => 'excluded_by_owner_direction', 'reviewed_at' => now()->subMinute()->toISOString(), 'source' => 'Owner signed-in fee page fixture'];
     }
 
-    private function policy(array $products = ['BTC-USD'], ?array $review = null, int $base = 0): InstrumentPolicy
+    private function policy(array $products = ['BTC-USD'], ?array $review = null, int $base = 0, string $playbook = CryptoParameters::VERSION): InstrumentPolicy
     {
-        return app(CryptoPolicies::class)->apply($this->owner->id, (string) Str::uuid(), $base, $review ? [] : array_map(fn ($p) => $this->cost($p), $products), $review);
+        return app(CryptoPolicies::class)->apply($this->owner->id, (string) Str::uuid(), $base, $review ? [] : array_map(fn ($p) => $this->cost($p), $products), $review, $playbook);
     }
 
     private function observation(array $change = []): CryptoFeeObservation
@@ -407,5 +408,74 @@ class CryptoPaperLifecycleTest extends TestCase
         $this->assertSame([], $this->venue->paths);
         config(['mcp.operator_emails' => ['someone-else@example.test']]);
         $this->actingAs($this->owner)->get('/mcp/paper/crypto')->assertForbidden();
+    }
+
+    public function test_regime_playbook_enters_to_target_holds_within_band_and_exits_to_cash_when_the_trend_breaks(): void
+    {
+        $policy = $this->policy(playbook: CryptoParameters::REGIME_TREND);
+        $this->assertSame(CryptoPolicies::REGIME_OWNER, $policy->payload['owner']);
+        $this->market();
+        $report = $this->cycle($policy);
+        $this->assertSame(['signal', 'BUY', 'regime_entry', 'order_created'], [$report['signals'][0]['status'], $report['signals'][0]['side'],
+            $report['signals'][0]['reason'], $report['signals'][0]['handoff']['status']]);
+        $signal = StrategySignal::firstOrFail();
+        $this->assertSame('regime_rules_v1', $signal->rule_version);
+        $this->assertNull($signal->profile_id);
+        // Calm fixture prices put the volatility target above 100%, so the whole sleeve is the target, less the reserved fee.
+        $this->assertSame('1.000000000000000000', $signal->payload['result']['facts']['target_fraction']);
+        $order = SimulationOrder::firstOrFail();
+        $this->assertSame('filled', $order->status);
+        $this->assertLessThan(0, Decimal::from(Portfolio::first()->cash)->compareTo(Decimal::from('1')));
+        $this->travel(5)->minutes();
+        $this->quote('99.69', '99.70');
+        $this->assertSame(['wait', 'regime_target_held'], [$this->cycle($policy)['signals'][0]['status'], StrategySignal::latest('id')->first()->reason]);
+        // Yesterday's close far below the 200-day average: exit to cash in the same UTC day, never held back as a rebalance.
+        DB::table('mcp_crypto_candles')->where(['product_id' => 'BTC-USD', 'granularity' => 'ONE_DAY'])->orderByDesc('starts_at')->limit(1)->update(['close' => '50', 'low' => '50']);
+        $this->travel(5)->minutes();
+        $this->quote('99.69', '99.70');
+        $exit = $this->cycle($policy)['signals'][0];
+        $this->assertSame(['signal', 'SELL', 'regime_exit', 'order_created'], [$exit['status'], $exit['side'], $exit['reason'], $exit['handoff']['status']]);
+        $this->assertSame(0, Decimal::from(SimulationPosition::firstOrFail()->quantity)->compareTo(Decimal::from('0')));
+        $this->assertDatabaseCount('broker_orders', 0);
+        $this->assertSame([], $this->venue->paths);
+    }
+
+    public function test_regime_playbook_sells_holdings_outside_the_playbook_and_the_loss_pause_blocks_only_buys(): void
+    {
+        config(['crypto.coinbase_products' => ['BTC-USD', 'ETH-USD']]);
+        $policy = $this->policy(['BTC-USD', 'ETH-USD'], playbook: CryptoParameters::REGIME_TREND);
+        $this->market(['BTC-USD', 'ETH-USD']);
+        SimulationPosition::create(['paper_portfolio_id' => $policy->paper_portfolio_id, 'symbol' => 'ETH-USD', 'sleeve' => 'active',
+            'quantity' => '0.5', 'reserved_quantity' => '0', 'cost_basis' => '50', 'realized_pnl' => '0']);
+        Portfolio::whereKey($policy->paper_portfolio_id)->update(['cash' => '300']);
+        $report = collect($this->cycle($policy)['signals'])->keyBy('symbol');
+        // Only the playbook product is evaluated for entry; ETH is a leftover holding and is sold.
+        $this->assertSame(['signal', 'SELL', 'not_in_playbook', 'order_created'], [$report['ETH-USD']['status'], $report['ETH-USD']['side'],
+            $report['ETH-USD']['reason'], $report['ETH-USD']['handoff']['status']]);
+        // Equity is about 350 against a 400 opening baseline, beyond the 5% daily loss pause: no BTC entry.
+        $this->assertSame(['wait', 'daily_loss_pause'], [$report['BTC-USD']['status'], $report['BTC-USD']['reason']]);
+        $this->assertSame(0, Decimal::from(SimulationPosition::where('symbol', 'ETH-USD')->firstOrFail()->quantity)->compareTo(Decimal::from('0')));
+        $this->assertSame(0, SimulationOrder::where('symbol', 'BTC-USD')->count());
+    }
+
+    public function test_playbooks_validate_and_older_swing_policies_remain_compatible(): void
+    {
+        $swing = $this->policy();
+        $this->assertTrue(CryptoPolicies::compatible($swing));
+        $legacy = $swing->payload;
+        $legacy['version'] = 'crypto_paper_policy_v3';
+        $make = fn (array $payload, int $version) => InstrumentPolicy::create(['paper_portfolio_id' => $swing->paper_portfolio_id, 'actor_id' => $this->owner->id,
+            'version' => $version, 'request_id' => (string) Str::uuid(), 'payload' => $payload, 'applied_at' => now(), 'fingerprint' => hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR))]);
+        $this->assertTrue(CryptoPolicies::compatible($make($legacy, 2)));
+        $regimeUnderOldContract = array_replace($legacy, ['parameters' => CryptoParameters::named(CryptoParameters::REGIME_TREND), 'owner' => CryptoPolicies::REGIME_OWNER]);
+        $this->assertFalse(CryptoPolicies::compatible($make($regimeUnderOldContract, 3)));
+        $wrongLimits = array_replace($this->policy(base: 3, playbook: CryptoParameters::REGIME_MOMENTUM)->payload, ['owner' => CryptoPolicies::OWNER]);
+        $this->assertFalse(CryptoPolicies::compatible($make($wrongLimits, 5)));
+        try {
+            $this->policy(base: 5, playbook: 'crypto_ai_picks_v1');
+            $this->fail('Unknown playbook accepted.');
+        } catch (HttpException $e) {
+            $this->assertSame(422, $e->getStatusCode());
+        }
     }
 }
