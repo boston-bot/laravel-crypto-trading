@@ -181,7 +181,7 @@ To deploy: commit, then `deploy.sh <rev> --migrate` with the private migration c
 - **Cycle 273 (00:00 UTC):** 16 products `quote_volume_too_low` and 9 `daily_history_missing_or_discontinuous`, as expected while October 26's daily candle settled. No conflict reason. 49 recorded revisions, all five-minute.
 - **Cycle 276 (00:15 UTC):** the nine liquid products were evaluated normally. BTC, NEAR and ZEC were `wait/trigger_not_crossed`; ETH, HYPE, QNT, SOL, SUI and XRP were `wait/no_setup`. 16 products were low volume. Equity was 400, the baseline was complete and there was no pause. No order (none was warranted). One fee observation: the hourly refresh correctly skipped a recent observation. No daily revisions.
 
-## Replay and dashboard increment (source, pending deployment)
+## Replay and dashboard increment (deployed in `b68b847`)
 
 **Replay engine.** The shared `StrategyReplay` gains a `crypto_limit` order mode instead of a second engine. Equity modes are unchanged; existing replay, experiment and variant tests pass. Differences in crypto mode:
 
@@ -256,3 +256,63 @@ New tests cover:
 2. Run `mcp:crypto-history --days=1095`.
 3. Run `mcp:crypto-replay --actor=1 --portfolio=2 --request=<uuid>`.
 4. Open `/mcp/paper/crypto`.
+
+### Deployment and first replay — October 27
+
+Deployed `b68b847` with migration `000037` (batch 21). Readiness 200; schedule unchanged; all health checks ok.
+
+**Backfill.** At 00:35:27 UTC, after that window's cycle, `mcp:crypto-history --days=1095` completed for all 25 products. It inserted 15,402 settled daily candles in 17 seconds (read 24). Products listed less than three years ago have shorter history.
+
+**Replay 1.** `mcp:crypto-replay --actor=1 --portfolio=2`, request `1372958e-485b-4b35-8c41-ebfe2837ac63`. Policy v2: Intro fees at the reserved 0.90% per side, 10 bp slippage, $400, 5% risk, 25% cap, three positions. Status `complete`, nothing excluded. 895 days, 2024-05-15 → 2026-10-26.
+
+| Measure | Replay | Comparison |
+|---|---|---|
+| Final equity | $308.54 (−22.87%) | BTC buy-and-hold +30.01%; equal weight of today's list +218.33% (strongly inflated by selecting coins on today's volume) |
+| Max drawdown | 48.24% | — |
+| Closed trades | 82 (17 wins / 65 losses, 20.73%) | — |
+| Average win / loss | +27.63% / −8.24% | — |
+| Profit factor | 0.79 | — |
+| Time invested | 44.92% of days | — |
+
+**Breakdown** (developer analysis of the stored trades; fees recomputed at the reserved 0.90% per side):
+- **Fees decide the sign.** Fees were about $116.79 against a −$91.47 net, so the strategy was roughly +$25 before fees over 2.5 years.
+- **The fast-moving-average exit is the main loss source.** 56 exits on `daily_close_below_fast_sma` lost $316.67. The 20 stop exits (initial or trailing) gained $255.06. 5 time exits lost $18.23; 1 assumed entry-day stop lost $11.63.
+- **Capacity bound often.** The three-position cap skipped 871 setups. Average holding was 10.9 days.
+
+These are retrospective research findings with the stated limitations. They are not a basis for parameter changes without owner review and out-of-sample checks. Forward paper continues unchanged under policy v2.
+
+## Research comparison (source, pending deployment)
+
+`mcp:crypto-replay … --variants=<json>` accepts up to six research variants. Each variant may set:
+- **`parameters`:** the existing reviewed `ResearchVariants` bounds, e.g. `exit_on_fast_sma_close: false`.
+- **`risk`:** the reviewed bounds for open positions, position cap and risk per trade.
+- **`costs`:** both fee rates as quoted decimals, from 0 to 0.02 per side. Sizing still reserves the greater rate.
+
+Malformed, out-of-bounds, baseline-equivalent and duplicate variants are refused.
+
+The baseline and every variant run over the full period and over two independent halves. The halves are split at the midpoint, and each starts from $400 with earlier bars only warming profiles. A change that helps should help in both halves, not only in aggregate. Each summary records:
+- return, drawdown, trades, hit rate and profit factor
+- buy-and-hold benchmarks
+- skip counts
+- the fees charged on its trades, recomputed with the same cost function
+- the exit-reason breakdown
+
+Variants live only in the replay record (adapter `crypto_daily_replay_v2`). They never change the policy, ledger or forward cycle; applying a change requires a new owner-reviewed policy version.
+
+No migration. The full suites pass with 850 tests each:
+
+| Suite | Passed | Skipped | Assertions |
+|---|---|---|---|
+| SQLite | 738 | 112 PostgreSQL-only | 5,162 |
+| PostgreSQL | 849 | 1 existing environment skip | 6,076 |
+
+Planned comparison set:
+
+| ID | Change | Question |
+|---|---|---|
+| `no_fast_sma_exit` | `exit_on_fast_sma_close: false` | Is the moving-average exit the main loss source? |
+| `maker_fees` | 0.50% per side | What if limit orders fill as maker? Assumes every fill is maker. |
+| `five_positions` | Five positions, 20% cap | Is the three-position cap costing setups? |
+| `zero_fees` | 0% per side | Commission-free sensitivity. A venue's spread markup is not modeled. |
+| `no_exit_maker` | First two combined | Do the two fixes add up? |
+| `no_exit_maker_five` | All three | All three changes together |

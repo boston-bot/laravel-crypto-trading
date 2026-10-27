@@ -9,8 +9,12 @@ use App\Models\PaperTrading\Portfolio;
 use App\Models\PaperTrading\StrategyReplayRun;
 use App\Models\User;
 use App\Services\PaperTrading\ProfileCalculator;
+use App\Services\PaperTrading\ResearchVariants;
 use App\Services\PaperTrading\SignalRules;
 use App\Services\PaperTrading\StrategyReplay;
+use App\Services\PaperTrading\TradingCosts;
+use App\Support\Mcp\Decimal;
+use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -21,13 +25,21 @@ use Illuminate\Support\Facades\Validator;
  */
 final class CryptoReplays
 {
-    public const ADAPTER_VERSION = 'crypto_daily_replay_v1';
+    // v2: research variants and independent early/late halves.
+    public const ADAPTER_VERSION = 'crypto_daily_replay_v2';
 
-    public function __construct(private StrategyReplay $engine) {}
+    public const MAX_VARIANTS = 6;
 
-    public function run(int $actor, int $portfolioId, string $requestId, ?string $start = null): StrategyReplayRun
+    /** Research fee bounds per side; a variant states both rates and sizing still reserves the greater. */
+    public const FEE_BOUNDS = ['0', '0.02'];
+
+    public function __construct(private StrategyReplay $engine, private TradingCosts $costs) {}
+
+    /** @param list<array{id: string, parameters?: array, risk?: array, costs?: array{maker_rate: string, taker_rate: string}}> $variants */
+    public function run(int $actor, int $portfolioId, string $requestId, ?string $start = null, array $variants = []): StrategyReplayRun
     {
         Validator::make(['request' => $requestId, 'start' => $start], ['request' => ['required', 'uuid'], 'start' => ['nullable', 'date_format:Y-m-d']])->validate();
+        $variants = $this->variants($variants);
         [$portfolio, $policy] = $this->authorize($actor, $portfolioId);
         if ($repeat = $this->repeat($portfolio, $requestId)) {
             return $repeat;
@@ -78,7 +90,7 @@ final class CryptoReplays
             'risk_per_trade_pct' => $owner['risk_per_trade_pct'], 'max_position_pct' => $owner['max_position_pct'], 'max_open_positions' => $owner['max_open_positions']];
         $input = ['adapter' => self::ADAPTER_VERSION, 'replay' => StrategyReplay::VERSION, 'profile' => ProfileCalculator::VERSION, 'rules' => SignalRules::VERSION,
             'parameters' => $parameters['hash'], 'policy_id' => $policy->id, 'policy_hash' => $policy->fingerprint, 'settings' => $settings,
-            'equity' => $owner['initial_cash'], 'bars' => $fingerprints, 'as_of' => $today->toDateString(), 'start' => $start];
+            'equity' => $owner['initial_cash'], 'bars' => $fingerprints, 'as_of' => $today->toDateString(), 'start' => $start, 'variants' => $variants];
         $reason = match (true) {
             ! isset($bars[$benchmark]) => 'benchmark_history_unavailable',
             $cost === null => 'benchmark_fee_schedule_unavailable',
@@ -90,8 +102,31 @@ final class CryptoReplays
             $reason = $result['sessions'] > 0 ? 'retrospective_replay_recorded' : 'no_days_with_a_full_profile_window';
         }
         $complete = $reason === 'retrospective_replay_recorded';
+        $comparison = null;
+        if ($complete) {
+            // Two independent halves, each from the starting cash: a change should help in both, not only in aggregate.
+            $mid = CarbonImmutable::parse($result['start'])->addDays(intdiv((int) CarbonImmutable::parse($result['start'])->diffInDays(CarbonImmutable::parse($result['end'])), 2));
+            $windows = ['early' => [$result['start'], $mid->toDateString()], 'late' => [$mid->addDay()->toDateString(), $result['end']]];
+            $replay = fn (array $values, array $with, ?string $from, ?string $to) => $this->engine->run($bars, $bars[$benchmark], $values, $with, $owner['initial_cash'], $from, $to);
+            $compare = function (array $values, array $with, array $full) use ($replay, $windows) {
+                $halves = [];
+                foreach ($windows as $name => [$from, $to]) {
+                    $halves[$name] = $this->summary($replay($values, $with, $from, $to), $with['cost_schedule']);
+                }
 
-        return DB::transaction(function () use ($actor, $portfolioId, $requestId, $parameters, $complete, $reason, $result, $input, $products, $excluded) {
+                return ['full' => $this->summary($full, $with['cost_schedule'])] + $halves;
+            };
+            $comparison = ['windows' => $windows, 'baseline' => $compare($p, $settings, $result), 'variants' => []];
+            foreach ($variants as $variant) {
+                $values = array_replace($p, $variant['parameters']);
+                $with = array_replace($settings, $variant['risk'], $variant['costs'] === null ? [] : ['cost_schedule' => array_replace($cost, $variant['costs'], ['version' => 'research_variant_'.$variant['id']])]);
+                $full = $replay($values, $with, $start, $today->subDay()->toDateString());
+                $comparison['variants'][] = $variant + ['parameters_hash' => hash('sha256', json_encode($values, JSON_THROW_ON_ERROR)), 'result' => $compare($values, $with, $full),
+                    'trades' => $full['trades']];
+            }
+        }
+
+        return DB::transaction(function () use ($actor, $portfolioId, $requestId, $parameters, $complete, $reason, $result, $input, $products, $excluded, $comparison) {
             [$portfolio] = $this->authorize($actor, $portfolioId, true);
             if ($repeat = $this->repeat($portfolio, $requestId)) {
                 return $repeat;
@@ -103,9 +138,59 @@ final class CryptoReplays
                 'status' => $complete ? 'complete' : 'incomplete', 'reason' => $reason, 'start_date' => $complete ? $result['start'] : null,
                 'end_date' => $complete ? $result['end'] : null, 'input_fingerprint' => hash('sha256', json_encode($input, JSON_THROW_ON_ERROR)),
                 'payload' => ['label' => 'retrospective_daily_replay_not_forward_results', 'input' => $input, 'symbols' => $products, 'excluded' => $excluded,
-                    'result' => $result, 'mode' => 'crypto_retrospective_replay', 'broker_executable' => false],
+                    'result' => $result, 'comparison' => $comparison, 'mode' => 'crypto_retrospective_replay', 'broker_executable' => false],
                 'recorded_at' => now()]);
         });
+    }
+
+    /** Comparable figures for one replay: stats, benchmarks, exit-reason breakdown and the fees charged on its trades. */
+    private function summary(array $result, array $cost): array
+    {
+        $reasons = [];
+        $fees = Decimal::from('0');
+        foreach ($result['trades'] as $trade) {
+            $quantity = Decimal::from($trade['quantity']);
+            $fees = $fees->plus($this->costs->fee($cost, 'BUY', $quantity, Decimal::from($trade['entry_price'])))
+                ->plus($this->costs->fee($cost, 'SELL', $quantity, Decimal::from($trade['exit_price'])));
+            $reasons[$trade['reason']] ??= ['trades' => 0, 'net' => Decimal::from('0')];
+            $reasons[$trade['reason']]['trades']++;
+            $reasons[$trade['reason']]['net'] = $reasons[$trade['reason']]['net']->plus(Decimal::from($trade['net']));
+        }
+        ksort($reasons);
+
+        return ['start' => $result['start'], 'end' => $result['end'], 'days' => $result['sessions'], 'final_equity' => $result['final_equity'],
+            'stats' => $result['stats'], 'benchmarks' => $result['benchmarks'], 'counts' => $result['counts'], 'fees' => (string) $fees->rounded(2, RoundingMode::HALF_EVEN),
+            'exit_reasons' => array_map(fn ($r) => ['trades' => $r['trades'], 'net' => (string) $r['net']->rounded(2, RoundingMode::HALF_EVEN)], $reasons)];
+    }
+
+    /** Research-only variants within the reviewed bounds; they never change the policy, ledger or forward cycle. */
+    private function variants(array $variants): array
+    {
+        abort_unless(array_is_list($variants) && count($variants) <= self::MAX_VARIANTS, 422, 'Use at most '.self::MAX_VARIANTS.' variants.');
+        $seen = [hash('sha256', json_encode([[], [], null], JSON_THROW_ON_ERROR)) => 'baseline'];
+        $normalized = [];
+        foreach ($variants as $variant) {
+            abort_unless(is_array($variant) && ! array_diff(array_keys($variant), ['id', 'parameters', 'risk', 'costs']) && is_string($variant['id'] ?? null) &&
+                preg_match('/^[a-z][a-z0-9_]{0,31}$/D', $variant['id']) && $variant['id'] !== 'baseline' && is_array($variant['parameters'] ?? []) &&
+                is_array($variant['risk'] ?? []) && (! isset($variant['costs']) || is_array($variant['costs'])), 422, 'Malformed replay variant.');
+            $parameters = ResearchVariants::parameters($variant['parameters'] ?? []);
+            ksort($parameters);
+            $risk = ResearchVariants::risk($variant['risk'] ?? []);
+            $costs = null;
+            if (isset($variant['costs'])) {
+                abort_unless(array_keys($variant['costs']) == ['maker_rate', 'taker_rate'] || array_keys($variant['costs']) == ['taker_rate', 'maker_rate'], 422, 'State both research fee rates.');
+                foreach ($variant['costs'] as $rate) {
+                    abort_unless(is_string($rate) && preg_match('/^0(?:\.\d{1,6})?$/D', $rate) && Decimal::from($rate)->compareTo(Decimal::from(self::FEE_BOUNDS[1])) <= 0, 422, 'Research fee rate outside reviewed bounds.');
+                }
+                $costs = ['maker_rate' => $variant['costs']['maker_rate'], 'taker_rate' => $variant['costs']['taker_rate']];
+            }
+            $key = hash('sha256', json_encode([$parameters, $risk, $costs], JSON_THROW_ON_ERROR));
+            abort_if(isset($seen[$key]) || in_array($variant['id'], $seen, true), 422, 'Duplicate replay variant.');
+            $seen[$key] = $variant['id'];
+            $normalized[] = ['id' => $variant['id'], 'parameters' => $parameters, 'risk' => $risk, 'costs' => $costs];
+        }
+
+        return $normalized;
     }
 
     /** Settled daily candles from successful reads, contiguous from the product's first stored day to yesterday (UTC). */

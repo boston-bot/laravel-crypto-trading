@@ -14,6 +14,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Support\CoinbasePublicFake;
 use Tests\TestCase;
 
@@ -98,5 +99,43 @@ class CryptoReplaysTest extends TestCase
         $this->artisan('mcp:crypto-replay', ['--actor' => $this->owner->id, '--portfolio' => $policy->paper_portfolio_id, '--request' => (string) Str::uuid()])
             ->expectsOutputToContain('retrospective_daily_replay_not_forward_results')->assertSuccessful();
         $this->assertSame(1, StrategyReplayRun::where('asset_class', 'crypto')->count());
+    }
+
+    public function test_variants_run_over_the_full_period_and_two_independent_halves_without_policy_effect(): void
+    {
+        $policy = $this->policy();
+        $variants = [['id' => 'no_fast_sma_exit', 'parameters' => ['exit_on_fast_sma_close' => false]],
+            ['id' => 'zero_fees', 'costs' => ['maker_rate' => '0', 'taker_rate' => '0']], ['id' => 'five_positions', 'risk' => ['max_open_positions' => 5]]];
+        $run = app(CryptoReplays::class)->run($this->owner->id, $policy->paper_portfolio_id, (string) Str::uuid(), variants: $variants);
+        $comparison = $run->payload['comparison'];
+        $this->assertSame(['early' => ['2026-04-05', '2026-07-13'], 'late' => ['2026-07-14', '2026-10-21']], $comparison['windows']);
+        $this->assertSame(['full', 'early', 'late'], array_keys($comparison['baseline']));
+        $this->assertSame(['2026-04-05', '2026-07-13', '400.00'], [$comparison['baseline']['early']['start'], $comparison['baseline']['early']['end'], $comparison['baseline']['early']['final_equity']]);
+        $this->assertSame(['no_fast_sma_exit', 'zero_fees', 'five_positions'], array_column($comparison['variants'], 'id'));
+        $this->assertSame(['maker_rate' => '0', 'taker_rate' => '0'], $comparison['variants'][1]['costs']);
+        $this->assertNotSame($comparison['variants'][0]['parameters_hash'], $comparison['variants'][1]['parameters_hash']);
+        $this->assertSame('0.00', $comparison['variants'][1]['result']['full']['fees']);
+        $this->assertSame($variants[0]['parameters'], $run->payload['input']['variants'][0]['parameters']);
+        $this->assertSame(1, InstrumentPolicy::where('paper_portfolio_id', $policy->paper_portfolio_id)->count());
+        $this->assertDatabaseCount('mcp_paper_sim_orders', 0);
+        $this->artisan('mcp:crypto-replay', ['--actor' => $this->owner->id, '--portfolio' => $policy->paper_portfolio_id, '--request' => (string) Str::uuid(), '--variants' => '/nonexistent.json'])->assertFailed();
+    }
+
+    public function test_variants_outside_reviewed_bounds_or_duplicating_the_baseline_are_refused(): void
+    {
+        $policy = $this->policy();
+        foreach ([[['id' => 'x', 'mode' => 'live']], [['id' => 'Bad Id']], [['id' => 'x', 'costs' => ['maker_rate' => '0.05', 'taker_rate' => '0']]],
+            [['id' => 'x', 'costs' => ['taker_rate' => '0.001']]], [['id' => 'x', 'costs' => ['maker_rate' => 0, 'taker_rate' => '0']]],
+            [['id' => 'x', 'parameters' => ['initial_stop_atr' => '9']]], [['id' => 'x', 'parameters' => ['slippage_bps' => '0']]], [['id' => 'x', 'risk' => ['max_open_positions' => 20]]],
+            [['id' => 'x']], [['id' => 'a', 'risk' => ['max_open_positions' => 4]], ['id' => 'b', 'risk' => ['max_open_positions' => 4]]],
+            array_map(fn ($i) => ['id' => 'v'.$i, 'risk' => ['max_open_positions' => $i]], range(1, 7))] as $variants) {
+            try {
+                app(CryptoReplays::class)->run($this->owner->id, $policy->paper_portfolio_id, (string) Str::uuid(), variants: $variants);
+                $this->fail('Invalid research variant accepted: '.json_encode($variants));
+            } catch (HttpException $e) {
+                $this->assertSame(422, $e->getStatusCode());
+            }
+        }
+        $this->assertSame(0, StrategyReplayRun::count());
     }
 }
