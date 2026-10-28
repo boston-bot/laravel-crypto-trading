@@ -450,7 +450,7 @@ Same data, costs and periods as round 1 (taker fees). Return / max drawdown, in 
 - T4 makes ten times as many decisions, with a smaller edge.
 - Both should be judged on forward paper, not on this history.
 
-## Regime playbooks in the application (source, pending deployment)
+## Regime playbooks in the application (deployed in `73c244e`)
 
 At the owner's request, T4 was built into the application, together with R1, the strongest round-2 result. They share one playbook family; the applied policy selects the version. No new migration.
 
@@ -517,3 +517,127 @@ Pint and `git diff --check` passed. New tests cover:
 - a research replay of another playbook leaving the applied policy unchanged, and the fee-only variant rule
 
 **Owner decision before activation.** Applying either regime policy changes the paper sleeve's limits from a 25% cap and three positions to a 100% cap and one position. It ends observation of the swing playbook, which its replays already disqualified. On the dashboard, regime playbooks are observed by days rather than a 30-trade target, since they trade rarely.
+
+### Deployment, replays and activation — October 27
+
+The owner deployed `73c244e` (no migration).
+
+**Replays recorded on runtime data**, both research-only with no policy change:
+- **Replay 3 (T4).** 2021-11-22 → 2026-10-26: +85.13%, max drawdown 34.93%, $190.96 fees. At maker fees: +113.43%, drawdown 32.21%. BTC buy-and-hold over the same period: +36.37% (this column uses the venue open/close convention).
+- **Replay 4 (R1).** Starts 2022-05-07, after its 366-day history requirement, to 2026-10-26: +239.60%, max drawdown 28.69%, $40.80 fees. BTC over that window: +122.25%.
+
+**Activation.** The owner chose T4. At 01:43 UTC policy version 3 (policy ID 3, contract v4, `crypto_regime_trend_v1`) was applied with the existing fee review. Limits are now a 100% cap, one position and a 5% daily loss pause. Still one cash entry and $400; no positions or open orders at activation.
+
+**First T4 cycle (294, 01:45 UTC).**
+- **Inputs.** Yesterday's close $80,008.79 against a 200-day average of $72,985.07: in trend. Annualized 30-day volatility 25.07%, so the target fraction is 1.
+- **Order.** `regime_entry` BUY, simulated limit order 5 at a $80,229.17 bound.
+- **Fill.** 0.00494124 BTC at $80,229.17 (ask plus 10 bp), fee $3.57 (0.90%). Remaining cash $0.0005.
+- **State.** No pause; baseline complete; `crypto_data` and `crypto_paper` ok. No broker order.
+
+## T4 robustness study — pre-registration (recorded 2026-10-27 02:19 UTC, before results)
+
+The owner prefers deeper backtesting to weeks of forward-paper observation. These tests examine the one fixed strategy, T4 (`crypto_regime_trend_v1`). They do not select among new candidates, and no setting is changed by them. Costs remain 0.90% per side plus 10 bp slippage, with decisions on the prior close and execution at the open.
+
+**Data.** Coinbase public daily candles from each product's earliest available day. Fetched read-only and without credentials into the research scratch area. Before any use by the application, the data would be re-collected through the application backfill.
+
+**Tests.**
+1. **Long history.** T4 against BTC buy-and-hold over the full available BTC history, reported by calendar year.
+2. **Rolling start dates.** Every 1-year and 3-year window starting on the first of each month: the share with a positive return, the share beating BTC on return ÷ max drawdown, and median and worst outcomes.
+3. **Nearby settings.** Average 150, 200 or 250 days × volatility target 40, 50 or 60% × band 10, 20 or 30 points: 27 combinations, each against buy-and-hold on the full history.
+4. **Other coins.** T4's unchanged rule applied to each coin with at least 3 years of Coinbase history, against that coin's buy-and-hold.
+5. **Block bootstrap.** 2,000 synthetic 3-year paths of BTC daily returns, resampled in 30-day blocks; T4 against buy-and-hold on each path.
+
+**T4 counts as robust if all of these hold.**
+- (a) Over the full history, T4's return ÷ max drawdown beats BTC buy-and-hold's.
+- (b) At least 70% of rolling 3-year windows beat BTC on return ÷ max drawdown, and at least 70% have a positive return.
+- (c) At least 20 of the 27 nearby settings beat buy-and-hold on return ÷ max drawdown over the full history.
+- (d) T4 beats buy-and-hold on return ÷ max drawdown for a majority of the other coins.
+- (e) In the bootstrap, T4's median max drawdown is lower than buy-and-hold's, and T4's return ÷ max drawdown beats buy-and-hold's on more than 60% of paths.
+
+### T4 robustness results
+
+**Data.** Coinbase public daily candles, BTC from 2015-07-20.
+- A first fetch had one missing day per 350-day page. The pages requested 351 inclusive candles against the API's 350 maximum. It was refetched with 349-day pages.
+- BTC is gap-free, and its 2,000 overlapping days match the application-stored settled candles exactly.
+- Genuine gaps (BCH's 2018 halt, the first ETH and LTC trading days) are excluded by using each coin's gap-free tail.
+- **Sanity check:** the float research simulation reproduces the exact-decimal application replay for 2021-11-22 → 2026-10-26: +85.1% return, 34.9% drawdown.
+
+**1. Long history.** BTC 2016-02-05 → 2026-10-26, 10.7 years:
+
+| | Return | CAGR | Max drawdown | Return ÷ drawdown | Trades |
+|---|---|---|---|---|---|
+| T4 | +6,312% | 47.4% | 57.8% | 0.82 | 108 |
+| Hold | +20,317% | 64.2% | 83.8% | 0.77 | 1 |
+
+T4 trailed holding in every strong-up year: 2017, 2019, 2020, 2021, 2023, 2024. It protected capital in 2018 (−25.6% vs −73.4%) and 2022 (0.0% vs −64.2%), and it also lost more than holding in 2025.
+
+**2. Rolling start dates.**
+
+| Windows | Count | T4 positive | Beats hold on return ÷ drawdown | Beats hold on return | T4 worst | Hold worst |
+|---|---|---|---|---|---|---|
+| 3-year | 92 | 100% | 49% | 16% | +7.1% | +9.4% |
+| 1-year | 116 | 67% | 39% | 29% | — | — |
+
+Median max drawdown over 3-year windows: 48.6% for T4, 76.7% for hold.
+
+**3. Nearby settings.** 20 of 27 beat hold: all 9 with a 150-day average, 4 of 9 with 200 days, 2 of 9 with 250 days. The chosen 200-day setting sits near the edge. Switching to 150 days after seeing this would be fitting to the data and is not proposed.
+
+**4. Other coins.** T4 beats each coin's own buy-and-hold on 9 of 19.
+
+**5. Block bootstrap** (2,000 paths of 3 years). T4 beats hold on return ÷ drawdown in 21.3% of paths. Median max drawdown is 50.1% for T4 against 59.7% for hold. T4 lost money in 23.7% of paths, hold in 11.4%. Thirty-day blocks break up multi-month trends, which biases this test against trend following; that was known when it was pre-registered, and the result stands.
+
+**Pre-registered verdict.** Checks (a) and (c) pass; (b), (d) and (e) fail. **T4 is not robust under the stated rules.**
+
+**Interpretation.**
+- The earlier 2021–2026 window began at the November 2021 peak, which flattered trend following.
+- Over the longer history, T4 is a lower-drawdown way to hold BTC (worst drop 58% against 84%; no losing 3-year window), not a way to beat it on return. It gave up about 17 points of compound annual return.
+- The T4 forward paper sleeve continues unchanged.
+
+## Hold/T4 blends and venue cost study (October 27)
+
+### Blends
+
+Stated before computing:
+- 50/50 and 70/30 BTC buy-and-hold/T4, set once at the start.
+- 50/50 rebalanced on the first of each month, with the 0.90% fee and 10 bp slippage charged on both sides of the amount moved.
+
+BTC history 2016-02-05 → 2026-10-26, the same float research simulation as the robustness study (`blend.py`):
+
+| | CAGR | Worst drop | Return ÷ drop | 3-year median return | Worst 3-year return | 3-year median worst drop |
+|---|---|---|---|---|---|---|
+| Hold | 64.2% | 83.8% | 0.77 | 227% | +9% | 76.7% |
+| T4 | 47.4% | 57.8% | 0.82 | 118% | +7% | 48.6% |
+| 50/50 set once | 57.9% | 70.6% | 0.82 | 179% | +13% | 62.0% |
+| 70/30 set once | 60.7% | 77.1% | 0.79 | 199% | +11% | 68.2% |
+| **50/50 monthly rebalance** | **58.7%** | **65.5%** | **0.90** | **185%** | **+21%** | **60.3%** |
+
+These are research observations, not a pass under the earlier pre-registered rules. No policy was changed.
+
+### Venue cost study (source, pending deployment)
+
+The owner holds a separate Robinhood Crypto account and asked whether moving to it would help. This increment adds a measurement, not a trading path:
+
+- **`RobinhoodCryptoQuotes`.** One fixed signed GET of Robinhood Crypto best bid/ask, including Robinhood's spread, for up to 10 symbols.
+  - It reuses the existing signer and credential resolver.
+  - Fixed host and path; no retries or redirects; exact decimal parsing.
+  - Bad responses are refused with a generic error, never a provider body or signed request.
+  - No order path uses it.
+- **`CryptoSpreadStudy` and `mcp:crypto-spreads --once`.** Each run pairs those quotes with Coinbase's live best bid/ask for the same products. It appends one line to the private file `storage/app/private/crypto-spread-study.jsonl` (`0600`). Costs per side, in basis points of the Coinbase mid:
+
+| Field | Meaning |
+|---|---|
+| Robinhood buy | Robinhood ask − Coinbase mid |
+| Robinhood sell | Coinbase mid − Robinhood bid |
+| Coinbase taker | Half the spread plus the observed taker fee |
+| Coinbase maker | Observed maker fee minus half the spread, assuming a fill |
+
+- **Schedule.** `CRYPTO_SPREAD_STUDY_ENABLED` defaults off. When on, it samples every five minutes, at minute 3 of each cycle. Default symbols: BTC, ETH, SOL, XRP, DOGE, LTC.
+
+**Verification.** 861 tests in each suite, all passing apart from the existing skips:
+
+| Suite | Passed | Skipped | Assertions |
+|---|---|---|---|
+| SQLite | 749 | 112 PostgreSQL-only | 5,233 |
+| PostgreSQL | 860 | 1 existing environment skip | 6,147 |
+
+Tests cover the exact signed request and query, the basis-point arithmetic, file permissions and redaction, generic failure handling for errors and unreviewed or crossed quotes, and the default-off schedule.

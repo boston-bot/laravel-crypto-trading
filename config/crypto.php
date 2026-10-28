@@ -8,6 +8,11 @@ return [
     // C3 read-only account fee-tier refresh (one fixed GET) at most every refresh_after_hours. Default off.
     'fee_refresh_enabled' => filter_var(env('CRYPTO_FEE_REFRESH_ENABLED', false), FILTER_VALIDATE_BOOL),
     'fee_refresh_after_hours' => 12,
+    // Venue cost study: Robinhood Crypto spread-inclusive quotes against Coinbase's book, sampled every five minutes into a
+    // private file. Read-only, default off.
+    'spread_study_enabled' => filter_var(env('CRYPTO_SPREAD_STUDY_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'spread_study_symbols' => array_values(array_filter(array_map('trim', explode(',', (string) env('CRYPTO_SPREAD_STUDY_SYMBOLS', 'BTC-USD,ETH-USD,SOL-USD,XRP-USD,DOGE-USD,LTC-USD'))))),
+    'spread_study_path' => storage_path('app/private/crypto-spread-study.jsonl'),
     // Health turns critical when no paper cycle completed this recently while the paper cycle is enabled.
     'paper_cycle_max_age_minutes' => 15,
     // Crypto track C1 (CRYPTO-AUTOMATION-PLAN.md): read-only Coinbase public market data. Default off.

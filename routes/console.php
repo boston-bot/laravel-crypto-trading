@@ -330,6 +330,9 @@ if (config('crypto.market_data_enabled')) {
         Schedule::command('mcp:crypto-market --once --scheduled')->everyFiveMinutes()->withoutOverlapping(10);
     }
 }
+if (config('crypto.spread_study_enabled')) {
+    Schedule::command('mcp:crypto-spreads --once')->cron('3-58/5 * * * *')->withoutOverlapping(5);
+}
 if (config('crypto.fee_refresh_enabled')) {
     Schedule::command('mcp:crypto-fees --scheduled')->hourlyAt(7)->withoutOverlapping(10);
 }
