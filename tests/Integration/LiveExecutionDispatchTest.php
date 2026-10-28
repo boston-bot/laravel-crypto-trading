@@ -123,7 +123,7 @@ class LiveExecutionDispatchTest extends TestCase
         $this->gateway->place = new ExecutionFailure('place_outcome_unknown', true);
         $second = F::stage($c, F::signal($c, 'BUY'));
         $this->assertSame('unknown', app(ExecutionDispatcher::class)->dispatch($c, $c->user_id, $second->id));
-        $this->assertSame(['unknown', 'submission_outcome_unknown'], $this->journalState($second));
+        $this->assertSame(['unknown', 'submission_unknown_place_outcome_unknown'], $this->journalState($second));
         // The broker had accepted it: the next order-history read proves it by ref_id. Nothing was resent.
         $this->travel(1)->seconds();
         $this->broker->orders = [LiveBrokerGateway::order('rh-timeout', 'queued', '1', ref: $second->idempotency_key)];
@@ -142,6 +142,20 @@ class LiveExecutionDispatchTest extends TestCase
         $this->assertSame(409, $this->refusal(fn () => app(ExecutionDispatcher::class)->dispatch($c, $c->user_id, $intent->id)));
         $this->assertSame([], $this->gateway->calls);
         $this->assertSame('staged', $this->journalState($intent)[0]);
+    }
+
+    public function test_unknown_submission_keeps_only_fixed_failure_categories_and_never_retries(): void
+    {
+        [$c, $intent] = $this->ready();
+        $this->gateway->place = new ExecutionFailure('place_order_differs', true);
+        $this->assertSame('unknown', app(ExecutionDispatcher::class)->dispatch($c, $c->user_id, $intent->id));
+        $this->assertSame(['unknown', 'submission_unknown_place_order_differs'], $this->journalState($intent));
+        $this->assertSame('not_claimed', app(ExecutionDispatcher::class)->dispatch($c, $c->user_id, $intent->id));
+        $this->assertCount(3, $this->gateway->calls);
+        // Arbitrary exception text is never journaled, even if wrapped as an ExecutionFailure.
+        $dispatch = DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->first();
+        app(ExecutionJournal::class)->uncertain($c, $c->user_id, $intent->id, $dispatch->claim_token, 'secret-broker-response');
+        $this->assertFalse(DB::table('mcp_execution_events')->where('reason', 'like', '%secret%')->exists());
     }
 
     public function test_operator_command_stages_and_dispatches_one_signal_and_reports_denials(): void

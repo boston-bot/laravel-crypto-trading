@@ -174,7 +174,7 @@ class LiveExecutionBoundaryTest extends TestCase
         $request = (string) Str::uuid();
         $journal->link($c, $c->user_id, $intent->id, $lost->id, $request, 'Lost acknowledgement; broker order matches the intent.');
         $journal->link($c, $c->user_id, $intent->id, $lost->id, $request, 'Lost acknowledgement; broker order matches the intent.');
-        $this->assertSame('accepted', $this->dispatchStatus($intent));
+        $this->assertSame('filled', $this->dispatchStatus($intent));
         $this->assertTrue(ExternalOrderReview::where('external_order_id', $lost->id)->exists());
         $this->assertSame('open', Incident::where('mcp_connection_id', $c->id)->where('incident_key', ExternalOrders::INCIDENT)->value('state'), 'The unrelated order still needs review.');
         $this->report($c, $this->broker->orders);

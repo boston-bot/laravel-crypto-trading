@@ -89,6 +89,7 @@
         </form>
     @endforeach
 
+    <div id="live-reconciliation"></div>
     @foreach($live['unknown'] as $row)
         @php $p = $row['intent']->payload; @endphp
         @if($row['status'] === 'approval_pending')
@@ -96,6 +97,8 @@
         @else
             <x-callout tone="warn" title="Unknown outcome · intent #{{ $row['intent']->id }}">{{ $p['side'] }} {{ $p['quantity'] }} {{ $p['symbol'] }} was claimed <x-time :at="$row['claimed_at']" /> and the broker response was not recorded. New live orders are blocked until the broker's order is matched by this app's reference, you link it, or you confirm none exists. It is never retried.</x-callout>
         @endif
+        <p class="note">Acknowledging the external-order alert does not link this intent. If a matching filled order is listed below, confirm its ownership with Link broker order. A different broker reference requires this explicit owner link; never submit a replacement order.</p>
+        @if($row['reason'])<p class="note">Recorded submission result: {{ App\Support\Mcp\DisplayFormat::humanize($row['reason']) }}.</p>@endif
         @if($row['candidates']->isNotEmpty())
             <form method="post" action="{{ route('mcp.live.link', $row['intent']->id) }}" class="stack">@csrf
                 <input type="hidden" name="account_scope" value="{{ $scopeKey }}">

@@ -71,7 +71,7 @@ class LiveExecutionController extends Controller
             'note' => ['required', 'string', 'max:500'], 'confirm_link' => ['accepted']]);
         $journal->link($this->connection($request), $request->user()->id, $intent, (int) $data['external_order_id'], $data['request_id'], $data['note']);
 
-        return $this->done('Unknown outcome linked to the broker order. Its fills are recorded from the next order-history read.');
+        return $this->done('Intent linked to the broker order. Current verified order history is reconciled immediately; otherwise monitoring must confirm its outcome before new orders can proceed.');
     }
 
     public function absent(Request $request, ExecutionJournal $journal, int $intent)

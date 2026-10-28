@@ -56,6 +56,22 @@ class AutomaticTradingTest extends TestCase
         }
     }
 
+    public function test_unknown_order_keeps_health_blocked_after_a_later_cycle_with_no_signal(): void
+    {
+        [$c] = $this->ready();
+        $this->gateway->place = new ExecutionFailure('place_outcome_unknown', true);
+        app(LiveTradingCycle::class)->tick($c->id);
+        $this->assertSame('unknown', DB::table('mcp_execution_dispatches')->sole()->status);
+        $state = AutomaticTrading::current(AccountScope::key($c));
+        $this->travel(5)->minutes();
+        DB::table('mcp_execution_cycles')->insert(['execution_account_id' => $state->execution_account_id, 'automation_id' => $state->id,
+            'slot_at' => now(), 'status' => 'complete', 'evaluated' => 1, 'attempted' => 0, 'started_at' => now(), 'finished_at' => now()]);
+        $health = app(OperationsHealth::class)->evaluate()['automatic_trading'];
+        $this->assertSame('warning', $health['status']);
+        $this->assertSame(1, $health['detail']['blocked_accounts']);
+        $this->actingAs(User::findOrFail($c->user_id))->get('/mcp/dashboard')->assertOk()->assertSee('Submissions blocked · order reconciliation');
+    }
+
     public function test_ui_start_requires_owner_and_confirmations_stop_stays_available_and_pause_preserves_stop(): void
     {
         [$c] = $this->ready(false);

@@ -23,8 +23,9 @@ final class LiveExecutionOverview
         $intents = OrderIntent::where('execution_account_id', $account ?? 0)->latest('id')->limit(10)->get();
         $dispatches = DB::table('mcp_execution_dispatches')->whereIn('intent_id', $intents->pluck('id'))->get()->keyBy('intent_id');
         $outcomes = ExecutionOutcome::whereIn('intent_id', $intents->pluck('id'))->latest('id')->get()->unique('intent_id')->keyBy('intent_id');
+        $events = DB::table('mcp_execution_events')->whereIn('intent_id', $intents->pluck('id'))->orderByDesc('version')->get()->unique('intent_id')->keyBy('intent_id');
         $rows = $intents->map(fn (OrderIntent $intent) => ['intent' => $intent, 'status' => $dispatches[$intent->id]->status ?? 'missing',
-            'claimed_at' => $dispatches[$intent->id]->claimed_at ?? null, 'outcome' => $outcomes[$intent->id] ?? null]);
+            'claimed_at' => $dispatches[$intent->id]->claimed_at ?? null, 'reason' => $events[$intent->id]->reason ?? null, 'outcome' => $outcomes[$intent->id] ?? null]);
         $approvals = ExecutionApproval::whereIn('intent_id', $intents->pluck('id'))->get()->keyBy('intent_id');
         $unknown = $rows->whereIn('status', ['unknown', 'approval_pending'])->map(fn ($row) => $row + ['approval' => $approvals[$row['intent']->id] ?? null])->values();
         // Owner links choose among this account's observed orders matching side and symbol; the journal rechecks quantity and time.

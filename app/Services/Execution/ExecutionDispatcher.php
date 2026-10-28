@@ -56,7 +56,7 @@ final class ExecutionDispatcher
             });
         } catch (Throwable $error) {
             if ($attempted || ($error instanceof ExecutionFailure && $error->maybeSent)) {
-                $this->journal->uncertain($connection, $actor, $intent->id, $token);
+                $this->journal->uncertain($connection, $actor, $intent->id, $token, $error instanceof ExecutionFailure ? $error->reason : null);
 
                 return 'unknown';
             }

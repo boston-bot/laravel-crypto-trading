@@ -20,8 +20,12 @@ final class AutomaticTrading
     {
         $scope = AccountScope::key($c);
         $state = self::current($scope);
+        $blocking = DB::table('mcp_execution_dispatches as d')->join('mcp_execution_intents as i', 'i.id', '=', 'd.intent_id')
+            ->join('mcp_execution_accounts as a', 'a.id', '=', 'i.execution_account_id')->where('a.scope', $scope)
+            ->whereIn('d.status', ExecutionJournal::BLOCKING)->select('i.id', 'd.status')->orderBy('i.id')->get();
 
         return ['state' => $state, 'reason' => $this->reason($c), 'configuration_reason' => $this->configurationReason(),
+            'blocking_orders' => $blocking,
             'controls' => ExecutionControls::state($scope), 'last_cycle' => $state ? DB::table('mcp_execution_cycles')
                 ->where('execution_account_id', $state->execution_account_id)->latest('id')->first() : null];
     }

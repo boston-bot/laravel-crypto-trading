@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Execution;
 
+use App\Models\Execution\ExecutionFill;
 use App\Models\Execution\ExecutionPolicy;
 use App\Models\Monitoring\ExternalOrder;
 use App\Models\Monitoring\ExternalOrderReview;
@@ -11,6 +12,7 @@ use App\Services\Execution\BrokerOutcomes;
 use App\Services\Execution\ExecutionControls;
 use App\Services\Execution\ExecutionJournal;
 use App\Services\Monitoring\AccountScope;
+use App\Services\Monitoring\ExternalOrders;
 use App\Services\Monitoring\IncidentRecorder;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -97,19 +99,48 @@ class LiveExecutionControlsTest extends TestCase
         DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->update(['status' => 'submitting', 'version' => 2, 'claim_token' => (string) Str::uuid(), 'claimed_at' => now()]);
         DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->update(['status' => 'unknown', 'version' => 3]);
         $this->travel(1)->seconds();
-        $this->broker->orders = [LiveBrokerGateway::order('rh-lost', 'filled', '1', '1', [['exec-lost', '1', '101.70']]), LiveBrokerGateway::order('rh-sell', 'filled', '1', '1', [['exec-sell', '1', '99.00']], 'DEMO', 'sell')];
+        $this->broker->orders = [LiveBrokerGateway::order('rh-lost', 'filled', '1', '1', [['exec-lost', '1', '101.70']], ref: (string) Str::uuid()), LiveBrokerGateway::order('rh-sell', 'filled', '1', '1', [['exec-sell', '1', '99.00']], 'DEMO', 'sell')];
         F::sync($c, $this->broker);
         $this->actingAs(User::findOrFail($c->user_id));
         $this->get('/mcp/dashboard/control')->assertOk()->assertSee('Unknown outcome · intent #'.$intent->id)->assertSee('rh-lost')->assertSee('Confirm no broker order');
         $this->post(route('mcp.live.absent', $intent->id), ['account_scope' => $scope, 'confirm_absent' => '1'])->assertConflict();
         $sell = ExternalOrder::where('broker_id_hash', hash('sha256', 'rh-sell'))->sole();
         $lost = ExternalOrder::where('broker_id_hash', hash('sha256', 'rh-lost'))->sole();
+        // Acknowledging the external alert must not hide or resolve the unknown execution intent.
+        app(ExternalOrders::class)->review($c, $c->user_id, $lost->id, (string) Str::uuid(), 'Owner recognizes the purchase.');
+        $this->get('/mcp/dashboard/control')->assertOk()->assertSee('Submissions blocked · order reconciliation')
+            ->assertSee('Acknowledging the external-order alert does not link this intent.')->assertSee('rh-lost');
         $link = ['account_scope' => $scope, 'request_id' => (string) Str::uuid(), 'note' => 'Matches the lost acknowledgement.', 'confirm_link' => '1'];
         $this->post(route('mcp.live.link', $intent->id), $link + ['external_order_id' => $sell->id])->assertConflict();
         $this->post(route('mcp.live.link', $intent->id), $link + ['external_order_id' => $lost->id])->assertRedirect();
-        $this->assertSame('accepted', DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->value('status'));
+        $this->assertSame('filled', DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->value('status'));
         $this->assertSame($c->user_id, ExternalOrderReview::where('external_order_id', $lost->id)->sole()->actor_id);
-        $this->get('/mcp/dashboard/control')->assertOk()->assertDontSee('Unknown outcome · intent #'.$intent->id)->assertSee('accepted');
+        $this->get('/mcp/dashboard/control')->assertOk()->assertDontSee('Unknown outcome · intent #'.$intent->id)
+            ->assertDontSee('Submissions blocked · order reconciliation')->assertSee('filled');
+        $this->post(route('mcp.live.link', $intent->id), $link + ['external_order_id' => $lost->id])->assertRedirect();
+        F::sync($c, $this->broker);
+        $this->assertSame(1, ExecutionFill::where('intent_id', $intent->id)->count());
+    }
+
+    public function test_owner_link_with_stale_history_remains_blocking_until_a_fresh_read(): void
+    {
+        $this->broker = new LiveBrokerGateway;
+        [$c, $signal] = F::seed($this->broker);
+        $intent = F::stage($c, $signal);
+        DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->update(['status' => 'submitting', 'version' => 2,
+            'claim_token' => (string) Str::uuid(), 'claimed_at' => now()]);
+        DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->update(['status' => 'unknown', 'version' => 3]);
+        $this->broker->orders = [LiveBrokerGateway::order('rh-stale', 'filled', '1', '1', [['exec-stale', '1', '101.70']])];
+        F::sync($c, $this->broker);
+        $order = ExternalOrder::where('broker_id_hash', hash('sha256', 'rh-stale'))->sole();
+        $this->travel(6)->minutes();
+        app(ExecutionJournal::class)->link($c, $c->user_id, $intent->id, $order->id, (string) Str::uuid(), 'Owner verified this order.');
+        $this->assertSame('accepted', DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->value('status'));
+        $this->assertSame(0, ExecutionFill::where('intent_id', $intent->id)->count());
+        $this->actingAs(User::findOrFail($c->user_id))->get('/mcp/dashboard')->assertOk()->assertSee('Submissions blocked · order reconciliation');
+        F::sync($c, $this->broker);
+        $this->assertSame('filled', DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->value('status'));
+        $this->assertSame(1, ExecutionFill::where('intent_id', $intent->id)->count());
     }
 
     public function test_approval_pending_orders_show_their_expiry_and_resolution_forms(): void

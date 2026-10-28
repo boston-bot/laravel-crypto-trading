@@ -13,6 +13,7 @@ use App\Models\PaperTrading\StrategyCycle;
 use App\Models\PaperTrading\StrategySignal;
 use App\Models\User;
 use App\Services\Broker\Agentic\RobinhoodOrderContract;
+use App\Services\Broker\Agentic\TrustedHttp;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\ExternalOrders;
 use App\Services\Monitoring\IncidentRecorder;
@@ -132,9 +133,12 @@ final class ExecutionJournal
     }
 
     /** A crash/timeout on either side of the external call cannot establish whether an order exists. */
-    public function uncertain(McpConnection $connection, int $actor, int $intentId, string $token): void
+    public function uncertain(McpConnection $connection, int $actor, int $intentId, string $token, ?string $failure = null): void
     {
-        DB::transaction(function () use ($connection, $actor, $intentId, $token) {
+        // Fixed categories only: never persist an exception message, response body or broker-supplied text.
+        $reason = in_array($failure, ['place_outcome_unknown', 'place_order_differs', 'place_response_unrecognized'], true)
+            ? 'submission_unknown_'.$failure : 'submission_outcome_unknown';
+        DB::transaction(function () use ($connection, $actor, $intentId, $token, $reason) {
             // Old authorizations must still be recoverable; they can only become more restrictive here.
             $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
             $this->operator($current, $actor);
@@ -144,7 +148,7 @@ final class ExecutionJournal
             abort_unless($dispatch->claim_token !== null && hash_equals($dispatch->claim_token, $token) &&
                 in_array($dispatch->status, ['submitting', 'unknown'], true), 409, 'Submission ownership changed.');
             if ($dispatch->status === 'submitting') {
-                $this->transition($dispatch, 'unknown', 'submission_outcome_unknown');
+                $this->transition($dispatch, 'unknown', $reason);
             }
         });
     }
@@ -293,6 +297,17 @@ final class ExecutionJournal
                 app(IncidentRecorder::class)->resolve($current, ExternalOrders::INCIDENT);
             }
             $this->transition($dispatch, 'accepted', 'owner_linked_broker_order');
+            // Reuse current stored broker evidence so a previously reviewed, already filled order can finish
+            // reconciliation in this action. Stale/missing evidence leaves it accepted and still blocking.
+            $read = BrokerOrderRead::where('mcp_connection_id', $current->id)->where('scope', $account->scope)
+                ->where('auth_generation', $current->auth_generation)->latest('id')->first();
+            if ($read && $read->complete && ! $read->retrieved_at->isFuture() && ! $read->recorded_at->isFuture() &&
+                $read->retrieved_at->gt(CarbonImmutable::now()->subMinutes(5)) &&
+                ($read->payload['read']['coverage'] ?? null) === 'equities' &&
+                ($read->payload['read']['source'] ?? null) === TrustedHttp::RESOURCE &&
+                ($read->payload['contract_fingerprint'] ?? null) === config('robinhood_mcp.operations.orders.fingerprint')) {
+                app(BrokerOutcomes::class)->record($current, $read);
+            }
         });
     }
 

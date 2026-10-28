@@ -14,6 +14,7 @@ use App\Services\Crypto\CryptoMarketData;
 use App\Services\Crypto\CryptoStrategyEvaluation;
 use App\Services\Execution\AutomaticTrading;
 use App\Services\Execution\ExecutionControls;
+use App\Services\Execution\ExecutionJournal;
 use App\Services\Monitoring\AccountScope;
 use App\Services\Monitoring\MarketCalendar;
 use Carbon\CarbonImmutable;
@@ -144,7 +145,9 @@ final class OperationsHealth
             if ($at->lte(CarbonImmutable::now()->subMinutes(10)) || ($last?->status === 'running' && $at->lte(CarbonImmutable::now()->subMinutes(6))) ||
                 ($last?->status === 'failed') || in_array($last?->reason, ['unknown', 'reconciliation_unavailable'], true)) {
                 $overdue++;
-            } elseif ($last?->reason === 'open_order_requires_reconciliation') {
+            } elseif ($last?->reason === 'open_order_requires_reconciliation' || DB::table('mcp_execution_dispatches as d')
+                ->join('mcp_execution_intents as i', 'i.id', '=', 'd.intent_id')->where('i.execution_account_id', $state->execution_account_id)
+                ->whereIn('d.status', ExecutionJournal::BLOCKING)->exists()) {
                 $blocked++;
             }
         }

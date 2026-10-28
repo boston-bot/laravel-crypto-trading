@@ -4,7 +4,7 @@
 @endphp
 <x-panel title="Automatic trading" subtitle="Real orders under your saved live policy" icon="shield">
     <div class="form-actions">
-        <x-pill :tone="$armed ? 'ok' : 'neutral'">{{ $armed ? ($automatic['controls']['buy_paused'] ? 'Exits only · buys paused' : 'On · buys and exits') : 'Off / blocked' }}</x-pill>
+        <x-pill :tone="$automatic['blocking_orders']->isNotEmpty() ? 'warn' : ($armed ? 'ok' : 'neutral')">{{ $automatic['blocking_orders']->isNotEmpty() ? 'Submissions blocked · order reconciliation' : ($armed ? ($automatic['controls']['buy_paused'] ? 'Exits only · buys paused' : 'On · buys and exits') : 'Off / blocked') }}</x-pill>
         <form method="post" action="{{ route('mcp.live.automatic.stop') }}" class="inline-form">@csrf
             <input type="hidden" name="account_scope" value="{{ $automaticScope }}">
             <input type="hidden" name="request_id" value="{{ Illuminate\Support\Str::uuid() }}">
@@ -18,6 +18,11 @@
         </form>
     </div>
     <p class="note">Stop blocks new buys and sells. An order already being submitted or accepted by Robinhood can still fill; cancel it in Robinhood if needed. Pausing buys leaves automatic exits running while trading is on.</p>
+    @if($automatic['blocking_orders']->isNotEmpty())
+        <p role="status">An unresolved or open submission blocks every new live order, including exits. Monitoring continues. Reviewing an external-order alert alone does not resolve its execution intent.</p>
+        <p>@foreach($automatic['blocking_orders'] as $blocking) Intent #{{ $blocking->id }} · {{ App\Support\Mcp\DisplayFormat::humanize($blocking->status) }}. @endforeach
+            <a href="{{ route('mcp.dashboard', ['page' => 'control']) }}#live-reconciliation">Review and reconcile broker orders</a></p>
+    @endif
     @if($automatic['state']?->enabled && $automatic['reason'])
         <p role="status">Trading blocked: {{ App\Support\Mcp\DisplayFormat::humanize($automatic['reason']) }}. Review the policy and authorization before enabling again.</p>
     @endif
