@@ -26,4 +26,12 @@ Predeployment encrypted backup `mcp-trading-20261028T145351Z.dump.enc` passed is
 
 Operational recovery uses the authenticated Control Center to link CRWD to intent #1, then verifies a broker-confirmed filled outcome and exactly one execution. This sends no broker order. Ordinary scheduled operation stays under existing owner activation/policy and every submission check; missed WSM signals are not replayed.
 
+## Actual deployment and recovery
+
+Owner-requested fix committed as `1532adf` and deployed with the standard pinned-PHP deployment script. No pending migrations; readiness healthy. During subsequent verification, development and runtime advanced separately to `1a6c864`, a direct descendant containing the pre-existing crypto spread work; that commit and runtime were preserved, not reverted or attributed to this repair.
+
+The owner signed into localhost Chrome. The authenticated Link broker order action linked the existing CRWD order to intent #1; the latest complete history (October 28, 15:01:08 UTC) recorded accepted version 4 and filled version 5 immediately. Read-only SQL verifies `owner_link`, quantity `0.045547`, average `261.859900`, zero fees, exactly one execution, and zero blocking dispatches. The external-order review from October 27 was retained. No direct SQL repair, replacement intent, broker write, manual live-cycle invocation or reference substitution was used.
+
+Read-only runtime services verify automatic enabled, no activation/recovery reason, zero blocking orders, automatic health `ok` with zero blocked/overdue accounts, and CRWD held with valid managed exit context. The authenticated page shows its filled intent and broker-confirmed execution. This corrects the earlier claim that CRWD would remain unmanaged after the external review: it is now explicitly linked and managed. Risk/approval settings and activation were unchanged. Future scheduled orders, if admitted, remain ordinary owner-authorized operation rather than deployment tests. Further broker reference behavior remains unverified.
+
 M6 remains partial. Next: observe ordinary scheduled operation and verify future broker reference behavior without a synthetic live order. Cancellation/recovery and remaining milestone acceptance are unchanged.
