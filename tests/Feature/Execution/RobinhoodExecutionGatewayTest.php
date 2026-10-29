@@ -59,7 +59,8 @@ class RobinhoodExecutionGatewayTest extends TestCase
 
     private function order(array $patch = []): array
     {
-        return ['order' => $patch + ['id' => 'rh-order-1', 'ref_id' => strtoupper(self::KEY), 'symbol' => 'DEMO', 'side' => 'buy', 'quantity' => '1.00000000'], 'approval' => null];
+        return ['order' => $patch + ['id' => 'rh-order-1', 'ref_id' => strtoupper(self::KEY), 'symbol' => 'DEMO', 'side' => 'buy', 'quantity' => '1.00000000',
+            'type' => 'market', 'time_in_force' => 'gfd', 'market_hours' => 'regular_hours', 'stop_price' => null, 'created_at' => now()->toISOString()], 'approval' => null];
     }
 
     public function test_pinned_fingerprints_match_the_captured_schemas(): void
@@ -95,7 +96,9 @@ class RobinhoodExecutionGatewayTest extends TestCase
         $this->assertSame([['name' => 'review_equity_order', 'arguments' => $terms], ['name' => 'place_equity_order', 'arguments' => $terms + ['ref_id' => self::KEY]]],
             array_map(fn ($call) => ['name' => $call['name'], 'arguments' => $call['arguments']], $this->calls));
         $this->assertSame(['order_checks' => [], 'customer_approval_required' => true], $review);
-        $this->assertSame(['kind' => 'order', 'order_id' => 'rh-order-1'], $placed);
+        $this->assertSame(['order', 'rh-order-1'], [$placed['kind'], $placed['order_id']]);
+        $this->assertSame(self::KEY, $placed['receipt']['submitted_ref_id']);
+        $this->assertSame(strtoupper(self::KEY), $placed['receipt']['returned_ref_id']);
     }
 
     public function test_limit_orders_carry_the_bound_and_fractional_limits_are_refused_before_sending(): void
@@ -165,13 +168,85 @@ class RobinhoodExecutionGatewayTest extends TestCase
             }
             $this->assertCount(1, $this->calls, 'One place request; no retry.');
         }
-        $this->fake($this->order(['ref_id' => 'another-agents-ref']));
+        $this->fake($this->order(['ref_id' => 'malformed-reference']));
         try {
             $gateway->within($c, fn () => $gateway->place($c, $this->intent($c)));
-            $this->fail('A different ref_id must not bind.');
+            $this->fail('A malformed ref_id must not bind.');
         } catch (ExecutionFailure $failure) {
             $this->assertSame(['place_order_differs', true], [$failure->reason, $failure->maybeSent]);
         }
+    }
+
+    public function test_correlated_exact_order_response_can_return_a_different_reference_without_resending(): void
+    {
+        config(['mcp.brokerage_writes_enabled' => true]);
+        $c = McpFixture::connection();
+        $gateway = app(RobinhoodExecutionGateway::class);
+        $returned = '00000000-0000-4000-8000-000000000001';
+        $this->fake($this->order(['ref_id' => $returned]));
+        $placed = $gateway->within($c, fn () => $gateway->place($c, $this->intent($c)));
+        $this->assertSame('rh-order-1', $placed['order_id']);
+        $this->assertSame(self::KEY, $this->calls[0]['arguments']['ref_id'], 'The submitted key is never replaced.');
+        $this->assertSame([self::KEY, $returned], [$placed['receipt']['submitted_ref_id'], $placed['receipt']['returned_ref_id']]);
+        $this->assertSame('correlated_submission_response_v1', $placed['receipt']['contract']);
+        $this->assertCount(1, $this->calls);
+    }
+
+    public function test_response_terms_and_time_must_match_even_when_reference_matches(): void
+    {
+        config(['mcp.brokerage_writes_enabled' => true]);
+        $c = McpFixture::connection();
+        $gateway = app(RobinhoodExecutionGateway::class);
+        foreach ([['symbol' => 'OTHER'], ['side' => 'sell'], ['quantity' => '1.000001'], ['type' => 'limit'], ['market_hours' => 'extended_hours'],
+            ['time_in_force' => 'gtc'], ['stop_price' => '99'], ['created_at' => null], ['created_at' => 'now'],
+            ['created_at' => now()->subMinutes(2)->toISOString()], ['created_at' => now()->addMinutes(2)->toISOString()], ['id' => 'bad id']] as $patch) {
+            $this->calls = [];
+            $this->fake($this->order($patch));
+            try {
+                $gateway->within($c, fn () => $gateway->place($c, $this->intent($c)));
+                $this->fail('Contradictory response must stay unknown: '.json_encode($patch));
+            } catch (ExecutionFailure $failure) {
+                $this->assertSame(['place_order_differs', true], [$failure->reason, $failure->maybeSent]);
+            }
+            $this->assertCount(1, $this->calls, 'Never retry a possible submission.');
+        }
+    }
+
+    public function test_direct_limit_response_must_echo_the_exact_limit_price(): void
+    {
+        config(['mcp.brokerage_writes_enabled' => true]);
+        $c = McpFixture::connection();
+        $gateway = app(RobinhoodExecutionGateway::class);
+        $intent = $this->intent($c, ['type' => 'limit']);
+        $this->fake($this->order(['type' => 'limit', 'price' => '102.051000']));
+        $placed = $gateway->within($c, fn () => $gateway->place($c, $intent));
+        $this->assertSame('102.051', $placed['receipt']['limit_price']);
+        $this->fake($this->order(['type' => 'limit', 'price' => '102.052']));
+        $this->expectException(ExecutionFailure::class);
+        $gateway->within($c, fn () => $gateway->place($c, $intent));
+    }
+
+    public function test_a_response_for_a_different_rpc_request_cannot_prove_ownership(): void
+    {
+        config(['mcp.brokerage_writes_enabled' => true]);
+        $c = McpFixture::connection();
+        $order = $this->order(['ref_id' => '00000000-0000-4000-8000-000000000001']);
+        $calls = 0;
+        McpFixture::rpcFake($this->tools(), function ($params, $request) use ($order, &$calls) {
+            $calls++;
+            $rpc = json_decode($request->body(), true);
+
+            return Http::response(['jsonrpc' => '2.0', 'id' => $rpc['id'] + 999, 'result' => [
+                'content' => [], 'structuredContent' => ['data' => $order, 'guide' => 'synthetic']]]);
+        });
+        $gateway = app(RobinhoodExecutionGateway::class);
+        try {
+            $gateway->within($c, fn () => $gateway->place($c, $this->intent($c)));
+            $this->fail('An unrelated RPC response cannot establish ownership.');
+        } catch (ExecutionFailure $failure) {
+            $this->assertSame(['place_outcome_unknown', true], [$failure->reason, $failure->maybeSent]);
+        }
+        $this->assertSame(1, $calls, 'No transport retry on an uncorrelated response.');
     }
 
     public function test_read_sessions_cannot_reach_order_tools_even_with_writes_enabled(): void

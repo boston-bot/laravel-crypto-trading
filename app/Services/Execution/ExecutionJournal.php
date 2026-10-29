@@ -214,13 +214,18 @@ final class ExecutionJournal
      * The broker acknowledged the request with its order ID. Binding the ID is what lets reconciliation and external
      * order detection recognise the order as this app's. It records acceptance, not a fill.
      */
-    public function accepted(McpConnection $connection, int $actor, int $intentId, string $token, string $brokerOrderId): void
+    public function accepted(McpConnection $connection, int $actor, int $intentId, string $token, string $brokerOrderId, ?array $receipt = null): void
     {
         abort_unless($brokerOrderId !== '' && strlen($brokerOrderId) <= 128 && ! preg_match('/\s/', $brokerOrderId), 422, 'Invalid broker order reference.');
-        DB::transaction(function () use ($connection, $actor, $intentId, $token, $brokerOrderId) {
+        DB::transaction(function () use ($connection, $actor, $intentId, $token, $brokerOrderId, $receipt) {
             $current = McpConnection::whereKey($connection->id)->lockForUpdate()->firstOrFail();
             $this->operator($current, $actor);
             $intent = OrderIntent::whereKey($intentId)->where('mcp_connection_id', $current->id)->firstOrFail();
+            if ($receipt !== null) {
+                abort_unless(($receipt['contract'] ?? null) === 'correlated_submission_response_v1' &&
+                    ($receipt['scope'] ?? null) === AccountScope::key($current) && ($receipt['auth_generation'] ?? null) === $intent->auth_generation &&
+                    ($receipt['submitted_ref_id'] ?? null) === $intent->idempotency_key && ($receipt['broker_order_id'] ?? null) === $brokerOrderId, 409, 'Submission receipt binding differs.');
+            }
             DB::table('mcp_execution_accounts')->where('id', $intent->execution_account_id)->lockForUpdate()->firstOrFail();
             $dispatch = DB::table('mcp_execution_dispatches')->where('intent_id', $intentId)->lockForUpdate()->firstOrFail();
             $bound = BrokerOrderBinding::where('intent_id', $intentId)->first();
@@ -232,8 +237,12 @@ final class ExecutionJournal
             }
             $dispatch = $this->owned($intentId, $token, ['submitting']);
             BrokerOrderBinding::create(['intent_id' => $intentId, 'broker_id_hash' => hash('sha256', $brokerOrderId), 'broker_order_id' => $brokerOrderId,
-                'source' => 'submission_response', 'recorded_at' => now()]);
-            $this->transition($dispatch, 'accepted', 'broker_acknowledged_order');
+                'source' => 'submission_response', 'submission_receipt' => $receipt, 'recorded_at' => now()]);
+            $differentRef = $receipt !== null && $receipt['returned_ref_id'] !== null && strtolower($receipt['returned_ref_id']) !== strtolower($intent->idempotency_key);
+            $this->transition($dispatch, 'accepted', $differentRef ? 'broker_acknowledged_order_reference_differs' : 'broker_acknowledged_order');
+            if (! app(ExternalOrders::class)->pending($current)->exists()) {
+                app(IncidentRecorder::class)->resolve($current, ExternalOrders::INCIDENT);
+            }
         });
     }
 

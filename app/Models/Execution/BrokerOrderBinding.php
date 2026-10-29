@@ -10,7 +10,7 @@ class BrokerOrderBinding extends ImmutableRecord
 
     protected $guarded = ['id'];
 
-    protected $hidden = ['broker_order_id'];
+    protected $hidden = ['broker_order_id', 'submission_receipt'];
 
     public $timestamps = false;
 
@@ -18,6 +18,6 @@ class BrokerOrderBinding extends ImmutableRecord
 
     protected function casts(): array
     {
-        return ['broker_order_id' => 'encrypted', 'recorded_at' => 'immutable_datetime'];
+        return ['broker_order_id' => 'encrypted', 'submission_receipt' => 'encrypted:array', 'recorded_at' => 'immutable_datetime'];
     }
 }

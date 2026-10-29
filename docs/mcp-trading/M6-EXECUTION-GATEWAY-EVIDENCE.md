@@ -1,5 +1,7 @@
 # M6 execution gateway and dispatcher
 
+October 29 follow-up: the original matching-reference requirement on a direct placement response is superseded by [validated, correlated submission receipts](M6-SUBMISSION-RECEIPTS.md). Broker history can report a different reference; exact response terms and request correlation prove the returned broker order ID, while lost responses still need exact reference proof or an owner link. Historical verification below describes the original implementation.
+
 October 25, 2026 Central, night. This continues trading readiness after deploying `1232e12` and enabling the approval-setting read. Source only, tested only against a synthetic JSON-RPC server and a scripted fake gateway. Live writes stay disabled (`BROKERAGE_WRITES_ENABLED=false`). No order, review or approval tool was called against Robinhood, and nothing was scheduled. No live pilot is authorized by this document.
 
 ## Runtime state at the time of writing

@@ -15,7 +15,7 @@ interface ExecutionGateway
     public function review(McpConnection $connection, OrderIntent $intent): array;
 
     /**
-     * @return array{kind: 'order', order_id: string}|array{kind: 'approval', approval_id: string, state: string, is_edited: bool, expires_at: string}
+     * @return array{kind: 'order', order_id: string, receipt?: array}|array{kind: 'approval', approval_id: string, state: string, is_edited: bool, expires_at: string}
      *
      * @throws ExecutionFailure with maybeSent true for any failure once the request may have been sent
      */

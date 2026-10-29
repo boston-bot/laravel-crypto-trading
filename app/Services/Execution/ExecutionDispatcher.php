@@ -46,7 +46,7 @@ final class ExecutionDispatcher
                 $attempted = true;
                 $result = $this->gateway->place($connection, $intent);
                 if ($result['kind'] === 'order') {
-                    $this->journal->accepted($connection, $actor, $intent->id, $token, $result['order_id']);
+                    $this->journal->accepted($connection, $actor, $intent->id, $token, $result['order_id'], $result['receipt'] ?? null);
 
                     return 'accepted';
                 }

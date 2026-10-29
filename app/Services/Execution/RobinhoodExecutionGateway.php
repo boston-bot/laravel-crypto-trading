@@ -9,7 +9,10 @@ use App\Services\Broker\Agentic\McpSession;
 use App\Services\Broker\Agentic\ReadFailure;
 use App\Services\Broker\Agentic\RobinhoodOrderContract;
 use App\Services\Broker\Agentic\SessionFactory;
+use App\Services\Monitoring\AccountScope;
+use App\Support\Mcp\Decimal;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use LogicException;
 use Throwable;
 
@@ -80,6 +83,7 @@ final class RobinhoodExecutionGateway implements ExecutionGateway
     {
         $arguments = $this->arguments($connection, $intent) + ['ref_id' => $intent->idempotency_key];
         $session = $this->session($connection);
+        $sentAt = CarbonImmutable::now();
         try {
             $result = $session->call('place_equity_order', $arguments);
         } catch (Throwable) {
@@ -90,13 +94,21 @@ final class RobinhoodExecutionGateway implements ExecutionGateway
         $approval = is_array($data) ? ($data['approval'] ?? null) : null;
         if (is_array($order) && $approval === null) {
             $ref = $order['ref_id'] ?? null;
-            if (! is_string($order['id'] ?? null) || $order['id'] === '' || ($ref !== null && (! is_string($ref) || strtolower($ref) !== strtolower($intent->idempotency_key))) ||
-                ! ExecutionJournal::matches($intent, ['id' => $order['id'], 'symbol' => $order['symbol'] ?? null, 'side' => $order['side'] ?? null,
-                    'quantity' => $order['quantity'] ?? null], CarbonImmutable::now())) {
+            $receivedAt = CarbonImmutable::now();
+            if (! $this->matchesResponse($intent, $arguments, $order, $sentAt, $receivedAt) || ($ref !== null && (! is_string($ref) || ! Str::isUuid($ref)))) {
                 throw new ExecutionFailure('place_order_differs', true);
             }
 
-            return ['kind' => 'order', 'order_id' => $order['id']];
+            // Ownership comes from this request's authenticated, JSON-RPC-correlated response and exact terms,
+            // not from the echoed ref_id. History-only matching still requires the original reference.
+            return ['kind' => 'order', 'order_id' => $order['id'], 'receipt' => [
+                'contract' => 'correlated_submission_response_v1', 'scope' => AccountScope::key($connection),
+                'auth_generation' => $connection->auth_generation, 'submitted_ref_id' => $intent->idempotency_key,
+                'returned_ref_id' => $ref, 'broker_order_id' => $order['id'], 'symbol' => $order['symbol'], 'side' => $order['side'],
+                'type' => $order['type'], 'quantity' => $order['quantity'], 'time_in_force' => $order['time_in_force'],
+                'market_hours' => $order['market_hours'], 'limit_price' => $arguments['limit_price'] ?? null,
+                'broker_created_at' => $order['created_at'], 'sent_at' => $sentAt->toISOString(), 'received_at' => $receivedAt->toISOString(),
+            ]];
         }
         if (is_array($approval) && $order === null && is_string($approval['approval_id'] ?? null) && is_string($approval['state'] ?? null) &&
             is_bool($approval['is_edited'] ?? null) && is_string($approval['expires_at'] ?? null)) {
@@ -104,6 +116,24 @@ final class RobinhoodExecutionGateway implements ExecutionGateway
                 'is_edited' => $approval['is_edited'], 'expires_at' => $approval['expires_at']];
         }
         throw new ExecutionFailure('place_response_unrecognized', true);
+    }
+
+    private function matchesResponse(OrderIntent $intent, array $arguments, array $order, CarbonImmutable $sent, CarbonImmutable $received): bool
+    {
+        if (! is_string($order['id'] ?? null) || strlen($order['id']) > 128 || preg_match('/\s/', $order['id']) ||
+            ! ExecutionJournal::matches($intent, $order, $sent, true) ||
+            ($order['type'] ?? null) !== $arguments['type'] || ($order['time_in_force'] ?? null) !== $arguments['time_in_force'] ||
+            ($order['market_hours'] ?? null) !== $arguments['market_hours'] || ($order['stop_price'] ?? null) !== null ||
+            ! is_string($order['created_at'] ?? null) || ! preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/D', $order['created_at'])) {
+            return false;
+        }
+        try {
+            return CarbonImmutable::parse($order['created_at'])->lte($received) && ($arguments['type'] !== 'limit' ||
+                (is_string($order['price'] ?? null) && preg_match('/^\d+(?:\.\d+)?$/D', $order['price']) &&
+                    Decimal::from($order['price'])->compareTo(Decimal::from($arguments['limit_price'])) === 0));
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
     }
 
     private function session(McpConnection $connection): McpSession

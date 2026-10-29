@@ -40,8 +40,10 @@ final class RobinhoodOrderContract
 
     /**
      * "Idempotency key (UUID) ... the upstream deduplicates by ref_id." One stable key per logical order, re-sent unchanged
-     * on transport retries. Orders report it back, which is the only evidence of which agent placed an order: approved
-     * orders read placed_agent 'user', and agent_initiated does not identify the agent.
+     * on transport retries according to the reviewed description; this app never retries a possible submission.
+     * Runtime history can report a different reference. A validated, correlated direct placement response can bind
+     * its broker order ID; without that receipt, history-only ownership still requires the submitted ref_id or an
+     * explicit owner link. placed_agent and agent_initiated cannot identify this app.
      */
     public const REF_ID_DEDUPLICATES = true;
 

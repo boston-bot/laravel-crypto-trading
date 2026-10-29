@@ -3,7 +3,12 @@
 namespace Tests\Integration;
 
 use App\Models\Execution\BrokerOrderBinding;
+use App\Models\Execution\ExecutionFill;
 use App\Models\Execution\OrderIntent;
+use App\Models\Monitoring\ExternalOrder;
+use App\Models\Monitoring\Incident;
+use App\Services\Broker\Agentic\Capabilities;
+use App\Services\Broker\Agentic\Operation;
 use App\Services\Execution\ExecutionControls;
 use App\Services\Execution\ExecutionDispatcher;
 use App\Services\Execution\ExecutionFailure;
@@ -11,8 +16,10 @@ use App\Services\Execution\ExecutionGateway;
 use App\Services\Execution\ExecutionJournal;
 use App\Services\Execution\LivePolicies;
 use App\Services\Execution\LivePositionFacts;
+use App\Services\Execution\RobinhoodExecutionGateway;
 use App\Services\Execution\SubmissionChecks;
 use App\Services\Monitoring\AccountScope;
+use App\Services\Monitoring\ExternalOrders;
 use App\Services\PaperTrading\SignalPaperHandoff;
 use App\Services\PaperTrading\StrategySignals;
 use Carbon\CarbonImmutable;
@@ -24,6 +31,7 @@ use Tests\Support\ExecutionJournalFixture;
 use Tests\Support\FakeExecutionGateway;
 use Tests\Support\LiveBrokerGateway;
 use Tests\Support\LiveExecutionFixture as F;
+use Tests\Support\McpFixture;
 use Tests\Support\SignalExecutionFixture;
 use Tests\TestCase;
 
@@ -89,6 +97,82 @@ class LiveExecutionDispatchTest extends TestCase
         $this->assertSame(['approval_pending', 'broker_customer_approval_requested'], $this->journalState($intent));
         $other = F::stage($c, F::signal($c, 'BUY'));
         $this->assertSame('not_claimed', app(ExecutionDispatcher::class)->dispatch($c, $c->user_id, $other->id));
+    }
+
+    public static function directResponseRaces(): array
+    {
+        return ['response first' => [false, false], 'history first' => [true, false], 'history with unrelated order' => [true, true]];
+    }
+
+    #[DataProvider('directResponseRaces')]
+    public function test_real_gateway_different_reference_receipt_reconciles_by_broker_id_after_restart(bool $historyFirst, bool $unrelated): void
+    {
+        [$c, $intent] = $this->ready();
+        config(['robinhood_mcp.enabled' => true]);
+        $returned = '00000000-0000-4000-8000-000000000001';
+        $calls = [];
+        $tools = [];
+        foreach (glob(base_path('tests/Fixtures/Mcp/*catalog*.json')) as $file) {
+            foreach (json_decode(file_get_contents($file), true)['tools'] as $tool) {
+                $tools[$tool['name']] = $tool;
+            }
+        }
+        foreach (json_decode(file_get_contents(base_path('tests/Fixtures/Mcp/robinhood-write-tool-schemas.json')), true)['tools'] as $tool) {
+            $tools[$tool['name']] = $tool;
+        }
+        $earnings = json_decode(file_get_contents(base_path('tests/Fixtures/Mcp/robinhood-earnings-calendar-schema.json')), true)['tool'];
+        $tools[$earnings['name']] = $earnings;
+        $approval = McpFixture::tool(Operation::TradeApprovalSetting);
+        config(['robinhood_mcp.operations.trade_approval_setting.tool' => $approval['name'],
+            'robinhood_mcp.operations.trade_approval_setting.fingerprint' => Capabilities::fingerprint($approval)]);
+        $tools[$approval['name']] = $approval;
+        F::sync($c, $this->broker);
+        foreach ($c->fresh()->capability_manifest ?? [] as $tool) {
+            $tools[$tool['name']] = array_intersect_key($tool, array_flip(['name', 'inputSchema', 'outputSchema']));
+        }
+        $tools = array_values($tools);
+        McpFixture::rpcFake($tools, function ($params) use (&$calls, $intent, $returned, $historyFirst, $unrelated, $c) {
+            $calls[] = $params;
+            if ($params['name'] === 'place_equity_order' && $historyFirst) {
+                $this->broker->orders = [LiveBrokerGateway::order('rh-direct-receipt', 'filled', $intent->payload['quantity'], $intent->payload['quantity'],
+                    [['exec-direct', $intent->payload['quantity'], '101.70']], ref: $returned)];
+                if ($unrelated) {
+                    $this->broker->orders[] = LiveBrokerGateway::order('rh-unrelated', 'filled', '1', '1', [['exec-unrelated', '1', '101.70']]);
+                }
+                F::sync($c, $this->broker);
+            }
+            $data = $params['name'] === 'review_equity_order'
+                ? ['symbol' => 'DEMO', 'side' => 'buy', 'order_checks' => [], 'customer_approval_required' => true]
+                : ['order' => ['id' => 'rh-direct-receipt', 'ref_id' => $returned, 'symbol' => 'DEMO', 'side' => 'buy', 'quantity' => $intent->payload['quantity'],
+                    'type' => 'market', 'time_in_force' => 'gfd', 'market_hours' => 'regular_hours', 'stop_price' => null, 'created_at' => now()->toISOString()], 'approval' => null];
+
+            return ['content' => [], 'structuredContent' => ['data' => $data, 'guide' => 'synthetic']];
+        });
+        $dispatcher = new ExecutionDispatcher(app(ExecutionJournal::class), app(RobinhoodExecutionGateway::class));
+        $outcome = $dispatcher->dispatch($c, $c->user_id, $intent->id);
+        $this->assertSame('accepted', $outcome, json_encode($this->journalState($intent)));
+        $binding = BrokerOrderBinding::where('intent_id', $intent->id)->sole();
+        $this->assertSame('submission_response', $binding->source);
+        $this->assertSame([$intent->idempotency_key, $returned], [$binding->submission_receipt['submitted_ref_id'], $binding->submission_receipt['returned_ref_id']]);
+        $this->assertStringNotContainsString($returned, DB::table('mcp_execution_broker_orders')->where('id', $binding->id)->value('submission_receipt'));
+        $this->assertArrayNotHasKey('submission_receipt', $binding->toArray());
+        $this->assertSame('broker_acknowledged_order_reference_differs', $this->journalState($intent)[1]);
+        // A new service instance uses only persisted evidence; history still reports the different reference.
+        $this->travel(1)->seconds();
+        $this->broker->orders = [LiveBrokerGateway::order('rh-direct-receipt', 'filled', $intent->payload['quantity'], $intent->payload['quantity'],
+            [['exec-direct', $intent->payload['quantity'], '101.70']], ref: $returned)];
+        F::sync($c, $this->broker);
+        F::sync($c, $this->broker);
+        $this->assertSame('filled', $this->journalState($intent)[0]);
+        $this->assertSame(1, ExecutionFill::where('intent_id', $intent->id)->count());
+        $this->assertSame($historyFirst ? ($unrelated ? 2 : 1) : 0, ExternalOrder::where('mcp_connection_id', $c->id)->count());
+        $this->assertSame($unrelated ? 1 : 0, app(ExternalOrders::class)->pending($c)->count());
+        $this->assertSame($unrelated ? 'open' : 'resolved', Incident::where('mcp_connection_id', $c->id)
+            ->where('incident_key', ExternalOrders::INCIDENT)->value('state') ?? 'resolved');
+        $this->assertFalse(DB::table('mcp_execution_dispatches')->where('intent_id', $intent->id)->whereIn('status', ExecutionJournal::BLOCKING)->exists());
+        $this->assertSame('not_claimed', $dispatcher->dispatch($c, $c->user_id, $intent->id));
+        $this->assertSame($intent->idempotency_key, $calls[1]['arguments']['ref_id']);
+        $this->assertCount(2, $calls, 'Exactly one review and one place; no resend after restart/reconciliation.');
     }
 
     public function test_review_alerts_or_an_approval_mode_mismatch_withdraw_without_placing(): void

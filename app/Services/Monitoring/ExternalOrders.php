@@ -72,6 +72,8 @@ final class ExternalOrders
             app(BrokerOutcomes::class)->record($current, $stored);
             if ($this->pending($current)->exists()) {
                 $this->incidents->record($current, self::INCIDENT, 'critical', 'external_orders');
+            } else {
+                $this->incidents->resolve($current, self::INCIDENT);
             }
         });
     }
@@ -84,8 +86,15 @@ final class ExternalOrders
 
     public function pending(McpConnection $connection): Builder
     {
+        $scope = AccountScope::key($connection);
+
         return ExternalOrder::where('mcp_connection_id', $connection->id)->where('scope', AccountScope::key($connection))
-            ->whereNotIn('id', ExternalOrderReview::select('external_order_id'));
+            ->whereNotIn('id', ExternalOrderReview::select('external_order_id'))
+            // A monitor may observe an order before its correlated placement response commits. Keep the original
+            // observation, but once app ownership is proven it is no longer an external order requiring review.
+            ->whereNotIn('broker_id_hash', DB::table('mcp_execution_broker_orders as b')
+                ->join('mcp_execution_intents as i', 'i.id', '=', 'b.intent_id')->join('mcp_execution_accounts as a', 'a.id', '=', 'i.execution_account_id')
+                ->where('a.scope', $scope)->select('b.broker_id_hash'));
     }
 
     /** Submission callers hold the same connection-row lock as detection/review. Exits never use this gate. */

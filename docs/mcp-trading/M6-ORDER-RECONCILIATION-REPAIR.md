@@ -1,5 +1,7 @@
 # M6 order reconciliation repair — October 28, 2026
 
+October 29 continuation: [submission receipts](M6-SUBMISSION-RECEIPTS.md) address future valid direct responses with different references. The October 28 increment below improved recovery/visibility; it did not change direct-response acceptance. Missing historical receipts, including the October 29 PSX unknown intent, still need an explicit owner link.
+
 ## Incident
 
 The ordinary October 26 automatic cycle recorded CRWD BUY intent #1 for `0.045547` shares. It was claimed at 19:41:15 UTC and became unknown at 19:41:19 UTC. Broker history reports a matching filled buy created at 19:41:19 UTC with one execution at `261.859900`, but its reference differs from the immutable intent's key. Automatic reference matching cannot prove ownership. The original placement response and specific failure category were not retained; the history discrepancy does not establish exactly why the placement response was rejected or whether the broker rewrote the submitted reference.
