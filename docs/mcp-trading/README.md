@@ -1,6 +1,6 @@
 # MCP trading application: start here
 
-October 29 M6 submission receipts: a validated, correlated placement response now proves its returned broker order ID even when Robinhood returns a different reference. Both references and checked terms are retained encrypted; history-only matching remains strict and ambiguous submissions are never replayed. Additive nullable receipt migration `000038`; old unknown orders still need owner recovery. [Behavior, tests and rollout](M6-SUBMISSION-RECEIPTS.md).
+October 29 M6 submission receipts **deployed `5f1dcf8`**, migration `000038` batch 22, readiness healthy: a validated, correlated placement response can prove its returned broker order ID despite a different reference. Both keys/terms are retained encrypted; history-only matching stays strict and ambiguous submissions are never replayed. Historical PSX intent #3 still needs the requested owner link; future live receipts remain unobserved. [Behavior, tests and rollout](M6-SUBMISSION-RECEIPTS.md).
 
 October 28 M6 reconciliation repair **deployed as `1532adf`** (also included in runtime descendant `1a6c864`): persistent dashboard/health reporting, explicit owner-link recovery, immediate reconciliation from fresh stored history, and safe failure categories. Authenticated CRWD link verified filled exactly once; zero blocking dispatches, managed exit context and automatic health `ok`. Different references still require explicit ownership proof. No migration or policy change. [Incident, tests and rollout](M6-ORDER-RECONCILIATION-REPAIR.md).
 

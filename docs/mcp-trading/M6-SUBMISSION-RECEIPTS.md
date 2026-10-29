@@ -30,4 +30,10 @@ Composer validation, frontend build and scoped Pint/whitespace checks pass. Fina
 
 Predeployment backup: `mcp-trading-20261029T182006Z.dump.enc`; encrypted copy verified locally and copied to the configured offsite folder. Isolated restore verified 106 tables / 182,496 counted rows, readable encrypted fields and scratch-database removal. Independent-device retrieval of this pair is not claimed. Runtime database/schema/owner verified read-only as `postgres` / `mcp_trading` / `admin`, with migrations through `000037` before deployment.
 
+## Actual rollout
+
+Committed/deployed `5f1dcf8`. The owner helper's pretend run under verified runtime configuration showed only the nullable text-column addition. A preliminary invocation from development correctly refused using the schema owner as both runtime and migration identity; no DDL occurred there. Standard deployment applied `000038` as batch 22, rebuilt assets/configuration, signaled workers and restarted FPM; readiness passed. Read-only SQL confirms the new nullable text column. Runtime and development checkouts were clean immediately after code deployment.
+
+No live placement or manual automatic cycle was run for validation. Existing intent #3 (PSX) remains unknown, with its broker fill observed but no historical receipt; an explicit authenticated owner link was requested and is pending. It still blocks submissions until resolved. No old event, reference, recovery checkpoint, policy, approval setting or activation was rewritten. Future live receipt behavior remains to be observed under ordinary authorized operation.
+
 M6 remains partial. Next is observation of ordinary scheduled receipts and outcomes, plus the existing cancellation/disaster-recovery acceptance work.
